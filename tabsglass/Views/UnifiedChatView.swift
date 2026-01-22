@@ -165,7 +165,11 @@ final class UnifiedChatViewController: UIViewController {
 
             self.reloadCurrentTab()
             self.updateAllContentInsets()
-            self.scrollToBottom(animated: true)
+
+            // Scroll after layout completes
+            DispatchQueue.main.async {
+                self.scrollToBottom(animated: true)
+            }
         }
 
         view.addSubview(inputContainer)
@@ -500,8 +504,8 @@ final class MessageListViewController: UIViewController {
         let inputHeight = inputContainerHeight?() ?? 80
         // When keyboard visible, it already covers safe area; when hidden, add safe area
         let bottomPadding = keyboardHeight > 0 ? keyboardHeight : safeAreaBottom
-        // Extra spacing from last message to composer (2x the spacing between messages)
-        let extraSpacing: CGFloat = 8
+        // Extra spacing from last message to composer
+        let extraSpacing: CGFloat = 16
         let totalInset = inputHeight + bottomPadding + extraSpacing
         tableView.contentInset.top = totalInset
         tableView.verticalScrollIndicatorInsets.top = totalInset
@@ -511,8 +515,9 @@ final class MessageListViewController: UIViewController {
         guard !sortedMessages.isEmpty else { return }
         // Ensure table has updated layout
         tableView.layoutIfNeeded()
-        // Since table is flipped, scroll to row 0 (newest message)
-        tableView.scrollToRow(at: IndexPath(row: 0, section: 0), at: .bottom, animated: animated)
+        // For flipped table: scroll to show row 0 at visual bottom (near composer)
+        // Use .top because the table is flipped - .top in flipped coordinates = visual bottom
+        tableView.scrollToRow(at: IndexPath(row: 0, section: 0), at: .top, animated: animated)
     }
 }
 
