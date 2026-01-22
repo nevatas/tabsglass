@@ -443,9 +443,12 @@ final class MessageListViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         reloadMessages()
-        // Get safe area from parent view controller
-        let safeAreaBottom = parent?.view.safeAreaInsets.bottom ?? 0
-        updateContentInset(keyboardHeight: 0, safeAreaBottom: safeAreaBottom)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Scroll to latest messages after layout is complete
+        scrollToBottom(animated: false)
     }
 
     func reloadMessages() {
