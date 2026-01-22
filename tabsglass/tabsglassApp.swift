@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct tabsglassApp: App {
@@ -13,5 +14,6 @@ struct tabsglassApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: [Tab.self, Message.self])
     }
 }
