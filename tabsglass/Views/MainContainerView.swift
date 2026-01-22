@@ -57,6 +57,12 @@ struct MainContainerView: View {
                 selectedTabIndex = newValue - 1
             }
         }
+        .onChange(of: selectedTabIndex) { _, newValue in
+            // Sync scrollProgress when tab is selected by tap
+            withAnimation(.easeInOut(duration: 0.2)) {
+                scrollProgress = CGFloat(newValue)
+            }
+        }
     }
 
     private func sendMessage() {
