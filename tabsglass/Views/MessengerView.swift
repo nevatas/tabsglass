@@ -42,7 +42,6 @@ final class MessengerViewController: UIViewController {
 
     private let tableView = UITableView()
     private let inputContainer = SwiftUIComposerContainer()
-    private var inputBottomConstraint: NSLayoutConstraint!
     private var sortedMessages: [Message] = []
 
     override func viewDidLoad() {
@@ -50,7 +49,6 @@ final class MessengerViewController: UIViewController {
         view.backgroundColor = .clear
         setupTableView()
         setupInputView()
-        setupKeyboardObservers()
     }
 
     private func setupTableView() {
@@ -91,42 +89,18 @@ final class MessengerViewController: UIViewController {
 
         view.addSubview(inputContainer)
 
-        inputBottomConstraint = inputContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
-
+        // Use keyboardLayoutGuide - automatically handles keyboard
         NSLayoutConstraint.activate([
             inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputBottomConstraint
+            inputContainer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         ])
     }
 
-    private func setupKeyboardObservers() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(keyboardWillChangeFrame),
-            name: UIResponder.keyboardWillChangeFrameNotification,
-            object: nil
-        )
-    }
-
-    @objc private func keyboardWillChangeFrame(_ notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let endFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
-              let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double,
-              let curveValue = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt else { return }
-
-        let keyboardHeight = view.bounds.height - endFrame.origin.y
-        let safeAreaBottom = view.safeAreaInsets.bottom
-        let bottomOffset = max(0, keyboardHeight - safeAreaBottom)
-
-        let curve = UIView.AnimationOptions(rawValue: curveValue << 16)
-
-        UIView.animate(withDuration: duration, delay: 0, options: [curve, .beginFromCurrentState]) {
-            self.inputBottomConstraint.constant = -bottomOffset
-            self.tableView.contentInset.top = self.inputContainer.bounds.height + bottomOffset
-            self.tableView.verticalScrollIndicatorInsets.top = self.inputContainer.bounds.height + bottomOffset
-            self.view.layoutIfNeeded()
-        }
+    private func updateTableInsets() {
+        let inputHeight = inputContainer.bounds.height
+        tableView.contentInset.top = inputHeight
+        tableView.verticalScrollIndicatorInsets.top = inputHeight
     }
 
     @objc private func handleTap() {
@@ -141,9 +115,7 @@ final class MessengerViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // Update content inset when input container size changes
-        tableView.contentInset.top = inputContainer.bounds.height
-        tableView.verticalScrollIndicatorInsets.top = inputContainer.bounds.height
+        updateTableInsets()
     }
 
     func reloadMessages() {
