@@ -30,13 +30,11 @@ struct MainContainerView: View {
             if tabs.isEmpty {
                 emptyStateView
             } else {
-                ChatContainerView(
+                UnifiedChatView(
                     tabs: tabs,
                     selectedIndex: $selectedTabIndex,
                     messageText: $messageText,
-                    isComposerFocused: $isComposerFocused,
-                    onSend: { sendMessage() },
-                    onTapOutside: { isComposerFocused = false }
+                    onSend: { sendMessage() }
                 )
             }
         }

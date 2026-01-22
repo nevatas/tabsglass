@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct ComposerView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var text: String
     var isFocused: FocusState<Bool>.Binding
     let onSend: () -> Void
@@ -71,7 +72,12 @@ struct ComposerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .glassEffect(.regular.tint(.white.opacity(0.9)), in: .rect(cornerRadius: 24))
+            .glassEffect(
+                .regular.tint(colorScheme == .dark
+                    ? Color(white: 0.1).opacity(0.9)
+                    : .white.opacity(0.9)),
+                in: .rect(cornerRadius: 24)
+            )
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)

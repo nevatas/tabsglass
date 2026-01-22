@@ -220,6 +220,7 @@ final class SwiftUIComposerContainer: UIView {
 // MARK: - Embedded Composer (without FocusState)
 
 struct EmbeddedComposerView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let text: String
     let onTextChange: (String) -> Void
     let onSend: () -> Void
@@ -277,7 +278,12 @@ struct EmbeddedComposerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .glassEffect(.regular.tint(.white.opacity(0.9)), in: .rect(cornerRadius: 24))
+            .glassEffect(
+                .regular.tint(colorScheme == .dark
+                    ? Color(white: 0.1).opacity(0.9)
+                    : .white.opacity(0.9)),
+                in: .rect(cornerRadius: 24)
+            )
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
