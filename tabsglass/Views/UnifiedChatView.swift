@@ -14,6 +14,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     let tabs: [Tab]
     @Binding var selectedIndex: Int
     @Binding var messageText: String
+    @Binding var scrollProgress: CGFloat
     let onSend: () -> Void
 
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
@@ -26,6 +27,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         }
         vc.onTextChange = { text in
             messageText = text
+        }
+        vc.onScrollProgress = { progress in
+            scrollProgress = progress
         }
         return vc
     }
@@ -48,10 +52,13 @@ final class UnifiedChatViewController: UIViewController {
     var onSend: (() -> Void)?
     var onIndexChange: ((Int) -> Void)?
     var onTextChange: ((String) -> Void)?
+    var onScrollProgress: ((CGFloat) -> Void)?
 
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
     private let inputContainer = SwiftUIComposerContainer()
+    private var pageScrollView: UIScrollView?
+    private var isUserSwiping: Bool = false
 
     // MARK: - Keyboard State Tracking
     private var keyboardHeight: CGFloat = 0
@@ -97,6 +104,15 @@ final class UnifiedChatViewController: UIViewController {
         ])
 
         pageViewController.didMove(toParent: self)
+
+        // Find the scroll view inside UIPageViewController to track swipe progress
+        for subview in pageViewController.view.subviews {
+            if let scrollView = subview as? UIScrollView {
+                pageScrollView = scrollView
+                scrollView.delegate = self
+                break
+            }
+        }
 
         // Set initial page
         if !tabs.isEmpty {
@@ -337,6 +353,43 @@ extension UnifiedChatViewController: UIGestureRecognizerDelegate {
         // Only begin pan for vertical gestures when keyboard is visible
         let velocity = panGestureRecognizer.velocity(in: view)
         return abs(velocity.y) > abs(velocity.x) && isKeyboardVisible
+    }
+}
+
+// MARK: - UIScrollViewDelegate (Page Swipe Progress)
+
+extension UnifiedChatViewController: UIScrollViewDelegate {
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        guard scrollView === pageScrollView else { return }
+        isUserSwiping = true
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView === pageScrollView, isUserSwiping else { return }
+
+        let pageWidth = scrollView.bounds.width
+        guard pageWidth > 0 else { return }
+
+        // contentOffset.x is pageWidth when at rest (center page)
+        // < pageWidth = swiping right (to previous), > pageWidth = swiping left (to next)
+        let offset = scrollView.contentOffset.x - pageWidth
+        let progress = offset / pageWidth
+
+        // progress: -1 = fully swiped to previous, 0 = center, +1 = fully swiped to next
+        let clampedProgress = max(-1, min(1, progress))
+        onScrollProgress?(CGFloat(selectedIndex) + clampedProgress)
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        guard scrollView === pageScrollView else { return }
+        isUserSwiping = false
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        guard scrollView === pageScrollView else { return }
+        if !decelerate {
+            isUserSwiping = false
+        }
     }
 }
 

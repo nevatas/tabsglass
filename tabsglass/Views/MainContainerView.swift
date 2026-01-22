@@ -12,6 +12,7 @@ struct MainContainerView: View {
     @State private var selectedTabIndex = 0
     @State private var showNewTabSheet = false
     @State private var messageText = ""
+    @State private var scrollProgress: CGFloat = 0
     @FocusState private var isComposerFocused: Bool
 
     private var currentTab: Tab? {
@@ -24,6 +25,7 @@ struct MainContainerView: View {
             TabBarView(
                 tabs: tabs,
                 selectedIndex: $selectedTabIndex,
+                scrollProgress: scrollProgress,
                 onAddTap: { showNewTabSheet = true }
             )
 
@@ -34,6 +36,7 @@ struct MainContainerView: View {
                     tabs: tabs,
                     selectedIndex: $selectedTabIndex,
                     messageText: $messageText,
+                    scrollProgress: $scrollProgress,
                     onSend: { sendMessage() }
                 )
             }
