@@ -462,7 +462,9 @@ final class MessageListViewController: UIViewController {
         let inputHeight = inputContainerHeight?() ?? 80
         // When keyboard visible, it already covers safe area; when hidden, add safe area
         let bottomPadding = keyboardHeight > 0 ? keyboardHeight : safeAreaBottom
-        let totalInset = inputHeight + bottomPadding
+        // Extra spacing from last message to composer (2x the spacing between messages)
+        let extraSpacing: CGFloat = 8
+        let totalInset = inputHeight + bottomPadding + extraSpacing
         tableView.contentInset.top = totalInset
         tableView.verticalScrollIndicatorInsets.top = totalInset
     }
