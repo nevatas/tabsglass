@@ -145,14 +145,27 @@ extension MessengerViewController: UITableViewDataSource, UITableViewDelegate {
     }
 }
 
+// MARK: - Composer State (Observable)
+
+@Observable
+final class ComposerState {
+    var text: String = ""
+    var onTextChange: ((String) -> Void)?
+    var onSend: (() -> Void)?
+}
+
 // MARK: - SwiftUI Composer Wrapper
 
 final class SwiftUIComposerContainer: UIView {
-    var onTextChange: ((String) -> Void)?
-    var onSend: (() -> Void)?
+    var onTextChange: ((String) -> Void)? {
+        didSet { composerState.onTextChange = onTextChange }
+    }
+    var onSend: (() -> Void)? {
+        didSet { composerState.onSend = onSend }
+    }
 
-    private var hostingController: UIHostingController<AnyView>?
-    private var currentText: String = ""
+    private let composerState = ComposerState()
+    private var hostingController: UIHostingController<EmbeddedComposerView>?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -165,51 +178,29 @@ final class SwiftUIComposerContainer: UIView {
     }
 
     private func setupHostingController() {
-        updateContent()
-    }
+        let composerView = EmbeddedComposerView(state: composerState)
+        let hc = UIHostingController(rootView: composerView)
+        hc.view.backgroundColor = .clear
+        hc.view.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(hc.view)
 
-    private func updateContent() {
-        let composerView = EmbeddedComposerView(
-            text: currentText,
-            onTextChange: { [weak self] newText in
-                self?.currentText = newText
-                self?.onTextChange?(newText)
-                self?.invalidateIntrinsicContentSize()
-                self?.superview?.setNeedsLayout()
-                self?.superview?.layoutIfNeeded()
-            },
-            onSend: { [weak self] in
-                self?.onSend?()
-            }
-        )
+        NSLayoutConstraint.activate([
+            hc.view.topAnchor.constraint(equalTo: topAnchor),
+            hc.view.bottomAnchor.constraint(equalTo: bottomAnchor),
+            hc.view.leadingAnchor.constraint(equalTo: leadingAnchor),
+            hc.view.trailingAnchor.constraint(equalTo: trailingAnchor)
+        ])
 
-        if let hostingController = hostingController {
-            hostingController.rootView = AnyView(composerView)
-        } else {
-            let hc = UIHostingController(rootView: AnyView(composerView))
-            hc.view.backgroundColor = .clear
-            hc.view.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(hc.view)
-
-            NSLayoutConstraint.activate([
-                hc.view.topAnchor.constraint(equalTo: topAnchor),
-                hc.view.bottomAnchor.constraint(equalTo: bottomAnchor),
-                hc.view.leadingAnchor.constraint(equalTo: leadingAnchor),
-                hc.view.trailingAnchor.constraint(equalTo: trailingAnchor)
-            ])
-
-            hostingController = hc
-        }
+        hostingController = hc
     }
 
     func clearText() {
-        currentText = ""
-        updateContent()
+        composerState.text = ""
         invalidateIntrinsicContentSize()
     }
 
     override var intrinsicContentSize: CGSize {
-        let lineCount = max(1, currentText.components(separatedBy: "\n").count)
+        let lineCount = max(1, composerState.text.components(separatedBy: "\n").count)
         let baseHeight: CGFloat = 80
         let lineHeight: CGFloat = 22
         let height = min(baseHeight + CGFloat(lineCount - 1) * lineHeight, 180)
@@ -221,30 +212,26 @@ final class SwiftUIComposerContainer: UIView {
 
 struct EmbeddedComposerView: View {
     @Environment(\.colorScheme) private var colorScheme
-    let text: String
-    let onTextChange: (String) -> Void
-    let onSend: () -> Void
-
-    @State private var localText: String = ""
+    @Bindable var state: ComposerState
 
     private var canSend: Bool {
-        !localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
         GlassEffectContainer {
             VStack(spacing: 12) {
-                TextField("Note...", text: $localText, axis: .vertical)
+                TextField("Note...", text: $state.text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...6)
                     .submitLabel(.send)
                     .onSubmit {
                         if canSend {
-                            onSend()
+                            state.onSend?()
                         }
                     }
-                    .onChange(of: localText) { _, newValue in
-                        onTextChange(newValue)
+                    .onChange(of: state.text) { _, newValue in
+                        state.onTextChange?(newValue)
                     }
 
                 HStack {
@@ -261,8 +248,7 @@ struct EmbeddedComposerView: View {
 
                     Button(action: {
                         if canSend {
-                            onSend()
-                            localText = ""
+                            state.onSend?()
                         }
                     }) {
                         Image(systemName: "arrow.up")
@@ -287,9 +273,6 @@ struct EmbeddedComposerView: View {
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
-        .onAppear {
-            localText = text
-        }
     }
 }
 
