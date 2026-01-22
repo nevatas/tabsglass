@@ -362,6 +362,7 @@ final class MessageListViewController: UIViewController {
         tableView.backgroundColor = .clear
         tableView.separatorStyle = .none
         tableView.keyboardDismissMode = .interactive
+        tableView.showsVerticalScrollIndicator = false
         tableView.delegate = self
         tableView.dataSource = self
         tableView.register(MessageTableCell.self, forCellReuseIdentifier: "MessageCell")
