@@ -157,24 +157,35 @@ final class ComposerState {
 // MARK: - SwiftUI Composer Wrapper
 
 final class SwiftUIComposerContainer: UIView {
-    var onTextChange: ((String) -> Void)? {
-        didSet { composerState.onTextChange = onTextChange }
-    }
+    var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)? {
         didSet { composerState.onSend = onSend }
     }
 
+    /// Callback для уведомления о изменении высоты
+    var onHeightChange: ((CGFloat) -> Void)?
+
     private let composerState = ComposerState()
     private var hostingController: UIHostingController<EmbeddedComposerView>?
+    private var currentHeight: CGFloat = 80
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
         setupHostingController()
+        setupTextChangeHandler()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupTextChangeHandler() {
+        composerState.onTextChange = { [weak self] newText in
+            guard let self = self else { return }
+            self.onTextChange?(newText)
+            self.updateHeight()
+        }
     }
 
     private func setupHostingController() {
@@ -194,17 +205,38 @@ final class SwiftUIComposerContainer: UIView {
         hostingController = hc
     }
 
-    func clearText() {
-        composerState.text = ""
-        invalidateIntrinsicContentSize()
+    /// Вычисляет текущую требуемую высоту
+    func calculateHeight() -> CGFloat {
+        guard let hc = hostingController else { return 80 }
+        let targetWidth = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
+        let fittingSize = hc.sizeThatFits(in: CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
+        return max(80, fittingSize.height)
     }
 
+    /// Обновляет высоту и уведомляет parent (синхронно, без async)
+    private func updateHeight() {
+        let newHeight = calculateHeight()
+        if abs(newHeight - currentHeight) > 1 {
+            currentHeight = newHeight
+            onHeightChange?(newHeight)
+        }
+    }
+
+    func clearText() {
+        composerState.text = ""
+
+        // Принудительно обновляем hosting controller
+        hostingController?.view.setNeedsLayout()
+        hostingController?.view.layoutIfNeeded()
+
+        // Сразу устанавливаем минимальную высоту
+        currentHeight = 80
+        onHeightChange?(80)
+    }
+
+    // Отключаем intrinsicContentSize - используем явный height constraint
     override var intrinsicContentSize: CGSize {
-        let lineCount = max(1, composerState.text.components(separatedBy: "\n").count)
-        let baseHeight: CGFloat = 80
-        let lineHeight: CGFloat = 22
-        let height = min(baseHeight + CGFloat(lineCount - 1) * lineHeight, 180)
-        return CGSize(width: UIView.noIntrinsicMetric, height: height)
+        return CGSize(width: UIView.noIntrinsicMetric, height: UIView.noIntrinsicMetric)
     }
 }
 
@@ -223,7 +255,7 @@ struct EmbeddedComposerView: View {
             VStack(spacing: 12) {
                 TextField("Note...", text: $state.text, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .lineLimit(1...6)
+                    .lineLimit(1...10)
                     .submitLabel(.send)
                     .onSubmit {
                         if canSend {

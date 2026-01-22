@@ -63,6 +63,8 @@ final class UnifiedChatViewController: UIViewController {
     // MARK: - Keyboard State Tracking
     private var keyboardHeight: CGFloat = 0
     private var inputContainerBottomConstraint: NSLayoutConstraint!
+    private var inputContainerHeightConstraint: NSLayoutConstraint!
+    private let minInputHeight: CGFloat = 80
     private var isKeyboardVisible: Bool = false
 
     // MARK: - Pan Gesture for Interactive Dismiss
@@ -126,26 +128,59 @@ final class UnifiedChatViewController: UIViewController {
         inputContainer.onTextChange = { [weak self] text in
             self?.onTextChange?(text)
         }
-        inputContainer.onSend = { [weak self] in
-            self?.onSend?()
-            self?.inputContainer.clearText()
-            self?.reloadCurrentTab()
-            // Scroll AFTER layout completes
-            DispatchQueue.main.async {
-                self?.scrollToBottom(animated: true)
+
+        // Обработка изменения высоты композера (мгновенно при печати)
+        inputContainer.onHeightChange = { [weak self] newHeight in
+            guard let self = self else { return }
+
+            let constrainedHeight = max(self.minInputHeight, newHeight)
+
+            guard abs(self.inputContainerHeightConstraint.constant - constrainedHeight) > 0.5 else {
+                return
             }
+
+            // Мгновенное обновление без анимации при печати
+            self.inputContainerHeightConstraint.constant = constrainedHeight
+
+            UIView.performWithoutAnimation {
+                self.view.layoutIfNeeded()
+            }
+
+            self.updateAllContentInsets()
+        }
+
+        inputContainer.onSend = { [weak self] in
+            guard let self = self else { return }
+
+            self.onSend?()
+
+            // Очищаем текст (это вызовет onHeightChange с минимальной высотой)
+            self.inputContainer.clearText()
+
+            // Анимируем изменение высоты после очистки
+            self.inputContainerHeightConstraint.constant = self.minInputHeight
+            UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
+                self.view.layoutIfNeeded()
+            }
+
+            self.reloadCurrentTab()
+            self.updateAllContentInsets()
+            self.scrollToBottom(animated: true)
         }
 
         view.addSubview(inputContainer)
 
         inputContainerBottomConstraint = inputContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        inputContainerHeightConstraint = inputContainer.heightAnchor.constraint(equalToConstant: minInputHeight)
 
         NSLayoutConstraint.activate([
             inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputContainerBottomConstraint
+            inputContainerBottomConstraint,
+            inputContainerHeightConstraint
         ])
     }
+
 
     // MARK: - Keyboard Handling
 
@@ -280,7 +315,7 @@ final class UnifiedChatViewController: UIViewController {
             self?.view.endEditing(true)
         }
         vc.inputContainerHeight = { [weak self] in
-            self?.inputContainer.bounds.height ?? 80
+            self?.inputContainerHeightConstraint.constant ?? 80
         }
         messageControllers[index] = vc
         return vc
