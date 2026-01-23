@@ -15,13 +15,22 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var selectedIndex: Int
     @Binding var messageText: String
     @Binding var scrollProgress: CGFloat
+    @Binding var editingMessage: Message?
     let onSend: () -> Void
+    var onDeleteMessage: ((Message) -> Void)?
+    var onMoveMessage: ((Message, Tab) -> Void)?
+    var onEditMessage: ((Message) -> Void)?
+    var onCancelEdit: (() -> Void)?
 
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
         vc.tabs = tabs
         vc.selectedIndex = selectedIndex
         vc.onSend = onSend
+        vc.onDeleteMessage = onDeleteMessage
+        vc.onMoveMessage = onMoveMessage
+        vc.onEditMessage = onEditMessage
+        vc.onCancelEdit = onCancelEdit
         vc.onIndexChange = { newIndex in
             selectedIndex = newIndex
         }
@@ -36,11 +45,16 @@ struct UnifiedChatView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UnifiedChatViewController, context: Context) {
         uiViewController.tabs = tabs
+        uiViewController.onDeleteMessage = onDeleteMessage
+        uiViewController.onMoveMessage = onMoveMessage
+        uiViewController.onEditMessage = onEditMessage
+        uiViewController.onCancelEdit = onCancelEdit
         if uiViewController.selectedIndex != selectedIndex {
             uiViewController.selectedIndex = selectedIndex
             uiViewController.updatePageSelection(animated: true)
         }
         uiViewController.reloadCurrentTab()
+        uiViewController.setEditingMessage(editingMessage)
     }
 }
 
@@ -53,6 +67,10 @@ final class UnifiedChatViewController: UIViewController {
     var onIndexChange: ((Int) -> Void)?
     var onTextChange: ((String) -> Void)?
     var onScrollProgress: ((CGFloat) -> Void)?
+    var onDeleteMessage: ((Message) -> Void)?
+    var onMoveMessage: ((Message, Tab) -> Void)?
+    var onEditMessage: ((Message) -> Void)?
+    var onCancelEdit: (() -> Void)?
 
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
@@ -154,8 +172,8 @@ final class UnifiedChatViewController: UIViewController {
 
             self.onSend?()
 
-            // Очищаем текст (это вызовет onHeightChange с минимальной высотой)
-            self.inputContainer.clearText()
+            // Очищаем текст и editing state
+            self.inputContainer.clearEditingState()
 
             // Анимируем изменение высоты после очистки
             self.inputContainerHeightConstraint.constant = self.minInputHeight
@@ -170,6 +188,18 @@ final class UnifiedChatViewController: UIViewController {
             DispatchQueue.main.async {
                 self.scrollToBottom(animated: true)
             }
+        }
+
+        inputContainer.onCancelEdit = { [weak self] in
+            guard let self = self else { return }
+            self.onCancelEdit?()
+            self.inputContainer.clearEditingState()
+
+            self.inputContainerHeightConstraint.constant = self.minInputHeight
+            UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
+                self.view.layoutIfNeeded()
+            }
+            self.updateAllContentInsets()
         }
 
         view.addSubview(inputContainer)
@@ -307,6 +337,7 @@ final class UnifiedChatViewController: UIViewController {
 
     private func getMessageController(for index: Int) -> MessageListViewController {
         if let existing = messageControllers[index] {
+            existing.allTabs = tabs
             return existing
         }
 
@@ -315,11 +346,21 @@ final class UnifiedChatViewController: UIViewController {
         if index < tabs.count {
             vc.currentTab = tabs[index]
         }
+        vc.allTabs = tabs
         vc.onTap = { [weak self] in
             self?.view.endEditing(true)
         }
         vc.inputContainerHeight = { [weak self] in
             self?.inputContainerHeightConstraint.constant ?? 80
+        }
+        vc.onDeleteMessage = { [weak self] message in
+            self?.onDeleteMessage?(message)
+        }
+        vc.onMoveMessage = { [weak self] message, targetTab in
+            self?.onMoveMessage?(message, targetTab)
+        }
+        vc.onEditMessage = { [weak self] message in
+            self?.onEditMessage?(message)
         }
         messageControllers[index] = vc
         return vc
@@ -344,6 +385,18 @@ final class UnifiedChatViewController: UIViewController {
                 currentVC.currentTab = tabs[currentVC.pageIndex]
                 currentVC.reloadMessages()
             }
+        }
+    }
+
+    func setEditingMessage(_ message: Message?) {
+        inputContainer.setEditingMessage(message)
+        if message != nil {
+            let newHeight = inputContainer.calculateHeight()
+            inputContainerHeightConstraint.constant = max(minInputHeight, newHeight)
+            UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
+                self.view.layoutIfNeeded()
+            }
+            updateAllContentInsets()
         }
     }
 
@@ -437,11 +490,16 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
 final class MessageListViewController: UIViewController {
     var pageIndex: Int = 0
     var currentTab: Tab?
+    var allTabs: [Tab] = []
     var onTap: (() -> Void)?
     var inputContainerHeight: (() -> CGFloat)?
+    var onDeleteMessage: ((Message) -> Void)?
+    var onMoveMessage: ((Message, Tab) -> Void)?
+    var onEditMessage: ((Message) -> Void)?
 
     private let tableView = UITableView()
     private var sortedMessages: [Message] = []
+    private var longPressGesture: UILongPressGestureRecognizer!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -473,10 +531,24 @@ final class MessageListViewController: UIViewController {
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
         tap.cancelsTouchesInView = false
         tableView.addGestureRecognizer(tap)
+
+        // Dismiss keyboard early on long press (before context menu appears)
+        longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+        longPressGesture.minimumPressDuration = 0.3 // Fire before context menu (default ~0.5s)
+        longPressGesture.cancelsTouchesInView = false
+        longPressGesture.delegate = self
+        tableView.addGestureRecognizer(longPressGesture)
     }
 
     @objc private func handleTap() {
         onTap?()
+    }
+
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        if gesture.state == .began {
+            // Dismiss keyboard before context menu appears
+            view.window?.endEditing(true)
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -539,5 +611,63 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         cell.configure(with: sortedMessages[indexPath.row])
         cell.transform = CGAffineTransform(scaleX: 1, y: -1)
         return cell
+    }
+
+    func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
+        guard !sortedMessages.isEmpty else { return nil }
+
+        let message = sortedMessages[indexPath.row]
+
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            guard let self = self else { return nil }
+
+            var actions: [UIMenuElement] = []
+
+            // Edit action
+            let editAction = UIAction(
+                title: "Изменить",
+                image: UIImage(systemName: "pencil")
+            ) { _ in
+                self.onEditMessage?(message)
+            }
+            actions.append(editAction)
+
+            // Move action (only if more than one tab)
+            let otherTabs = self.allTabs.filter { $0.id != self.currentTab?.id }
+            if !otherTabs.isEmpty {
+                let moveMenuChildren = otherTabs.map { tab in
+                    UIAction(title: tab.title) { _ in
+                        self.onMoveMessage?(message, tab)
+                    }
+                }
+                let moveMenu = UIMenu(
+                    title: "Переместить",
+                    image: UIImage(systemName: "arrow.right.doc.on.clipboard"),
+                    children: moveMenuChildren
+                )
+                actions.append(moveMenu)
+            }
+
+            // Delete action
+            let deleteAction = UIAction(
+                title: "Удалить",
+                image: UIImage(systemName: "trash"),
+                attributes: .destructive
+            ) { _ in
+                self.onDeleteMessage?(message)
+            }
+            actions.append(deleteAction)
+
+            return UIMenu(children: actions)
+        }
+    }
+}
+
+// MARK: - UIGestureRecognizerDelegate
+
+extension MessageListViewController: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Allow long press to work with context menu interaction
+        return true
     }
 }

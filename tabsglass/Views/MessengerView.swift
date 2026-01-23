@@ -150,8 +150,13 @@ extension MessengerViewController: UITableViewDataSource, UITableViewDelegate {
 @Observable
 final class ComposerState {
     var text: String = ""
+    var editingMessage: Message? = nil
+    var shouldFocus: Bool = false
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)?
+    var onCancelEdit: (() -> Void)?
+
+    var isEditing: Bool { editingMessage != nil }
 }
 
 // MARK: - SwiftUI Composer Wrapper
@@ -160,6 +165,9 @@ final class SwiftUIComposerContainer: UIView {
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)? {
         didSet { composerState.onSend = onSend }
+    }
+    var onCancelEdit: (() -> Void)? {
+        didSet { composerState.onCancelEdit = onCancelEdit }
     }
 
     /// Callback для уведомления о изменении высоты
@@ -234,6 +242,24 @@ final class SwiftUIComposerContainer: UIView {
         onHeightChange?(80)
     }
 
+    func setEditingMessage(_ message: Message?) {
+        composerState.editingMessage = message
+        if let message = message {
+            composerState.text = message.text
+            composerState.shouldFocus = true
+        }
+        updateHeight()
+    }
+
+    func clearEditingState() {
+        composerState.editingMessage = nil
+        composerState.text = ""
+        hostingController?.view.setNeedsLayout()
+        hostingController?.view.layoutIfNeeded()
+        currentHeight = 80
+        onHeightChange?(80)
+    }
+
     // Отключаем intrinsicContentSize - используем явный height constraint
     override var intrinsicContentSize: CGSize {
         return CGSize(width: UIView.noIntrinsicMetric, height: UIView.noIntrinsicMetric)
@@ -245,6 +271,7 @@ final class SwiftUIComposerContainer: UIView {
 struct EmbeddedComposerView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Bindable var state: ComposerState
+    @FocusState private var isFocused: Bool
 
     private var canSend: Bool {
         !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -252,50 +279,81 @@ struct EmbeddedComposerView: View {
 
     var body: some View {
         GlassEffectContainer {
-            VStack(spacing: 12) {
-                TextField("Note...", text: $state.text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...10)
-                    .submitLabel(.send)
-                    .onSubmit {
-                        if canSend {
-                            state.onSend?()
-                        }
-                    }
-                    .onChange(of: state.text) { _, newValue in
-                        state.onTextChange?(newValue)
-                    }
-
-                HStack {
-                    Button {
-                        // Attach action
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .medium))
+            VStack(spacing: 0) {
+                // Editing banner
+                if state.isEditing {
+                    HStack {
+                        Text("Редактирование")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Button(action: {
-                        if canSend {
-                            state.onSend?()
+                        Spacer()
+                        Button {
+                            state.onCancelEdit?()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                    }) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(canSend ? Color.accentColor : Color.gray.opacity(0.4))
-                            .clipShape(Circle())
+                        .buttonStyle(.plain)
                     }
-                    .disabled(!canSend)
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+                    .padding(.bottom, -4)
                 }
+
+                // Main composer content
+                VStack(spacing: 12) {
+                    TextField("Note...", text: $state.text, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...10)
+                        .submitLabel(.send)
+                        .focused($isFocused)
+                        .onSubmit {
+                            if canSend {
+                                state.onSend?()
+                            }
+                        }
+                        .onChange(of: state.text) { _, newValue in
+                            state.onTextChange?(newValue)
+                        }
+                        .onChange(of: state.shouldFocus) { _, shouldFocus in
+                            if shouldFocus {
+                                isFocused = true
+                                state.shouldFocus = false
+                            }
+                        }
+
+                    HStack {
+                        Button {
+                            // Attach action
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+
+                        Button(action: {
+                            if canSend {
+                                state.onSend?()
+                            }
+                        }) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .background(canSend ? Color.accentColor : Color.gray.opacity(0.4))
+                                .clipShape(Circle())
+                        }
+                        .disabled(!canSend)
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
             .glassEffect(
                 .regular.tint(colorScheme == .dark
                     ? Color(white: 0.1).opacity(0.9)
@@ -341,7 +399,7 @@ final class MessageTableCell: UITableViewCell {
             bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
             bubbleView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
             bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            bubbleView.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 60),
+            bubbleView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
 
             messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10),
             messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10),
