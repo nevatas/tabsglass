@@ -11,6 +11,8 @@ struct TabBarView: View {
     let scrollProgress: CGFloat
     let onAddTap: () -> Void
     let onMenuTap: () -> Void
+    let onRenameTab: (Tab) -> Void
+    let onDeleteTab: (Tab) -> Void
 
     var body: some View {
         VStack(spacing: 6) {
@@ -59,6 +61,23 @@ struct TabBarView: View {
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     selectedIndex = index
                                 }
+                            }
+                            .contextMenu {
+                                Button {
+                                    onRenameTab(tab)
+                                } label: {
+                                    Label("Переименовать", systemImage: "pencil")
+                                }
+
+                                Button(role: .destructive) {
+                                    onDeleteTab(tab)
+                                } label: {
+                                    Label("Удалить", systemImage: "trash")
+                                }
+                            } preview: {
+                                // Always show selected style in preview
+                                TabChipView(title: tab.title, selectionProgress: 1.0)
+                                    .padding(8)
                             }
                         }
                     }
@@ -147,6 +166,8 @@ struct TabChipView: View {
         selectedIndex: .constant(0),
         scrollProgress: 0,
         onAddTap: {},
-        onMenuTap: {}
+        onMenuTap: {},
+        onRenameTab: { _ in },
+        onDeleteTab: { _ in }
     )
 }
