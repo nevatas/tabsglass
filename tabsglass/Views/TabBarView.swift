@@ -10,43 +10,96 @@ struct TabBarView: View {
     @Binding var selectedIndex: Int
     let scrollProgress: CGFloat
     let onAddTap: () -> Void
+    let onMenuTap: () -> Void
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
-                        TabChipView(
-                            title: tab.title,
-                            selectionProgress: selectionProgress(for: index)
-                        )
-                        .id(index)
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedIndex = index
+        VStack(spacing: 6) {
+            // Header buttons row
+            HStack {
+                // Burger menu button (left) - circular liquid glass
+                Button(action: onMenuTap) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+
+                Spacer()
+
+                // Title
+                Text("Serejen's Space")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                // Plus button (right) - circular liquid glass
+                Button(action: onAddTap) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+            }
+            .padding(.horizontal, 16)
+
+            // Tabs scroll view
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                            TabChipView(
+                                title: tab.title,
+                                selectionProgress: selectionProgress(for: index)
+                            )
+                            .id(index)
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedIndex = index
+                                }
                             }
                         }
                     }
-
-                    Button(action: onAddTap) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 36, height: 36)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 6) // Space for shadow
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-            }
-            .onChange(of: selectedIndex) { _, newValue in
-                withAnimation {
-                    proxy.scrollTo(newValue, anchor: .center)
+                .scrollClipDisabled() // Allow shadow to render outside
+                .scrollContentBackground(.hidden)
+                .onChange(of: scrollProgress) { _, newValue in
+                    // Scroll to nearest tab during swipe
+                    let nearestIndex = Int(newValue.rounded())
+                    if nearestIndex >= 0 && nearestIndex < tabs.count {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo(nearestIndex, anchor: .center)
+                        }
+                    }
                 }
             }
         }
-        .background(.bar)
+        .padding(.top, 4)
+        .padding(.bottom, 16)
+        .background {
+            // Gradient blur - extends below header
+            GeometryReader { geo in
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .frame(height: geo.size.height + 80)
+                    .mask {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white, location: 0),
+                                .init(color: .white, location: 0.4),
+                                .init(color: .clear, location: 1)
+                        ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+            }
+            .ignoresSafeArea()
+        }
     }
 
     /// Calculate selection progress for a tab (0 = not selected, 1 = fully selected)
@@ -57,23 +110,31 @@ struct TabBarView: View {
 }
 
 struct TabChipView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     let selectionProgress: CGFloat  // 0 = not selected, 1 = fully selected
 
+    private var isSelected: Bool { selectionProgress > 0.5 }
+
     var body: some View {
-        Text(title)
-            .font(.subheadline)
-            .fontWeight(selectionProgress > 0.5 ? .semibold : .regular)
-            .foregroundStyle(selectionProgress > 0.5 ? .primary : .secondary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color.accentColor.opacity(0.2 * selectionProgress))
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .strokeBorder(Color.accentColor.opacity(selectionProgress), lineWidth: 1.5)
-            )
+        if isSelected {
+            // Active tab - LiquidGlass style (neutral)
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .glassEffect(.regular, in: .capsule)
+        } else {
+            // Inactive tab - just text with shadow, no background
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(colorScheme == .dark ? .white : .black)
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.2), radius: 4, y: 2)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+        }
     }
 }
 
@@ -82,6 +143,7 @@ struct TabChipView: View {
         tabs: [],
         selectedIndex: .constant(0),
         scrollProgress: 0,
-        onAddTap: {}
+        onAddTap: {},
+        onMenuTap: {}
     )
 }

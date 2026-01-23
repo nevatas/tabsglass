@@ -21,14 +21,8 @@ struct MainContainerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            TabBarView(
-                tabs: tabs,
-                selectedIndex: $selectedTabIndex,
-                scrollProgress: scrollProgress,
-                onAddTap: { showNewTabSheet = true }
-            )
-
+        ZStack(alignment: .top) {
+            // Content layer (full screen)
             if tabs.isEmpty {
                 emptyStateView
             } else {
@@ -39,7 +33,17 @@ struct MainContainerView: View {
                     scrollProgress: $scrollProgress,
                     onSend: { sendMessage() }
                 )
+                .scrollEdgeEffectStyle(.soft, for: .top)
             }
+
+            // Header layer (floating on top)
+            TabBarView(
+                tabs: tabs,
+                selectedIndex: $selectedTabIndex,
+                scrollProgress: scrollProgress,
+                onAddTap: { showNewTabSheet = true },
+                onMenuTap: { /* TODO: Open menu */ }
+            )
         }
         .sheet(isPresented: $showNewTabSheet) {
             NewTabSheet { title in

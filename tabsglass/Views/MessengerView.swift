@@ -327,7 +327,6 @@ final class MessageTableCell: UITableViewCell {
         backgroundColor = .clear
         selectionStyle = .none
 
-        bubbleView.backgroundColor = .systemBlue
         bubbleView.layer.cornerRadius = 18
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(bubbleView)
@@ -349,10 +348,30 @@ final class MessageTableCell: UITableViewCell {
             messageLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
             messageLabel.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
         ])
+
+        updateBubbleColor()
+    }
+
+    private func updateBubbleColor() {
+        if traitCollection.userInterfaceStyle == .dark {
+            bubbleView.backgroundColor = UIColor(white: 0.12, alpha: 1)
+            messageLabel.textColor = .white
+        } else {
+            bubbleView.backgroundColor = UIColor(white: 0.96, alpha: 1)
+            messageLabel.textColor = .black
+        }
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            updateBubbleColor()
+        }
     }
 
     func configure(with message: Message) {
         messageLabel.text = message.text
+        updateBubbleColor()
     }
 }
 
