@@ -43,7 +43,7 @@ struct TabBarView: View {
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
 
             // Tabs scroll view
             ScrollViewReader { proxy in
@@ -126,12 +126,15 @@ struct TabChipView: View {
                 .padding(.vertical, 8)
                 .glassEffect(.regular, in: .capsule)
         } else {
-            // Inactive tab - just text with shadow, no background
+            // Inactive tab - text with background-colored glow
             Text(title)
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(colorScheme == .dark ? .white : .black)
-                .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.2), radius: 4, y: 2)
+                .shadow(color: colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945), radius: 12, y: 0)
+                .shadow(color: colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945), radius: 8, y: 0)
+                .shadow(color: colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945), radius: 4, y: 0)
+                .shadow(color: colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945), radius: 2, y: 0)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
         }
