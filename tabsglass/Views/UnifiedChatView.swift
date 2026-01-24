@@ -81,6 +81,8 @@ final class UnifiedChatViewController: UIViewController {
     // MARK: - Input Container (Auto Layout)
     private var isComposerFocused: Bool = false
     private var hasAutoFocused: Bool = false
+    private var inputBottomToKeyboard: NSLayoutConstraint?
+    private var inputBottomToSafeArea: NSLayoutConstraint?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -149,7 +151,9 @@ final class UnifiedChatViewController: UIViewController {
         }
 
         inputContainer.onFocusChange = { [weak self] isFocused in
-            self?.isComposerFocused = isFocused
+            guard let self = self else { return }
+            self.isComposerFocused = isFocused
+            self.updateKeyboardConstraint(followKeyboard: isFocused)
         }
 
         inputContainer.onShowPhotoPicker = { [weak self] in
@@ -162,13 +166,27 @@ final class UnifiedChatViewController: UIViewController {
 
         view.addSubview(inputContainer)
 
-        // Auto Layout: pin to bottom (keyboard guide), leading, trailing
-        // Height determined by intrinsicContentSize
+        // Create both bottom constraints
+        inputBottomToKeyboard = inputContainer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        inputBottomToSafeArea = inputContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+
+        // Auto Layout: pin leading, trailing, and bottom (start with safe area)
         NSLayoutConstraint.activate([
             inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputContainer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+            inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
+        inputBottomToSafeArea?.isActive = true
+    }
+
+    /// Switch between keyboard-following and safe-area-anchored modes
+    private func updateKeyboardConstraint(followKeyboard: Bool) {
+        if followKeyboard {
+            inputBottomToSafeArea?.isActive = false
+            inputBottomToKeyboard?.isActive = true
+        } else {
+            inputBottomToKeyboard?.isActive = false
+            inputBottomToSafeArea?.isActive = true
+        }
     }
 
     private func updateAllContentInsets(animated: Bool = false) {
