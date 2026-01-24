@@ -200,7 +200,7 @@ final class SwiftUIComposerContainer: UIView {
 
     private let composerState = ComposerState()
     private var hostingController: UIHostingController<EmbeddedComposerView>?
-    private var currentHeight: CGFloat = 80
+    private var currentHeight: CGFloat = 102
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -269,13 +269,13 @@ final class SwiftUIComposerContainer: UIView {
 
     /// Вычисляет текущую требуемую высоту
     func calculateHeight() -> CGFloat {
-        guard let hc = hostingController else { return 80 }
+        guard let hc = hostingController else { return 102 }
         let targetWidth = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
         let fittingSize = hc.sizeThatFits(in: CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
-        return max(80, fittingSize.height)
+        return max(102, fittingSize.height)
     }
 
-    /// Обновляет высоту и уведомляет parent (синхронно, без async)
+    /// Обновляет высоту и уведомляет parent
     private func updateHeight() {
         let newHeight = calculateHeight()
         if abs(newHeight - currentHeight) > 1 {
@@ -292,9 +292,10 @@ final class SwiftUIComposerContainer: UIView {
         hostingController?.view.setNeedsLayout()
         hostingController?.view.layoutIfNeeded()
 
-        // Сразу устанавливаем минимальную высоту
-        currentHeight = 80
-        onHeightChange?(80)
+        // Recalculate actual height after clearing
+        DispatchQueue.main.async { [weak self] in
+            self?.updateHeight()
+        }
     }
 
     /// Focus the composer text field
@@ -321,93 +322,92 @@ struct EmbeddedComposerView: View {
 
     var body: some View {
         GlassEffectContainer {
-                VStack(spacing: 12) {
-                    // Attached images row
-                    if !state.attachedImages.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(Array(state.attachedImages.enumerated()), id: \.offset) { index, image in
-                                    AttachedImageView(image: image) {
-                                        state.removeImage(at: index)
-                                    }
+            VStack(spacing: 12) {
+                // Attached images row
+                if !state.attachedImages.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(state.attachedImages.enumerated()), id: \.offset) { index, image in
+                                AttachedImageView(image: image) {
+                                    state.removeImage(at: index)
                                 }
                             }
                         }
-                        .frame(height: 80)
                     }
-
-                    TextField("Note...", text: $state.text, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .lineLimit(1...10)
-                        .submitLabel(.send)
-                        .focused($isFocused)
-                        .onSubmit {
-                            if canSend {
-                                state.onSend?()
-                            }
-                        }
-                        .onChange(of: state.text) { _, newValue in
-                            state.onTextChange?(newValue)
-                        }
-                        .onChange(of: state.shouldFocus) { _, shouldFocus in
-                            if shouldFocus {
-                                isFocused = true
-                                state.shouldFocus = false
-                            }
-                        }
-                        .onChange(of: isFocused) { _, newValue in
-                            state.onFocusChange?(newValue)
-                        }
-
-                    HStack {
-                        Menu {
-                            Button {
-                                state.onShowCamera?()
-                            } label: {
-                                Label("Камера", systemImage: "camera")
-                            }
-
-                            Button {
-                                state.onShowPhotoPicker?()
-                            } label: {
-                                Label("Фото", systemImage: "photo.on.rectangle")
-                            }
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        Button(action: {
-                            if canSend {
-                                state.onSend?()
-                            }
-                        }) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(canSend ? Color.accentColor : Color.gray.opacity(0.4))
-                                .clipShape(Circle())
-                        }
-                        .disabled(!canSend)
-                        .buttonStyle(.plain)
-                    }
+                    .frame(height: 80)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .glassEffect(
-                    .regular.tint(colorScheme == .dark
-                        ? Color(white: 0.1).opacity(0.9)
-                        : .white.opacity(0.9)),
-                    in: .rect(cornerRadius: 24)
-                )
+
+                TextField("Note...", text: $state.text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...10)
+                    .submitLabel(.send)
+                    .focused($isFocused)
+                    .onSubmit {
+                        if canSend {
+                            state.onSend?()
+                        }
+                    }
+                    .onChange(of: state.text) { _, newValue in
+                        state.onTextChange?(newValue)
+                    }
+                    .onChange(of: state.shouldFocus) { _, shouldFocus in
+                        if shouldFocus {
+                            isFocused = true
+                            state.shouldFocus = false
+                        }
+                    }
+                    .onChange(of: isFocused) { _, newValue in
+                        state.onFocusChange?(newValue)
+                    }
+
+                HStack {
+                    Menu {
+                        Button {
+                            state.onShowCamera?()
+                        } label: {
+                            Label("Камера", systemImage: "camera")
+                        }
+
+                        Button {
+                            state.onShowPhotoPicker?()
+                        } label: {
+                            Label("Фото", systemImage: "photo.on.rectangle")
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        if canSend {
+                            state.onSend?()
+                        }
+                    }) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(canSend ? Color.accentColor : Color.gray.opacity(0.4))
+                            .clipShape(Circle())
+                    }
+                    .disabled(!canSend)
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .glassEffect(
+                .regular.tint(colorScheme == .dark
+                    ? Color(white: 0.1).opacity(0.9)
+                    : .white.opacity(0.9)),
+                in: .rect(cornerRadius: 24)
+            )
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
-        .frame(maxHeight: .infinity, alignment: .bottom)
     }
 }
 

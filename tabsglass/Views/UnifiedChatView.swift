@@ -79,11 +79,13 @@ final class UnifiedChatViewController: UIViewController {
     private var isUserSwiping: Bool = false
 
     // MARK: - Input Container (manual frame layout)
-    private let minInputHeight: CGFloat = 80
-    private var currentInputHeight: CGFloat = 80
+    private let minInputHeight: CGFloat = 102
+    private var currentInputHeight: CGFloat = 102
     private var isComposerFocused: Bool = false
     private var currentKeyboardHeight: CGFloat = 0
     private var hasAutoFocused: Bool = false
+
+    // No constraints - using manual frame layout for stability
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -130,7 +132,7 @@ final class UnifiedChatViewController: UIViewController {
     }
 
     private func setupInputView() {
-        // Use manual frame layout for precise control
+        // Use manual frame layout for stability
         inputContainer.translatesAutoresizingMaskIntoConstraints = true
         inputContainer.onTextChange = { [weak self] text in
             self?.onTextChange?(text)
@@ -147,8 +149,6 @@ final class UnifiedChatViewController: UIViewController {
             }
 
             self.currentInputHeight = constrainedHeight
-
-            // Force immediate layout update
             self.layoutInputContainer()
             self.updateAllContentInsets()
         }
@@ -159,15 +159,12 @@ final class UnifiedChatViewController: UIViewController {
             self.onSend?()
             self.inputContainer.clearText()
 
-            self.currentInputHeight = self.minInputHeight
-            UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
-                self.layoutInputContainer()
-            }
-
+            // Don't force height - let SwiftUI report actual height via onHeightChange
             self.reloadCurrentTab()
-            self.updateAllContentInsets()
 
             DispatchQueue.main.async {
+                self.layoutInputContainer()
+                self.updateAllContentInsets()
                 self.scrollToBottom(animated: true)
             }
         }
@@ -175,15 +172,6 @@ final class UnifiedChatViewController: UIViewController {
         inputContainer.onFocusChange = { [weak self] isFocused in
             guard let self = self else { return }
             self.isComposerFocused = isFocused
-
-            // When gaining focus and keyboard is already visible, update layout
-            // (fixes race condition where keyboard notification fires before focus change)
-            if isFocused && self.currentKeyboardHeight > 0 {
-                UIView.animate(withDuration: 0.25) {
-                    self.layoutInputContainer()
-                }
-                self.updateAllContentInsets()
-            }
         }
 
         inputContainer.onShowPhotoPicker = { [weak self] in
@@ -196,7 +184,7 @@ final class UnifiedChatViewController: UIViewController {
 
         view.addSubview(inputContainer)
 
-        // Manual keyboard handling
+        // Keyboard notifications for positioning
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(keyboardWillChangeFrame(_:)),
@@ -205,21 +193,20 @@ final class UnifiedChatViewController: UIViewController {
         )
     }
 
-    /// Calculate and set inputContainer frame manually
+    /// Update input container frame based on keyboard state
     private func layoutInputContainer() {
         let viewWidth = view.bounds.width
-        let viewHeight = view.bounds.height
         let safeAreaBottom = view.safeAreaInsets.bottom
 
-        // Bottom position: above keyboard if visible, otherwise above safe area
         let bottomY: CGFloat
         if currentKeyboardHeight > 0 {
-            bottomY = viewHeight - currentKeyboardHeight
+            // Keyboard is showing - position above keyboard with small gap
+            bottomY = view.bounds.height - currentKeyboardHeight - 4
         } else {
-            bottomY = viewHeight - safeAreaBottom
+            // No keyboard - position at safe area bottom
+            bottomY = view.bounds.height - safeAreaBottom
         }
 
-        // Frame: full width, positioned so bottom edge is at bottomY
         let newFrame = CGRect(
             x: 0,
             y: bottomY - currentInputHeight,
@@ -239,8 +226,9 @@ final class UnifiedChatViewController: UIViewController {
         let keyboardFrameInView = view.convert(endFrame, from: nil)
         let viewHeight = view.bounds.height
         let keyboardTop = keyboardFrameInView.minY
+        let keyboardIsShowing = keyboardTop < viewHeight
 
-        if keyboardTop < viewHeight {
+        if keyboardIsShowing {
             // Keyboard is showing
             // IMPORTANT: Only respond if OUR composer has focus (not alert's text field)
             // This check prevents composer from moving when alert keyboard appears
@@ -273,7 +261,7 @@ final class UnifiedChatViewController: UIViewController {
     }
 
     private func updateAllContentInsets() {
-        // Calculate bottom padding based on where inputContainer is positioned
+        // Calculate bottom padding from actual input container position
         let inputBottom = view.bounds.height - inputContainer.frame.minY
         let safeAreaBottom = view.safeAreaInsets.bottom
         messageControllers.values.forEach {
@@ -365,8 +353,7 @@ final class UnifiedChatViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // Only layout if keyboard is not animating - keyboard handler will handle that case
-        // This prevents viewDidLayoutSubviews from interfering with keyboard animations
+        layoutInputContainer()
         updateAllContentInsets()
     }
 
