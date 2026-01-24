@@ -15,7 +15,7 @@ struct MainContainerView: View {
     @State private var showDeleteAlert = false
     @State private var tabToRename: Tab?
     @State private var tabToDelete: Tab?
-    @State private var editingMessage: Message?
+    @State private var messageToEdit: Message?
     @State private var newTabTitle = ""
     @State private var renameTabTitle = ""
     @State private var messageText = ""
@@ -38,7 +38,6 @@ struct MainContainerView: View {
                     selectedIndex: $selectedTabIndex,
                     messageText: $messageText,
                     scrollProgress: $scrollProgress,
-                    editingMessage: $editingMessage,
                     onSend: { sendMessage() },
                     onDeleteMessage: { message in
                         deleteMessage(message)
@@ -47,12 +46,7 @@ struct MainContainerView: View {
                         moveMessage(message, to: targetTab)
                     },
                     onEditMessage: { message in
-                        editingMessage = message
-                        messageText = message.text
-                    },
-                    onCancelEdit: {
-                        editingMessage = nil
-                        messageText = ""
+                        messageToEdit = message
                     }
                 )
                 .scrollEdgeEffectStyle(.soft, for: .top)
@@ -127,32 +121,34 @@ struct MainContainerView: View {
             }
         }
         .onChange(of: selectedTabIndex) { _, newValue in
-            // Cancel editing when switching tabs
-            if editingMessage != nil {
-                editingMessage = nil
-                messageText = ""
-            }
             // Sync scrollProgress when tab is selected by tap
             withAnimation(.easeInOut(duration: 0.2)) {
                 scrollProgress = CGFloat(newValue)
             }
+        }
+        .sheet(item: $messageToEdit) { message in
+            EditMessageSheet(
+                originalText: message.text,
+                onSave: { newText in
+                    message.text = newText
+                    messageToEdit = nil
+                },
+                onCancel: {
+                    messageToEdit = nil
+                }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
         }
     }
 
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+        guard let tab = currentTab else { return }
 
-        if let message = editingMessage {
-            // Editing mode - update existing message
-            message.text = trimmedText
-            editingMessage = nil
-        } else {
-            // Normal mode - create new message
-            guard let tab = currentTab else { return }
-            let message = Message(text: trimmedText, tab: tab)
-            modelContext.insert(message)
-        }
+        let message = Message(text: trimmedText, tab: tab)
+        modelContext.insert(message)
         messageText = ""
     }
 

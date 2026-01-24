@@ -15,12 +15,10 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var selectedIndex: Int
     @Binding var messageText: String
     @Binding var scrollProgress: CGFloat
-    @Binding var editingMessage: Message?
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, Tab) -> Void)?
     var onEditMessage: ((Message) -> Void)?
-    var onCancelEdit: (() -> Void)?
 
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
@@ -30,7 +28,6 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onDeleteMessage = onDeleteMessage
         vc.onMoveMessage = onMoveMessage
         vc.onEditMessage = onEditMessage
-        vc.onCancelEdit = onCancelEdit
         vc.onIndexChange = { newIndex in
             selectedIndex = newIndex
         }
@@ -48,13 +45,11 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onDeleteMessage = onDeleteMessage
         uiViewController.onMoveMessage = onMoveMessage
         uiViewController.onEditMessage = onEditMessage
-        uiViewController.onCancelEdit = onCancelEdit
         if uiViewController.selectedIndex != selectedIndex {
             uiViewController.selectedIndex = selectedIndex
             uiViewController.updatePageSelection(animated: true)
         }
         uiViewController.reloadCurrentTab()
-        uiViewController.setEditingMessage(editingMessage)
     }
 }
 
@@ -70,11 +65,10 @@ final class UnifiedChatViewController: UIViewController {
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, Tab) -> Void)?
     var onEditMessage: ((Message) -> Void)?
-    var onCancelEdit: (() -> Void)?
 
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
-    private let inputContainer = SwiftUIComposerContainer()
+    let inputContainer = SwiftUIComposerContainer()
     private var pageScrollView: UIScrollView?
     private var isUserSwiping: Bool = false
 
@@ -172,8 +166,8 @@ final class UnifiedChatViewController: UIViewController {
 
             self.onSend?()
 
-            // Очищаем текст и editing state
-            self.inputContainer.clearEditingState()
+            // Очищаем текст
+            self.inputContainer.clearText()
 
             // Анимируем изменение высоты после очистки
             self.inputContainerHeightConstraint.constant = self.minInputHeight
@@ -188,18 +182,6 @@ final class UnifiedChatViewController: UIViewController {
             DispatchQueue.main.async {
                 self.scrollToBottom(animated: true)
             }
-        }
-
-        inputContainer.onCancelEdit = { [weak self] in
-            guard let self = self else { return }
-            self.onCancelEdit?()
-            self.inputContainer.clearEditingState()
-
-            self.inputContainerHeightConstraint.constant = self.minInputHeight
-            UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
-                self.view.layoutIfNeeded()
-            }
-            self.updateAllContentInsets()
         }
 
         view.addSubview(inputContainer)
@@ -385,18 +367,6 @@ final class UnifiedChatViewController: UIViewController {
                 currentVC.currentTab = tabs[currentVC.pageIndex]
                 currentVC.reloadMessages()
             }
-        }
-    }
-
-    func setEditingMessage(_ message: Message?) {
-        inputContainer.setEditingMessage(message)
-        if message != nil {
-            let newHeight = inputContainer.calculateHeight()
-            inputContainerHeightConstraint.constant = max(minInputHeight, newHeight)
-            UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
-                self.view.layoutIfNeeded()
-            }
-            updateAllContentInsets()
         }
     }
 
@@ -622,6 +592,15 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             guard let self = self else { return nil }
 
             var actions: [UIMenuElement] = []
+
+            // Copy action
+            let copyAction = UIAction(
+                title: "Скопировать",
+                image: UIImage(systemName: "doc.on.doc")
+            ) { _ in
+                UIPasteboard.general.string = message.text
+            }
+            actions.append(copyAction)
 
             // Edit action
             let editAction = UIAction(

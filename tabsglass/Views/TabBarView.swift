@@ -117,6 +117,7 @@ struct TabBarView: View {
                         )
                     }
             }
+            .allowsHitTesting(false)
             .ignoresSafeArea()
         }
     }
