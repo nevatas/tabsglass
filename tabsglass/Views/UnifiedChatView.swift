@@ -254,6 +254,18 @@ final class UnifiedChatViewController: UIViewController {
         }
     }
 
+    private func resetComposerPosition() {
+        // Reset composer to default position (above safe area, no keyboard)
+        // Use performWithoutAnimation to ensure instant update before context menu snapshots
+        isComposerFocused = false
+        inputContainerBottomConstraint.constant = 0
+
+        UIView.performWithoutAnimation {
+            self.view.layoutIfNeeded()
+        }
+        updateAllContentInsets()
+    }
+
     // MARK: - Scroll to Bottom
 
     private func scrollToBottom(animated: Bool) {
@@ -265,6 +277,9 @@ final class UnifiedChatViewController: UIViewController {
     private func getMessageController(for index: Int) -> MessageListViewController {
         if let existing = messageControllers[index] {
             existing.allTabs = tabs
+            existing.onContextMenuWillShow = { [weak self] in
+                self?.resetComposerPosition()
+            }
             return existing
         }
 
@@ -276,6 +291,9 @@ final class UnifiedChatViewController: UIViewController {
         vc.allTabs = tabs
         vc.onTap = { [weak self] in
             self?.view.endEditing(true)
+        }
+        vc.onContextMenuWillShow = { [weak self] in
+            self?.resetComposerPosition()
         }
         vc.getBottomPadding = { [weak self] in
             guard let self = self else { return 80 }
@@ -395,6 +413,7 @@ final class MessageListViewController: UIViewController {
     var currentTab: Tab?
     var allTabs: [Tab] = []
     var onTap: (() -> Void)?
+    var onContextMenuWillShow: (() -> Void)?
     var getBottomPadding: (() -> CGFloat)?
     var getSafeAreaBottom: (() -> CGFloat)?
     var onDeleteMessage: ((Message) -> Void)?
@@ -451,8 +470,9 @@ final class MessageListViewController: UIViewController {
 
     @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
         if gesture.state == .began {
-            // Dismiss keyboard before context menu appears
+            // Dismiss keyboard and reset composer before context menu appears
             view.window?.endEditing(true)
+            onContextMenuWillShow?()
         }
     }
 
