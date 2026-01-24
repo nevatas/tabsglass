@@ -495,16 +495,14 @@ struct AttachedImageView: View {
 
 final class MessageTableCell: UITableViewCell {
     private let bubbleView = UIView()
-    private let photosScrollView = UIScrollView()
-    private let photosStackView = UIStackView()
+    private let mosaicView = MosaicMediaView()
     private let messageLabel = UILabel()
-    private var photoImageViews: [UIImageView] = []
 
-    private var messageLabelTopToPhotos: NSLayoutConstraint!
+    private var messageLabelTopToMosaic: NSLayoutConstraint!
     private var messageLabelTopToBubble: NSLayoutConstraint!
     private var messageLabelBottomToBubble: NSLayoutConstraint!
-    private var photosHeightConstraint: NSLayoutConstraint!
-    private var photosBottomToBubble: NSLayoutConstraint!
+    private var mosaicHeightConstraint: NSLayoutConstraint!
+    private var mosaicBottomToBubble: NSLayoutConstraint!
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -524,16 +522,9 @@ final class MessageTableCell: UITableViewCell {
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(bubbleView)
 
-        // Photos scroll view (horizontal)
-        photosScrollView.showsHorizontalScrollIndicator = false
-        photosScrollView.translatesAutoresizingMaskIntoConstraints = false
-        bubbleView.addSubview(photosScrollView)
-
-        // Photos stack view (inside scroll view)
-        photosStackView.axis = .horizontal
-        photosStackView.spacing = 4
-        photosStackView.translatesAutoresizingMaskIntoConstraints = false
-        photosScrollView.addSubview(photosStackView)
+        // Mosaic media view
+        mosaicView.translatesAutoresizingMaskIntoConstraints = false
+        bubbleView.addSubview(mosaicView)
 
         // Message label
         messageLabel.textColor = .white
@@ -542,11 +533,11 @@ final class MessageTableCell: UITableViewCell {
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
         bubbleView.addSubview(messageLabel)
 
-        photosHeightConstraint = photosScrollView.heightAnchor.constraint(equalToConstant: 0)
-        messageLabelTopToPhotos = messageLabel.topAnchor.constraint(equalTo: photosScrollView.bottomAnchor, constant: 8)
+        mosaicHeightConstraint = mosaicView.heightAnchor.constraint(equalToConstant: 0)
+        messageLabelTopToMosaic = messageLabel.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 10)
         messageLabelTopToBubble = messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
         messageLabelBottomToBubble = messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
-        photosBottomToBubble = photosScrollView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
+        mosaicBottomToBubble = mosaicView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
 
         NSLayoutConstraint.activate([
             bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
@@ -554,18 +545,11 @@ final class MessageTableCell: UITableViewCell {
             bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             bubbleView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
 
-            // Photos scroll view
-            photosScrollView.topAnchor.constraint(equalTo: bubbleView.topAnchor),
-            photosScrollView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
-            photosScrollView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
-            photosHeightConstraint,
-
-            // Photos stack view (inside scroll view)
-            photosStackView.topAnchor.constraint(equalTo: photosScrollView.topAnchor),
-            photosStackView.bottomAnchor.constraint(equalTo: photosScrollView.bottomAnchor),
-            photosStackView.leadingAnchor.constraint(equalTo: photosScrollView.leadingAnchor),
-            photosStackView.trailingAnchor.constraint(equalTo: photosScrollView.trailingAnchor),
-            photosStackView.heightAnchor.constraint(equalTo: photosScrollView.heightAnchor),
+            // Mosaic view
+            mosaicView.topAnchor.constraint(equalTo: bubbleView.topAnchor),
+            mosaicView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
+            mosaicView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
+            mosaicHeightConstraint,
 
             // Message label - horizontal constraints always active
             messageLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
@@ -594,69 +578,51 @@ final class MessageTableCell: UITableViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        // Clear old photos
-        for imageView in photoImageViews {
-            imageView.removeFromSuperview()
-        }
-        photoImageViews.removeAll()
-
         // Reset constraints
-        messageLabelTopToPhotos.isActive = false
+        messageLabelTopToMosaic.isActive = false
         messageLabelTopToBubble.isActive = false
         messageLabelBottomToBubble.isActive = false
-        photosBottomToBubble.isActive = false
+        mosaicBottomToBubble.isActive = false
     }
 
     func configure(with message: Message) {
         messageLabel.text = message.text
         updateBubbleColor()
 
-        // Clear old photos
-        for imageView in photoImageViews {
-            imageView.removeFromSuperview()
-        }
-        photoImageViews.removeAll()
-
         let photos = message.photos
         let hasPhotos = !photos.isEmpty
         let hasText = !message.text.isEmpty
 
         // Reset constraints first
-        messageLabelTopToPhotos.isActive = false
+        messageLabelTopToMosaic.isActive = false
         messageLabelTopToBubble.isActive = false
         messageLabelBottomToBubble.isActive = false
-        photosBottomToBubble.isActive = false
+        mosaicBottomToBubble.isActive = false
 
-        // Configure photos
+        // Calculate bubble width (screen width - 32 for margins)
+        let bubbleWidth = UIScreen.main.bounds.width - 32
+
+        // Configure photos with mosaic layout
         if hasPhotos {
-            let photoSize: CGFloat = 150
-            photosHeightConstraint.constant = photoSize
-
-            for photo in photos {
-                let imageView = UIImageView(image: photo)
-                imageView.contentMode = .scaleAspectFill
-                imageView.clipsToBounds = true
-                imageView.translatesAutoresizingMaskIntoConstraints = false
-                imageView.widthAnchor.constraint(equalToConstant: photoSize).isActive = true
-                photosStackView.addArrangedSubview(imageView)
-                photoImageViews.append(imageView)
-            }
-
-            photosScrollView.isHidden = false
+            let mosaicHeight = MosaicMediaView.calculateHeight(for: photos, maxWidth: bubbleWidth)
+            mosaicHeightConstraint.constant = mosaicHeight
+            // isAtBottom: true only when there's no text below (photos-only message)
+            mosaicView.configure(with: photos, maxWidth: bubbleWidth, isAtBottom: !hasText)
+            mosaicView.isHidden = false
         } else {
-            photosHeightConstraint.constant = 0
-            photosScrollView.isHidden = true
+            mosaicHeightConstraint.constant = 0
+            mosaicView.isHidden = true
         }
 
         // Configure layout based on content
         if hasPhotos && hasText {
             // Both photos and text
-            messageLabelTopToPhotos.isActive = true
+            messageLabelTopToMosaic.isActive = true
             messageLabelBottomToBubble.isActive = true
             messageLabel.isHidden = false
         } else if hasPhotos && !hasText {
-            // Photos only - photos fill to bottom
-            photosBottomToBubble.isActive = true
+            // Photos only - mosaic fills to bottom
+            mosaicBottomToBubble.isActive = true
             messageLabel.isHidden = true
         } else {
             // Text only (or empty)
