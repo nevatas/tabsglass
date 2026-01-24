@@ -159,22 +159,46 @@ final class ComposerState {
     var onShowPhotoPicker: (() -> Void)?
     var onShowCamera: (() -> Void)?
 
+    /// Height of images section (80 when visible, 0 when hidden)
+    var imagesSectionHeight: CGFloat = 0
+
     func removeImage(at index: Int) {
         guard index < attachedImages.count else { return }
-        attachedImages.remove(at: index)
-        onAttachmentChange?()
+        let isLastImage = attachedImages.count == 1
+
+        if isLastImage {
+            // For last image: first animate height to 0, then remove
+            withAnimation(.easeOut(duration: 0.25)) {
+                imagesSectionHeight = 0
+            }
+            // Remove after animation completes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.attachedImages.removeAll()
+                self?.onAttachmentChange?()
+            }
+        } else {
+            // For non-last: just remove
+            attachedImages.remove(at: index)
+            onAttachmentChange?()
+        }
     }
 
     func addImages(_ images: [UIImage]) {
-        // Limit to 10 total images
         let available = 10 - attachedImages.count
         let toAdd = Array(images.prefix(available))
         attachedImages.append(contentsOf: toAdd)
+        // Set height when adding first images (80 images + 12 spacing = 92)
+        if imagesSectionHeight == 0 && !attachedImages.isEmpty {
+            withAnimation(.easeOut(duration: 0.25)) {
+                imagesSectionHeight = 92
+            }
+        }
         onAttachmentChange?()
     }
 
     func clearAttachments() {
         attachedImages.removeAll()
+        imagesSectionHeight = 0
     }
 }
 
@@ -219,17 +243,18 @@ final class SwiftUIComposerContainer: UIView {
             self.onTextChange?(newText)
             self.updateHeight()
         }
+
         composerState.onAttachmentChange = { [weak self] in
-            // Allow SwiftUI to render before calculating new height
-            // Multiple updates to ensure we catch the rendered size
+            guard let self = self else { return }
+            // Update height with small delays to catch SwiftUI layout changes
             DispatchQueue.main.async {
-                self?.updateHeight()
+                self.updateHeight()
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self?.updateHeight()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.updateHeight()
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self?.updateHeight()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self.updateHeight()
             }
         }
     }
@@ -248,22 +273,30 @@ final class SwiftUIComposerContainer: UIView {
         let composerView = EmbeddedComposerView(state: composerState)
         let hc = UIHostingController(rootView: composerView)
         hc.view.backgroundColor = .clear
+        hc.view.translatesAutoresizingMaskIntoConstraints = false
 
-        // Use autoresizing mask instead of constraints for simpler frame-based layout
-        hc.view.translatesAutoresizingMaskIntoConstraints = true
-        hc.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        // Let UIHostingController automatically update intrinsicContentSize
+        hc.sizingOptions = .intrinsicContentSize
 
         // Disable UIHostingController's automatic keyboard avoidance
         hc.safeAreaRegions = .container
 
         addSubview(hc.view)
+
+        // Pin to all edges
+        NSLayoutConstraint.activate([
+            hc.view.topAnchor.constraint(equalTo: topAnchor),
+            hc.view.bottomAnchor.constraint(equalTo: bottomAnchor),
+            hc.view.leadingAnchor.constraint(equalTo: leadingAnchor),
+            hc.view.trailingAnchor.constraint(equalTo: trailingAnchor)
+        ])
+
         hostingController = hc
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        hostingController?.view.frame = bounds
-        // Update height when bounds change (including initial layout)
+        // Notify parent about height changes
         updateHeight()
     }
 
@@ -303,9 +336,12 @@ final class SwiftUIComposerContainer: UIView {
         composerState.shouldFocus = true
     }
 
-    // Отключаем intrinsicContentSize - используем явный height constraint
+    // Use intrinsicContentSize from hosting controller
     override var intrinsicContentSize: CGSize {
-        return CGSize(width: UIView.noIntrinsicMetric, height: UIView.noIntrinsicMetric)
+        guard let hc = hostingController else {
+            return CGSize(width: UIView.noIntrinsicMetric, height: 102)
+        }
+        return hc.view.intrinsicContentSize
     }
 }
 
@@ -322,22 +358,33 @@ struct EmbeddedComposerView: View {
 
     var body: some View {
         GlassEffectContainer {
-            VStack(spacing: 12) {
-                // Attached images row
-                if !state.attachedImages.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(Array(state.attachedImages.enumerated()), id: \.offset) { index, image in
-                                AttachedImageView(image: image) {
-                                    state.removeImage(at: index)
+            VStack(spacing: 0) {
+                // Spacer pushes content to bottom during shrink animation
+                Spacer(minLength: 0)
+
+                VStack(spacing: 0) {
+                    // Attached images row - height includes spacing (80 + 12 = 92, or 0)
+                    if !state.attachedImages.isEmpty {
+                        VStack(spacing: 0) {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(Array(state.attachedImages.enumerated()), id: \.offset) { index, image in
+                                        AttachedImageView(image: image) {
+                                            state.removeImage(at: index)
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                    .frame(height: 80)
-                }
+                            .frame(height: 80)
 
-                TextField("Note...", text: $state.text, axis: .vertical)
+                            Spacer().frame(height: 12) // spacing below images
+                        }
+                        .frame(height: state.imagesSectionHeight > 0 ? 92 : 0)
+                        .clipped()
+                        .opacity(state.imagesSectionHeight > 0 ? 1 : 0)
+                    }
+
+                    TextField("Note...", text: $state.text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...10)
                     .submitLabel(.send)
@@ -360,7 +407,9 @@ struct EmbeddedComposerView: View {
                         state.onFocusChange?(newValue)
                     }
 
-                HStack {
+                    Spacer().frame(height: 12) // Fixed spacing between textfield and buttons
+
+                    HStack {
                     Menu {
                         Button {
                             state.onShowCamera?()
@@ -396,9 +445,11 @@ struct EmbeddedComposerView: View {
                     .disabled(!canSend)
                     .buttonStyle(.plain)
                 }
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
+            .animation(.easeOut(duration: 0.25), value: state.attachedImages.count)
             .glassEffect(
                 .regular.tint(colorScheme == .dark
                     ? Color(white: 0.1).opacity(0.9)
