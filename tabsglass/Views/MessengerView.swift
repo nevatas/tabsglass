@@ -206,6 +206,7 @@ final class ComposerState {
 
 final class SwiftUIComposerContainer: UIView {
     var onTextChange: ((String) -> Void)?
+    var onImagesChange: (([UIImage]) -> Void)?
     var onSend: (() -> Void)? {
         didSet { composerState.onSend = onSend }
     }
@@ -246,6 +247,8 @@ final class SwiftUIComposerContainer: UIView {
 
         composerState.onAttachmentChange = { [weak self] in
             guard let self = self else { return }
+            // Notify about images change
+            self.onImagesChange?(self.composerState.attachedImages)
             // Update height with small delays to catch SwiftUI layout changes
             DispatchQueue.main.async {
                 self.updateHeight()

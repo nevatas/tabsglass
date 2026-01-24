@@ -164,6 +164,10 @@ final class UnifiedChatViewController: UIViewController {
             self?.showCamera()
         }
 
+        inputContainer.onImagesChange = { [weak self] images in
+            self?.onImagesChange?(images)
+        }
+
         view.addSubview(inputContainer)
 
         // Create both bottom constraints
