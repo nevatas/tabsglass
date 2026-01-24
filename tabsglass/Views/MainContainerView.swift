@@ -49,6 +49,7 @@ struct MainContainerView: View {
                         messageToEdit = message
                     }
                 )
+                .ignoresSafeArea(.keyboard)
                 .scrollEdgeEffectStyle(.soft, for: .top)
             }
 

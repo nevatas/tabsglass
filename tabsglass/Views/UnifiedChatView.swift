@@ -74,7 +74,9 @@ final class UnifiedChatViewController: UIViewController {
 
     // MARK: - Input Container
     private var inputContainerHeightConstraint: NSLayoutConstraint!
+    private var inputContainerBottomConstraint: NSLayoutConstraint!
     private let minInputHeight: CGFloat = 80
+    private var isComposerFocused: Bool = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -169,34 +171,74 @@ final class UnifiedChatViewController: UIViewController {
             }
         }
 
+        // Track composer focus state for keyboard handling
+        inputContainer.onFocusChange = { [weak self] isFocused in
+            self?.isComposerFocused = isFocused
+        }
+
         view.addSubview(inputContainer)
 
         inputContainerHeightConstraint = inputContainer.heightAnchor.constraint(equalToConstant: minInputHeight)
+        inputContainerBottomConstraint = inputContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
 
-        // Use keyboardLayoutGuide for automatic keyboard tracking (including interactive dismiss)
         NSLayoutConstraint.activate([
             inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputContainer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+            inputContainerBottomConstraint,
             inputContainerHeightConstraint
         ])
 
-        // Observe keyboard layout changes to update content insets
-        view.keyboardLayoutGuide.keyboardDismissPadding = 0
+        // Manual keyboard handling
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(keyboardDidChangeFrame),
-            name: UIResponder.keyboardDidChangeFrameNotification,
+            selector: #selector(keyboardWillChangeFrame(_:)),
+            name: UIResponder.keyboardWillChangeFrameNotification,
             object: nil
         )
     }
 
-    deinit {
-        NotificationCenter.default.removeObserver(self)
+    @objc private func keyboardWillChangeFrame(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let endFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+              let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval,
+              let curveValue = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt else { return }
+
+        let keyboardFrameInView = view.convert(endFrame, from: nil)
+        let viewHeight = view.bounds.height
+        let safeAreaBottom = view.safeAreaInsets.bottom
+        let keyboardTop = keyboardFrameInView.minY
+
+        let bottomOffset: CGFloat
+        if keyboardTop < viewHeight {
+            // Keyboard is showing
+            // Only respond if OUR composer has focus (not alert's text field)
+            if !isComposerFocused {
+                return
+            }
+            bottomOffset = viewHeight - keyboardTop
+        } else {
+            // Keyboard is hiding - always reset to safe area
+            bottomOffset = safeAreaBottom
+        }
+
+        let animationOptions = UIView.AnimationOptions(rawValue: curveValue << 16)
+
+        // Update constraint relative to view bottom (not safe area when keyboard visible)
+        inputContainerBottomConstraint.constant = -bottomOffset + safeAreaBottom
+
+        UIView.animate(
+            withDuration: duration,
+            delay: 0,
+            options: [.beginFromCurrentState, animationOptions],
+            animations: {
+                self.view.layoutIfNeeded()
+            }
+        )
+        updateAllContentInsets()
     }
 
-    @objc private func keyboardDidChangeFrame() {
-        updateAllContentInsets()
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func updateAllContentInsets() {
@@ -358,6 +400,7 @@ final class MessageListViewController: UIViewController {
     private let tableView = UITableView()
     private var sortedMessages: [Message] = []
     private var longPressGesture: UILongPressGestureRecognizer!
+    private var hasAppearedBefore = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -418,8 +461,11 @@ final class MessageListViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         refreshContentInset()
-        // Scroll to latest messages after layout is complete
-        scrollToBottom(animated: false)
+        // Only scroll to bottom on first appearance, preserve position on subsequent visits
+        if !hasAppearedBefore {
+            scrollToBottom(animated: false)
+            hasAppearedBefore = true
+        }
     }
 
     private func refreshContentInset() {
@@ -442,9 +488,20 @@ final class MessageListViewController: UIViewController {
         // Extra spacing from last message to composer
         let extraSpacing: CGFloat = 16
         // bottomPadding already includes inputContainer height + keyboard (if visible)
-        let totalInset = bottomPadding + extraSpacing
-        tableView.contentInset.top = totalInset
-        tableView.verticalScrollIndicatorInsets.top = totalInset
+        let newInset = bottomPadding + extraSpacing
+        let oldInset = tableView.contentInset.top
+        let delta = newInset - oldInset
+
+        tableView.contentInset.top = newInset
+        tableView.verticalScrollIndicatorInsets.top = newInset
+
+        // Only adjust offset when inset INCREASES (keyboard appearing)
+        // When keyboard hides, tableView handles scroll naturally
+        if delta > 1 {
+            var offset = tableView.contentOffset
+            offset.y -= delta
+            tableView.contentOffset = offset
+        }
     }
 
     func scrollToBottom(animated: Bool) {

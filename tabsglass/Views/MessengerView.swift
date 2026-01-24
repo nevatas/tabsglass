@@ -153,6 +153,7 @@ final class ComposerState {
     var shouldFocus: Bool = false
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)?
+    var onFocusChange: ((Bool) -> Void)?
 }
 
 // MARK: - SwiftUI Composer Wrapper
@@ -161,6 +162,9 @@ final class SwiftUIComposerContainer: UIView {
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)? {
         didSet { composerState.onSend = onSend }
+    }
+    var onFocusChange: ((Bool) -> Void)? {
+        didSet { composerState.onFocusChange = onFocusChange }
     }
 
     /// Callback для уведомления о изменении высоты
@@ -206,6 +210,11 @@ final class SwiftUIComposerContainer: UIView {
         let hc = UIHostingController(rootView: composerView)
         hc.view.backgroundColor = .clear
         hc.view.translatesAutoresizingMaskIntoConstraints = false
+
+        // Disable UIHostingController's automatic keyboard avoidance
+        // We handle keyboard manually in UnifiedChatViewController
+        hc.safeAreaRegions = .container  // Excludes .keyboard
+
         addSubview(hc.view)
 
         NSLayoutConstraint.activate([
@@ -285,6 +294,9 @@ struct EmbeddedComposerView: View {
                             isFocused = true
                             state.shouldFocus = false
                         }
+                    }
+                    .onChange(of: isFocused) { _, newValue in
+                        state.onFocusChange?(newValue)
                     }
 
                 HStack {
