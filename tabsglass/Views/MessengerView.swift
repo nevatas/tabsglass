@@ -151,9 +151,31 @@ extension MessengerViewController: UITableViewDataSource, UITableViewDelegate {
 final class ComposerState {
     var text: String = ""
     var shouldFocus: Bool = false
+    var attachedImages: [UIImage] = []
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
+    var onAttachmentChange: (() -> Void)?
+    var onShowPhotoPicker: (() -> Void)?
+    var onShowCamera: (() -> Void)?
+
+    func removeImage(at index: Int) {
+        guard index < attachedImages.count else { return }
+        attachedImages.remove(at: index)
+        onAttachmentChange?()
+    }
+
+    func addImages(_ images: [UIImage]) {
+        // Limit to 10 total images
+        let available = 10 - attachedImages.count
+        let toAdd = Array(images.prefix(available))
+        attachedImages.append(contentsOf: toAdd)
+        onAttachmentChange?()
+    }
+
+    func clearAttachments() {
+        attachedImages.removeAll()
+    }
 }
 
 // MARK: - SwiftUI Composer Wrapper
@@ -165,6 +187,12 @@ final class SwiftUIComposerContainer: UIView {
     }
     var onFocusChange: ((Bool) -> Void)? {
         didSet { composerState.onFocusChange = onFocusChange }
+    }
+    var onShowPhotoPicker: (() -> Void)? {
+        didSet { composerState.onShowPhotoPicker = onShowPhotoPicker }
+    }
+    var onShowCamera: (() -> Void)? {
+        didSet { composerState.onShowCamera = onShowCamera }
     }
 
     /// Callback для уведомления о изменении высоты
@@ -179,18 +207,6 @@ final class SwiftUIComposerContainer: UIView {
         backgroundColor = .clear
         setupHostingController()
         setupTextChangeHandler()
-        setupTapGesture()
-    }
-
-    private func setupTapGesture() {
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
-        tap.cancelsTouchesInView = false
-        addGestureRecognizer(tap)
-    }
-
-    @objc private func handleTap() {
-        // Force focus on tap to work around UIHostingController + FocusState issues
-        composerState.shouldFocus = true
     }
 
     required init?(coder: NSCoder) {
@@ -203,33 +219,45 @@ final class SwiftUIComposerContainer: UIView {
             self.onTextChange?(newText)
             self.updateHeight()
         }
+        composerState.onAttachmentChange = { [weak self] in
+            // Allow SwiftUI to render before calculating new height
+            DispatchQueue.main.async {
+                self?.updateHeight()
+            }
+        }
+    }
+
+    /// Get currently attached images
+    var attachedImages: [UIImage] {
+        composerState.attachedImages
+    }
+
+    /// Add images from picker
+    func addImages(_ images: [UIImage]) {
+        composerState.addImages(images)
     }
 
     private func setupHostingController() {
         let composerView = EmbeddedComposerView(state: composerState)
         let hc = UIHostingController(rootView: composerView)
         hc.view.backgroundColor = .clear
-        hc.view.translatesAutoresizingMaskIntoConstraints = false
+
+        // Use autoresizing mask instead of constraints for simpler frame-based layout
+        hc.view.translatesAutoresizingMaskIntoConstraints = true
+        hc.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
 
         // Disable UIHostingController's automatic keyboard avoidance
-        // We handle keyboard manually in UnifiedChatViewController
-        hc.safeAreaRegions = .container  // Excludes .keyboard
+        hc.safeAreaRegions = .container
 
         addSubview(hc.view)
-
-        NSLayoutConstraint.activate([
-            hc.view.topAnchor.constraint(equalTo: topAnchor),
-            hc.view.bottomAnchor.constraint(equalTo: bottomAnchor),
-            hc.view.leadingAnchor.constraint(equalTo: leadingAnchor),
-            hc.view.trailingAnchor.constraint(equalTo: trailingAnchor)
-        ])
-
         hostingController = hc
+    }
 
-        // Trigger initial height calculation after layout
-        DispatchQueue.main.async { [weak self] in
-            self?.updateHeight()
-        }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        hostingController?.view.frame = bounds
+        // Update height when bounds change (including initial layout)
+        updateHeight()
     }
 
     /// Вычисляет текущую требуемую высоту
@@ -251,6 +279,7 @@ final class SwiftUIComposerContainer: UIView {
 
     func clearText() {
         composerState.text = ""
+        composerState.clearAttachments()
 
         // Принудительно обновляем hosting controller
         hostingController?.view.setNeedsLayout()
@@ -275,74 +304,128 @@ struct EmbeddedComposerView: View {
     @FocusState private var isFocused: Bool
 
     private var canSend: Bool {
-        !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.attachedImages.isEmpty
     }
 
     var body: some View {
-        GlassEffectContainer {
-            VStack(spacing: 12) {
-                TextField("Note...", text: $state.text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...10)
-                    .submitLabel(.send)
-                    .focused($isFocused)
-                    .onSubmit {
-                        if canSend {
-                            state.onSend?()
+        VStack {
+            Spacer(minLength: 0)
+
+            GlassEffectContainer {
+                VStack(spacing: 12) {
+                    // Attached images row
+                    if !state.attachedImages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(Array(state.attachedImages.enumerated()), id: \.offset) { index, image in
+                                    AttachedImageView(image: image) {
+                                        state.removeImage(at: index)
+                                    }
+                                }
+                            }
                         }
-                    }
-                    .onChange(of: state.text) { _, newValue in
-                        state.onTextChange?(newValue)
-                    }
-                    .onChange(of: state.shouldFocus) { _, shouldFocus in
-                        if shouldFocus {
-                            isFocused = true
-                            state.shouldFocus = false
-                        }
-                    }
-                    .onChange(of: isFocused) { _, newValue in
-                        state.onFocusChange?(newValue)
+                        .frame(height: 80)
                     }
 
-                HStack {
-                    Button {
-                        // Attach action
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Button(action: {
-                        if canSend {
-                            state.onSend?()
+                    TextField("Note...", text: $state.text, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...10)
+                        .submitLabel(.send)
+                        .focused($isFocused)
+                        .onSubmit {
+                            if canSend {
+                                state.onSend?()
+                            }
                         }
-                    }) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(canSend ? Color.accentColor : Color.gray.opacity(0.4))
-                            .clipShape(Circle())
+                        .onChange(of: state.text) { _, newValue in
+                            state.onTextChange?(newValue)
+                        }
+                        .onChange(of: state.shouldFocus) { _, shouldFocus in
+                            if shouldFocus {
+                                isFocused = true
+                                state.shouldFocus = false
+                            }
+                        }
+                        .onChange(of: isFocused) { _, newValue in
+                            state.onFocusChange?(newValue)
+                        }
+
+                    HStack {
+                        Menu {
+                            Button {
+                                state.onShowCamera?()
+                            } label: {
+                                Label("Камера", systemImage: "camera")
+                            }
+
+                            Button {
+                                state.onShowPhotoPicker?()
+                            } label: {
+                                Label("Фото", systemImage: "photo.on.rectangle")
+                            }
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Button(action: {
+                            if canSend {
+                                state.onSend?()
+                            }
+                        }) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .background(canSend ? Color.accentColor : Color.gray.opacity(0.4))
+                                .clipShape(Circle())
+                        }
+                        .disabled(!canSend)
+                        .buttonStyle(.plain)
                     }
-                    .disabled(!canSend)
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .glassEffect(
+                    .regular.tint(colorScheme == .dark
+                        ? Color(white: 0.1).opacity(0.9)
+                        : .white.opacity(0.9)),
+                    in: .rect(cornerRadius: 24)
+                )
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .glassEffect(
-                .regular.tint(colorScheme == .dark
-                    ? Color(white: 0.1).opacity(0.9)
-                    : .white.opacity(0.9)),
-                in: .rect(cornerRadius: 24)
-            )
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+    }
+}
+
+// MARK: - Attached Image View
+
+struct AttachedImageView: View {
+    let image: UIImage
+    let onRemove: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(Circle())
+            }
+            .offset(x: 4, y: -4)
+        }
     }
 }
 
@@ -350,7 +433,16 @@ struct EmbeddedComposerView: View {
 
 final class MessageTableCell: UITableViewCell {
     private let bubbleView = UIView()
+    private let photosScrollView = UIScrollView()
+    private let photosStackView = UIStackView()
     private let messageLabel = UILabel()
+    private var photoImageViews: [UIImageView] = []
+
+    private var messageLabelTopToPhotos: NSLayoutConstraint!
+    private var messageLabelTopToBubble: NSLayoutConstraint!
+    private var messageLabelBottomToBubble: NSLayoutConstraint!
+    private var photosHeightConstraint: NSLayoutConstraint!
+    private var photosBottomToBubble: NSLayoutConstraint!
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -366,14 +458,33 @@ final class MessageTableCell: UITableViewCell {
         selectionStyle = .none
 
         bubbleView.layer.cornerRadius = 18
+        bubbleView.clipsToBounds = true
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(bubbleView)
 
+        // Photos scroll view (horizontal)
+        photosScrollView.showsHorizontalScrollIndicator = false
+        photosScrollView.translatesAutoresizingMaskIntoConstraints = false
+        bubbleView.addSubview(photosScrollView)
+
+        // Photos stack view (inside scroll view)
+        photosStackView.axis = .horizontal
+        photosStackView.spacing = 4
+        photosStackView.translatesAutoresizingMaskIntoConstraints = false
+        photosScrollView.addSubview(photosStackView)
+
+        // Message label
         messageLabel.textColor = .white
         messageLabel.font = .systemFont(ofSize: 16)
         messageLabel.numberOfLines = 0
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
         bubbleView.addSubview(messageLabel)
+
+        photosHeightConstraint = photosScrollView.heightAnchor.constraint(equalToConstant: 0)
+        messageLabelTopToPhotos = messageLabel.topAnchor.constraint(equalTo: photosScrollView.bottomAnchor, constant: 8)
+        messageLabelTopToBubble = messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
+        messageLabelBottomToBubble = messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
+        photosBottomToBubble = photosScrollView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
 
         NSLayoutConstraint.activate([
             bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
@@ -381,8 +492,20 @@ final class MessageTableCell: UITableViewCell {
             bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             bubbleView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
 
-            messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10),
-            messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10),
+            // Photos scroll view
+            photosScrollView.topAnchor.constraint(equalTo: bubbleView.topAnchor),
+            photosScrollView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
+            photosScrollView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
+            photosHeightConstraint,
+
+            // Photos stack view (inside scroll view)
+            photosStackView.topAnchor.constraint(equalTo: photosScrollView.topAnchor),
+            photosStackView.bottomAnchor.constraint(equalTo: photosScrollView.bottomAnchor),
+            photosStackView.leadingAnchor.constraint(equalTo: photosScrollView.leadingAnchor),
+            photosStackView.trailingAnchor.constraint(equalTo: photosScrollView.trailingAnchor),
+            photosStackView.heightAnchor.constraint(equalTo: photosScrollView.heightAnchor),
+
+            // Message label - horizontal constraints always active
             messageLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
             messageLabel.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
         ])
@@ -407,9 +530,78 @@ final class MessageTableCell: UITableViewCell {
         }
     }
 
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        // Clear old photos
+        for imageView in photoImageViews {
+            imageView.removeFromSuperview()
+        }
+        photoImageViews.removeAll()
+
+        // Reset constraints
+        messageLabelTopToPhotos.isActive = false
+        messageLabelTopToBubble.isActive = false
+        messageLabelBottomToBubble.isActive = false
+        photosBottomToBubble.isActive = false
+    }
+
     func configure(with message: Message) {
         messageLabel.text = message.text
         updateBubbleColor()
+
+        // Clear old photos
+        for imageView in photoImageViews {
+            imageView.removeFromSuperview()
+        }
+        photoImageViews.removeAll()
+
+        let photos = message.photos
+        let hasPhotos = !photos.isEmpty
+        let hasText = !message.text.isEmpty
+
+        // Reset constraints first
+        messageLabelTopToPhotos.isActive = false
+        messageLabelTopToBubble.isActive = false
+        messageLabelBottomToBubble.isActive = false
+        photosBottomToBubble.isActive = false
+
+        // Configure photos
+        if hasPhotos {
+            let photoSize: CGFloat = 150
+            photosHeightConstraint.constant = photoSize
+
+            for photo in photos {
+                let imageView = UIImageView(image: photo)
+                imageView.contentMode = .scaleAspectFill
+                imageView.clipsToBounds = true
+                imageView.translatesAutoresizingMaskIntoConstraints = false
+                imageView.widthAnchor.constraint(equalToConstant: photoSize).isActive = true
+                photosStackView.addArrangedSubview(imageView)
+                photoImageViews.append(imageView)
+            }
+
+            photosScrollView.isHidden = false
+        } else {
+            photosHeightConstraint.constant = 0
+            photosScrollView.isHidden = true
+        }
+
+        // Configure layout based on content
+        if hasPhotos && hasText {
+            // Both photos and text
+            messageLabelTopToPhotos.isActive = true
+            messageLabelBottomToBubble.isActive = true
+            messageLabel.isHidden = false
+        } else if hasPhotos && !hasText {
+            // Photos only - photos fill to bottom
+            photosBottomToBubble.isActive = true
+            messageLabel.isHidden = true
+        } else {
+            // Text only (or empty)
+            messageLabelTopToBubble.isActive = true
+            messageLabelBottomToBubble.isActive = true
+            messageLabel.isHidden = false
+        }
     }
 }
 

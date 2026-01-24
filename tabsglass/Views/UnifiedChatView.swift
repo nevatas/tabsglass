@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import PhotosUI
 
 // MARK: - SwiftUI Bridge
 
@@ -15,6 +16,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var selectedIndex: Int
     @Binding var messageText: String
     @Binding var scrollProgress: CGFloat
+    @Binding var attachedImages: [UIImage]
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, Tab) -> Void)?
@@ -36,6 +38,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         }
         vc.onScrollProgress = { progress in
             scrollProgress = progress
+        }
+        vc.onImagesChange = { images in
+            attachedImages = images
         }
         return vc
     }
@@ -65,6 +70,7 @@ final class UnifiedChatViewController: UIViewController {
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, Tab) -> Void)?
     var onEditMessage: ((Message) -> Void)?
+    var onImagesChange: (([UIImage]) -> Void)?
 
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
@@ -72,11 +78,11 @@ final class UnifiedChatViewController: UIViewController {
     private var pageScrollView: UIScrollView?
     private var isUserSwiping: Bool = false
 
-    // MARK: - Input Container
-    private var inputContainerHeightConstraint: NSLayoutConstraint!
-    private var inputContainerBottomConstraint: NSLayoutConstraint!
+    // MARK: - Input Container (manual frame layout)
     private let minInputHeight: CGFloat = 80
+    private var currentInputHeight: CGFloat = 80
     private var isComposerFocused: Bool = false
+    private var currentKeyboardHeight: CGFloat = 0
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -123,70 +129,79 @@ final class UnifiedChatViewController: UIViewController {
     }
 
     private func setupInputView() {
-        inputContainer.translatesAutoresizingMaskIntoConstraints = false
+        // Use manual frame layout for precise control
+        inputContainer.translatesAutoresizingMaskIntoConstraints = true
         inputContainer.onTextChange = { [weak self] text in
             self?.onTextChange?(text)
         }
 
-        // Обработка изменения высоты композера (мгновенно при печати)
+        // Обработка изменения высоты композера
         inputContainer.onHeightChange = { [weak self] newHeight in
             guard let self = self else { return }
 
             let constrainedHeight = max(self.minInputHeight, newHeight)
 
-            guard abs(self.inputContainerHeightConstraint.constant - constrainedHeight) > 0.5 else {
+            guard abs(self.currentInputHeight - constrainedHeight) > 0.5 else {
                 return
             }
 
-            // Мгновенное обновление без анимации при печати
-            self.inputContainerHeightConstraint.constant = constrainedHeight
+            let isSignificantChange = abs(self.currentInputHeight - constrainedHeight) > 20
+            self.currentInputHeight = constrainedHeight
 
-            UIView.performWithoutAnimation {
-                self.view.layoutIfNeeded()
+            if isSignificantChange {
+                UIView.animate(withDuration: 0.25, delay: 0, options: .curveEaseOut) {
+                    self.layoutInputContainer()
+                } completion: { _ in
+                    self.updateAllContentInsets()
+                }
+            } else {
+                self.layoutInputContainer()
+                self.updateAllContentInsets()
             }
-
-            self.updateAllContentInsets()
         }
 
         inputContainer.onSend = { [weak self] in
             guard let self = self else { return }
 
             self.onSend?()
-
-            // Очищаем текст
             self.inputContainer.clearText()
 
-            // Анимируем изменение высоты после очистки
-            self.inputContainerHeightConstraint.constant = self.minInputHeight
+            self.currentInputHeight = self.minInputHeight
             UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseOut) {
-                self.view.layoutIfNeeded()
+                self.layoutInputContainer()
             }
 
             self.reloadCurrentTab()
             self.updateAllContentInsets()
 
-            // Scroll after layout completes
             DispatchQueue.main.async {
                 self.scrollToBottom(animated: true)
             }
         }
 
-        // Track composer focus state for keyboard handling
         inputContainer.onFocusChange = { [weak self] isFocused in
-            self?.isComposerFocused = isFocused
+            guard let self = self else { return }
+            self.isComposerFocused = isFocused
+
+            // When gaining focus and keyboard is already visible, update layout
+            // (fixes race condition where keyboard notification fires before focus change)
+            if isFocused && self.currentKeyboardHeight > 0 {
+                UIView.animate(withDuration: 0.25) {
+                    self.layoutInputContainer()
+                }
+                self.updateAllContentInsets()
+            }
+        }
+
+        inputContainer.onShowPhotoPicker = { [weak self] in
+            self?.showPhotoPicker()
+        }
+
+        inputContainer.onShowCamera = { [weak self] in
+            self?.showCamera()
         }
 
         view.addSubview(inputContainer)
-
-        inputContainerHeightConstraint = inputContainer.heightAnchor.constraint(equalToConstant: minInputHeight)
-        inputContainerBottomConstraint = inputContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
-
-        NSLayoutConstraint.activate([
-            inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputContainerBottomConstraint,
-            inputContainerHeightConstraint
-        ])
 
         // Manual keyboard handling
         NotificationCenter.default.addObserver(
@@ -197,11 +212,32 @@ final class UnifiedChatViewController: UIViewController {
         )
     }
 
-    @objc private func keyboardWillChangeFrame(_ notification: Notification) {
-        // Ensure inputContainer's SwiftUI content is fully laid out
-        // (fixes missing padding on first keyboard appearance)
-        inputContainer.layoutIfNeeded()
+    /// Calculate and set inputContainer frame manually
+    private func layoutInputContainer() {
+        let viewWidth = view.bounds.width
+        let viewHeight = view.bounds.height
+        let safeAreaBottom = view.safeAreaInsets.bottom
 
+        // Bottom position: above keyboard if visible, otherwise above safe area
+        let bottomY: CGFloat
+        if currentKeyboardHeight > 0 {
+            bottomY = viewHeight - currentKeyboardHeight
+        } else {
+            bottomY = viewHeight - safeAreaBottom
+        }
+
+        // Frame: full width, positioned so bottom edge is at bottomY
+        let newFrame = CGRect(
+            x: 0,
+            y: bottomY - currentInputHeight,
+            width: viewWidth,
+            height: currentInputHeight
+        )
+
+        inputContainer.frame = newFrame
+    }
+
+    @objc private func keyboardWillChangeFrame(_ notification: Notification) {
         guard let userInfo = notification.userInfo,
               let endFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
               let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval,
@@ -209,35 +245,26 @@ final class UnifiedChatViewController: UIViewController {
 
         let keyboardFrameInView = view.convert(endFrame, from: nil)
         let viewHeight = view.bounds.height
-        let safeAreaBottom = view.safeAreaInsets.bottom
         let keyboardTop = keyboardFrameInView.minY
 
-        let bottomOffset: CGFloat
         if keyboardTop < viewHeight {
-            // Keyboard is showing
-            // Only respond if OUR composer has focus (not alert's text field)
-            if !isComposerFocused {
-                return
-            }
-            bottomOffset = viewHeight - keyboardTop
+            currentKeyboardHeight = viewHeight - keyboardTop
         } else {
-            // Keyboard is hiding - always reset to safe area
-            bottomOffset = safeAreaBottom
+            currentKeyboardHeight = 0
         }
 
         let animationOptions = UIView.AnimationOptions(rawValue: curveValue << 16)
-
-        // Update constraint relative to view bottom (not safe area when keyboard visible)
-        inputContainerBottomConstraint.constant = -bottomOffset + safeAreaBottom
 
         UIView.animate(
             withDuration: duration,
             delay: 0,
             options: [.beginFromCurrentState, animationOptions],
             animations: {
-                self.view.layoutIfNeeded()
+                self.layoutInputContainer()
             }
         )
+
+        updateAllContentInsets()
         updateAllContentInsets()
     }
 
@@ -256,12 +283,11 @@ final class UnifiedChatViewController: UIViewController {
 
     private func resetComposerPosition() {
         // Reset composer to default position (above safe area, no keyboard)
-        // Use performWithoutAnimation to ensure instant update before context menu snapshots
         isComposerFocused = false
-        inputContainerBottomConstraint.constant = 0
+        currentKeyboardHeight = 0
 
         UIView.performWithoutAnimation {
-            self.view.layoutIfNeeded()
+            self.layoutInputContainer()
         }
         updateAllContentInsets()
     }
@@ -339,8 +365,94 @@ final class UnifiedChatViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // Update content inset for all visible controllers
+        // Only layout if keyboard is not animating - keyboard handler will handle that case
+        // This prevents viewDidLayoutSubviews from interfering with keyboard animations
         updateAllContentInsets()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Initial layout
+        layoutInputContainer()
+    }
+
+    // MARK: - Photo Picker
+
+    private func showPhotoPicker() {
+        var config = PHPickerConfiguration()
+        config.selectionLimit = 10 - inputContainer.attachedImages.count
+        config.filter = .images
+
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    // MARK: - Camera
+
+    private func showCamera() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else { return }
+
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    /// Get currently attached images
+    func getAttachedImages() -> [UIImage] {
+        inputContainer.attachedImages
+    }
+
+    /// Clear attached images after sending
+    func clearAttachedImages() {
+        inputContainer.clearText()
+    }
+}
+
+// MARK: - PHPickerViewControllerDelegate
+
+extension UnifiedChatViewController: PHPickerViewControllerDelegate {
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+
+        guard !results.isEmpty else { return }
+
+        let group = DispatchGroup()
+        var loadedImages: [UIImage] = []
+
+        for result in results {
+            group.enter()
+            result.itemProvider.loadObject(ofClass: UIImage.self) { object, _ in
+                if let image = object as? UIImage {
+                    loadedImages.append(image)
+                }
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) { [weak self] in
+            guard let self = self else { return }
+            self.inputContainer.addImages(loadedImages)
+            self.onImagesChange?(self.inputContainer.attachedImages)
+        }
+    }
+}
+
+// MARK: - UIImagePickerControllerDelegate
+
+extension UnifiedChatViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        picker.dismiss(animated: true)
+
+        if let image = info[.originalImage] as? UIImage {
+            inputContainer.addImages([image])
+            onImagesChange?(inputContainer.attachedImages)
+        }
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
     }
 }
 
@@ -516,6 +628,18 @@ final class MessageListViewController: UIViewController {
     /// Animate message deletion with smooth fade animation
     func animateDeleteMessage(_ message: Message, completion: @escaping () -> Void) {
         guard let index = sortedMessages.firstIndex(where: { $0.id == message.id }) else {
+            completion()
+            return
+        }
+
+        // If this is the last message, we can't animate deletion because
+        // numberOfRowsInSection returns 1 for empty state (empty cell)
+        // Just reload the table instead
+        if sortedMessages.count == 1 {
+            sortedMessages.remove(at: index)
+            UIView.performWithoutAnimation {
+                tableView.reloadData()
+            }
             completion()
             return
         }

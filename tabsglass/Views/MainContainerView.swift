@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct MainContainerView: View {
     @Environment(\.modelContext) private var modelContext
@@ -20,6 +21,7 @@ struct MainContainerView: View {
     @State private var renameTabTitle = ""
     @State private var messageText = ""
     @State private var scrollProgress: CGFloat = 0
+    @State private var attachedImages: [UIImage] = []
     @FocusState private var isComposerFocused: Bool
 
     private var currentTab: Tab? {
@@ -38,6 +40,7 @@ struct MainContainerView: View {
                     selectedIndex: $selectedTabIndex,
                     messageText: $messageText,
                     scrollProgress: $scrollProgress,
+                    attachedImages: $attachedImages,
                     onSend: { sendMessage() },
                     onDeleteMessage: { message in
                         deleteMessage(message)
@@ -145,15 +148,27 @@ struct MainContainerView: View {
 
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
+        // Allow sending if there's text OR images
+        guard !trimmedText.isEmpty || !attachedImages.isEmpty else { return }
         guard let tab = currentTab else { return }
 
-        let message = Message(text: trimmedText, tab: tab)
+        // Save attached images and get file names
+        var photoFileNames: [String] = []
+        for image in attachedImages {
+            if let fileName = Message.savePhoto(image) {
+                photoFileNames.append(fileName)
+            }
+        }
+
+        let message = Message(text: trimmedText, tab: tab, photoFileNames: photoFileNames)
         modelContext.insert(message)
         messageText = ""
+        attachedImages = []
     }
 
     private func deleteMessage(_ message: Message) {
+        // Delete photo files first
+        message.deletePhotoFiles()
         modelContext.delete(message)
     }
 
