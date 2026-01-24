@@ -221,7 +221,14 @@ final class SwiftUIComposerContainer: UIView {
         }
         composerState.onAttachmentChange = { [weak self] in
             // Allow SwiftUI to render before calculating new height
+            // Multiple updates to ensure we catch the rendered size
             DispatchQueue.main.async {
+                self?.updateHeight()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self?.updateHeight()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self?.updateHeight()
             }
         }
@@ -290,6 +297,11 @@ final class SwiftUIComposerContainer: UIView {
         onHeightChange?(80)
     }
 
+    /// Focus the composer text field
+    func focus() {
+        composerState.shouldFocus = true
+    }
+
     // Отключаем intrinsicContentSize - используем явный height constraint
     override var intrinsicContentSize: CGSize {
         return CGSize(width: UIView.noIntrinsicMetric, height: UIView.noIntrinsicMetric)
@@ -308,10 +320,7 @@ struct EmbeddedComposerView: View {
     }
 
     var body: some View {
-        VStack {
-            Spacer(minLength: 0)
-
-            GlassEffectContainer {
+        GlassEffectContainer {
                 VStack(spacing: 12) {
                     // Attached images row
                     if !state.attachedImages.isEmpty {
@@ -395,10 +404,10 @@ struct EmbeddedComposerView: View {
                         : .white.opacity(0.9)),
                     in: .rect(cornerRadius: 24)
                 )
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
         }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .frame(maxHeight: .infinity, alignment: .bottom)
     }
 }
 

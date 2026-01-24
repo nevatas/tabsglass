@@ -83,6 +83,7 @@ final class UnifiedChatViewController: UIViewController {
     private var currentInputHeight: CGFloat = 80
     private var isComposerFocused: Bool = false
     private var currentKeyboardHeight: CGFloat = 0
+    private var hasAutoFocused: Bool = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -145,19 +146,11 @@ final class UnifiedChatViewController: UIViewController {
                 return
             }
 
-            let isSignificantChange = abs(self.currentInputHeight - constrainedHeight) > 20
             self.currentInputHeight = constrainedHeight
 
-            if isSignificantChange {
-                UIView.animate(withDuration: 0.25, delay: 0, options: .curveEaseOut) {
-                    self.layoutInputContainer()
-                } completion: { _ in
-                    self.updateAllContentInsets()
-                }
-            } else {
-                self.layoutInputContainer()
-                self.updateAllContentInsets()
-            }
+            // Force immediate layout update
+            self.layoutInputContainer()
+            self.updateAllContentInsets()
         }
 
         inputContainer.onSend = { [weak self] in
@@ -248,8 +241,16 @@ final class UnifiedChatViewController: UIViewController {
         let keyboardTop = keyboardFrameInView.minY
 
         if keyboardTop < viewHeight {
+            // Keyboard is showing
+            // IMPORTANT: Only respond if OUR composer has focus (not alert's text field)
+            // This check prevents composer from moving when alert keyboard appears
+            // DO NOT REMOVE this check - it fixes the alert keyboard bug
+            if !isComposerFocused {
+                return
+            }
             currentKeyboardHeight = viewHeight - keyboardTop
         } else {
+            // Keyboard is hiding - always reset
             currentKeyboardHeight = 0
         }
 
@@ -264,7 +265,6 @@ final class UnifiedChatViewController: UIViewController {
             }
         )
 
-        updateAllContentInsets()
         updateAllContentInsets()
     }
 
@@ -374,6 +374,15 @@ final class UnifiedChatViewController: UIViewController {
         super.viewDidAppear(animated)
         // Initial layout
         layoutInputContainer()
+
+        // Auto-focus composer on first appearance
+        if !hasAutoFocused {
+            hasAutoFocused = true
+            // Small delay to ensure view is fully laid out
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.inputContainer.focus()
+            }
+        }
     }
 
     // MARK: - Photo Picker
@@ -618,7 +627,9 @@ final class MessageListViewController: UIViewController {
             }
             return
         }
-        sortedMessages = tab.messages.sorted { $0.createdAt > $1.createdAt }
+        sortedMessages = tab.messages
+            .filter { !$0.isEmpty }
+            .sorted { $0.createdAt > $1.createdAt }
         // Disable animations to prevent glitches with flipped tableView and context menu
         UIView.performWithoutAnimation {
             tableView.reloadData()

@@ -32,6 +32,19 @@ final class Message: Identifiable {
         }
     }
 
+    /// Check if message has no content (no text and no valid photos)
+    var isEmpty: Bool {
+        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if hasText { return false }
+
+        // Check if any photo files exist (without loading them)
+        let hasValidPhotos = photoFileNames.contains { fileName in
+            let url = Message.photosDirectory.appendingPathComponent(fileName)
+            return FileManager.default.fileExists(atPath: url.path)
+        }
+        return !hasValidPhotos
+    }
+
     /// Directory for storing message photos
     static var photosDirectory: URL {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

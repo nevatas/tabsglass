@@ -136,30 +136,40 @@ struct TabChipView: View {
     let title: String
     let selectionProgress: CGFloat  // 0 = not selected, 1 = fully selected
 
-    private var isSelected: Bool { selectionProgress > 0.5 }
+    private var shadowColor: Color {
+        colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945)
+    }
+
+    // Inverse progress for shadows (visible when not selected)
+    private var shadowOpacity: CGFloat {
+        1 - selectionProgress
+    }
+
+    // Glass opacity: 0.3 when not selected, 1.0 when selected
+    private var glassOpacity: CGFloat {
+        0.3 + (selectionProgress * 0.7)
+    }
 
     var body: some View {
-        if isSelected {
-            // Active tab - LiquidGlass style (neutral)
-            Text(title)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .glassEffect(.regular, in: .capsule)
-        } else {
-            // Inactive tab - text with background-colored glow
-            Text(title)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(colorScheme == .dark ? .white : .black)
-                .shadow(color: colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945), radius: 12, y: 0)
-                .shadow(color: colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945), radius: 8, y: 0)
-                .shadow(color: colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945), radius: 4, y: 0)
-                .shadow(color: colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945), radius: 2, y: 0)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-        }
+        Text(title)
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundStyle(colorScheme == .dark ? .white : .black)
+            // Shadows fade out as tab becomes selected
+            .shadow(color: shadowColor.opacity(shadowOpacity), radius: 12, y: 0)
+            .shadow(color: shadowColor.opacity(shadowOpacity), radius: 8, y: 0)
+            .shadow(color: shadowColor.opacity(shadowOpacity), radius: 4, y: 0)
+            .shadow(color: shadowColor.opacity(shadowOpacity), radius: 2, y: 0)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background {
+                // Glass background - semi-transparent when inactive, full when active
+                Capsule()
+                    .fill(.clear)
+                    .glassEffect(.regular, in: .capsule)
+                    .opacity(glassOpacity)
+            }
+            .animation(.easeOut(duration: 0.15), value: selectionProgress)
     }
 }
 
