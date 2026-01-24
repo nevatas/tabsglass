@@ -136,30 +136,27 @@ struct TabChipView: View {
     let title: String
     let selectionProgress: CGFloat  // 0 = not selected, 1 = fully selected
 
-    private var shadowColor: Color {
-        colorScheme == .dark ? .black : Color(red: 0.945, green: 0.945, blue: 0.945)
-    }
-
-    // Inverse progress for shadows (visible when not selected)
-    private var shadowOpacity: CGFloat {
-        1 - selectionProgress
-    }
-
     // Glass opacity: 0.3 when not selected, 1.0 when selected
     private var glassOpacity: CGFloat {
         0.3 + (selectionProgress * 0.7)
+    }
+
+    // Text color: light gray when inactive, white/black when active
+    private var textColor: Color {
+        if colorScheme == .dark {
+            // Dark theme: from light gray (0.7) to white (1.0)
+            return Color(white: 0.7 + (selectionProgress * 0.3))
+        } else {
+            // Light theme: from dark gray (0.3) to black (0.0)
+            return Color(white: 0.3 - (selectionProgress * 0.3))
+        }
     }
 
     var body: some View {
         Text(title)
             .font(.subheadline)
             .fontWeight(.semibold)
-            .foregroundStyle(colorScheme == .dark ? .white : .black)
-            // Shadows fade out as tab becomes selected
-            .shadow(color: shadowColor.opacity(shadowOpacity), radius: 12, y: 0)
-            .shadow(color: shadowColor.opacity(shadowOpacity), radius: 8, y: 0)
-            .shadow(color: shadowColor.opacity(shadowOpacity), radius: 4, y: 0)
-            .shadow(color: shadowColor.opacity(shadowOpacity), radius: 2, y: 0)
+            .foregroundStyle(textColor)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background {

@@ -757,8 +757,11 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             let otherTabs = self.allTabs.filter { $0.id != self.currentTab?.id }
             if !otherTabs.isEmpty {
                 let moveMenuChildren = otherTabs.map { tab in
-                    UIAction(title: tab.title) { _ in
-                        self.onMoveMessage?(message, tab)
+                    UIAction(title: tab.title) { [weak self] _ in
+                        // Animate removal first, then move to target tab
+                        self?.animateDeleteMessage(message) {
+                            self?.onMoveMessage?(message, tab)
+                        }
                     }
                 }
                 let moveMenu = UIMenu(
