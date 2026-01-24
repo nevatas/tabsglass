@@ -26,6 +26,7 @@ struct TabBarView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
+                .shadow(color: .clear, radius: 0)
 
                 Spacer()
 
@@ -44,6 +45,7 @@ struct TabBarView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
+                .shadow(color: .clear, radius: 0)
             }
             .padding(.horizontal, 12)
 
