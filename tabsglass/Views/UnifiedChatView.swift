@@ -250,22 +250,22 @@ final class UnifiedChatViewController: UIViewController {
             options: [.beginFromCurrentState, animationOptions],
             animations: {
                 self.layoutInputContainer()
+                // Update content insets inside animation so messages follow keyboard
+                self.updateAllContentInsets(animated: true)
             }
         )
-
-        updateAllContentInsets()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
 
-    private func updateAllContentInsets() {
+    private func updateAllContentInsets(animated: Bool = false) {
         // Calculate bottom padding from actual input container position
         let inputBottom = view.bounds.height - inputContainer.frame.minY
         let safeAreaBottom = view.safeAreaInsets.bottom
         messageControllers.values.forEach {
-            $0.updateContentInset(bottomPadding: inputBottom, safeAreaBottom: safeAreaBottom)
+            $0.updateContentInset(bottomPadding: inputBottom, safeAreaBottom: safeAreaBottom, animated: animated)
         }
     }
 
@@ -653,13 +653,16 @@ final class MessageListViewController: UIViewController {
         }
     }
 
-    func updateContentInset(bottomPadding: CGFloat, safeAreaBottom: CGFloat) {
+    func updateContentInset(bottomPadding: CGFloat, safeAreaBottom: CGFloat, animated: Bool = false) {
         // Extra spacing from last message to composer
         let extraSpacing: CGFloat = 16
         // bottomPadding already includes inputContainer height + keyboard (if visible)
         let newInset = bottomPadding + extraSpacing
         let oldInset = tableView.contentInset.top
         let delta = newInset - oldInset
+
+        // Save current offset BEFORE changing inset (tableView auto-adjusts on inset change)
+        let currentOffset = tableView.contentOffset
 
         // Visual bottom (composer area) - tableView is flipped so top = visual bottom
         tableView.contentInset.top = newInset
@@ -673,10 +676,14 @@ final class MessageListViewController: UIViewController {
         tableView.contentInset.bottom = topInset
         tableView.verticalScrollIndicatorInsets.bottom = topInset
 
-        // Only adjust offset when inset INCREASES (keyboard appearing)
-        // When keyboard hides, tableView handles scroll naturally
-        if delta > 1 {
-            var offset = tableView.contentOffset
+        // Adjust offset to keep messages in sync with keyboard
+        if animated && abs(delta) > 1 {
+            var offset = currentOffset
+            offset.y -= delta
+            tableView.contentOffset = offset
+        } else if delta > 1 {
+            // Non-animated: only adjust when inset increases (keyboard appearing)
+            var offset = currentOffset
             offset.y -= delta
             tableView.contentOffset = offset
         }
