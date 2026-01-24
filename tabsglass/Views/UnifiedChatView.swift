@@ -501,11 +501,34 @@ final class MessageListViewController: UIViewController {
     func reloadMessages() {
         guard let tab = currentTab else {
             sortedMessages = []
-            tableView.reloadData()
+            UIView.performWithoutAnimation {
+                tableView.reloadData()
+            }
             return
         }
         sortedMessages = tab.messages.sorted { $0.createdAt > $1.createdAt }
-        tableView.reloadData()
+        // Disable animations to prevent glitches with flipped tableView and context menu
+        UIView.performWithoutAnimation {
+            tableView.reloadData()
+        }
+    }
+
+    /// Animate message deletion with smooth fade animation
+    func animateDeleteMessage(_ message: Message, completion: @escaping () -> Void) {
+        guard let index = sortedMessages.firstIndex(where: { $0.id == message.id }) else {
+            completion()
+            return
+        }
+
+        // Remove from local array first
+        sortedMessages.remove(at: index)
+
+        // Animate the row deletion
+        tableView.performBatchUpdates {
+            tableView.deleteRows(at: [IndexPath(row: index, section: 0)], with: .fade)
+        } completion: { _ in
+            completion()
+        }
     }
 
     func updateContentInset(bottomPadding: CGFloat, safeAreaBottom: CGFloat) {
@@ -616,8 +639,11 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 title: "Удалить",
                 image: UIImage(systemName: "trash"),
                 attributes: .destructive
-            ) { _ in
-                self.onDeleteMessage?(message)
+            ) { [weak self] _ in
+                // Animate deletion first, then delete from data
+                self?.animateDeleteMessage(message) {
+                    self?.onDeleteMessage?(message)
+                }
             }
             actions.append(deleteAction)
 
