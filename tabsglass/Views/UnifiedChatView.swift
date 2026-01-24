@@ -492,8 +492,17 @@ final class MessageListViewController: UIViewController {
         let oldInset = tableView.contentInset.top
         let delta = newInset - oldInset
 
+        // Visual bottom (composer area) - tableView is flipped so top = visual bottom
         tableView.contentInset.top = newInset
         tableView.verticalScrollIndicatorInsets.top = newInset
+
+        // Visual top (header/tab bar area) - tableView is flipped so bottom = visual top
+        // Safe area top + header content + extra padding
+        let safeAreaTop = view.safeAreaInsets.top
+        let headerHeight: CGFloat = 115 // TabBarView + extra padding
+        let topInset = safeAreaTop + headerHeight
+        tableView.contentInset.bottom = topInset
+        tableView.verticalScrollIndicatorInsets.bottom = topInset
 
         // Only adjust offset when inset INCREASES (keyboard appearing)
         // When keyboard hides, tableView handles scroll naturally
