@@ -225,6 +225,11 @@ final class SwiftUIComposerContainer: UIView {
         ])
 
         hostingController = hc
+
+        // Trigger initial height calculation after layout
+        DispatchQueue.main.async { [weak self] in
+            self?.updateHeight()
+        }
     }
 
     /// Вычисляет текущую требуемую высоту

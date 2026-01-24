@@ -198,6 +198,10 @@ final class UnifiedChatViewController: UIViewController {
     }
 
     @objc private func keyboardWillChangeFrame(_ notification: Notification) {
+        // Ensure inputContainer's SwiftUI content is fully laid out
+        // (fixes missing padding on first keyboard appearance)
+        inputContainer.layoutIfNeeded()
+
         guard let userInfo = notification.userInfo,
               let endFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
               let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval,
