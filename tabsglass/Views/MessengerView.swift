@@ -364,8 +364,8 @@ final class MessageTableCell: UITableViewCell {
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
 
-    /// Callback when a photo is tapped: (index, sourceFrame in window, image, allPhotos)
-    var onPhotoTapped: ((Int, CGRect, UIImage, [UIImage]) -> Void)?
+    /// Callback when a photo is tapped: (index, sourceFrame in window, image, fileNames)
+    var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
 
     private var messageLabelTopToMosaic: NSLayoutConstraint!
     private var messageLabelTopToBubble: NSLayoutConstraint!
@@ -393,9 +393,8 @@ final class MessageTableCell: UITableViewCell {
 
         // Mosaic media view
         mosaicView.translatesAutoresizingMaskIntoConstraints = false
-        mosaicView.onPhotoTapped = { [weak self] index, sourceFrame, image in
-            guard let self = self, let message = self.cachedMessage else { return }
-            self.onPhotoTapped?(index, sourceFrame, image, message.photos)
+        mosaicView.onPhotoTapped = { [weak self] index, sourceFrame, image, fileNames in
+            self?.onPhotoTapped?(index, sourceFrame, image, fileNames)
         }
         bubbleView.addSubview(mosaicView)
 
@@ -481,8 +480,9 @@ final class MessageTableCell: UITableViewCell {
     }
 
     private func applyLayout(for message: Message, width: CGFloat) {
-        let photos = message.photos
-        let hasPhotos = !photos.isEmpty
+        let fileNames = message.photoFileNames
+        let aspectRatios = message.aspectRatios
+        let hasPhotos = !fileNames.isEmpty && !aspectRatios.isEmpty
         let hasText = !message.text.isEmpty
 
         // Reset constraints first
@@ -494,12 +494,12 @@ final class MessageTableCell: UITableViewCell {
         // Calculate bubble width (cell width - 32 for margins)
         let bubbleWidth = max(width - 32, 0)
 
-        // Configure photos with mosaic layout
+        // Configure photos with mosaic layout (async loading)
         if hasPhotos {
-            let mosaicHeight = MosaicMediaView.calculateHeight(for: photos, maxWidth: bubbleWidth)
+            let mosaicHeight = MosaicMediaView.calculateHeight(for: aspectRatios, maxWidth: bubbleWidth)
             mosaicHeightConstraint.constant = mosaicHeight
             // isAtBottom: true only when there's no text below (photos-only message)
-            mosaicView.configure(with: photos, maxWidth: bubbleWidth, isAtBottom: !hasText)
+            mosaicView.configure(with: fileNames, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText)
             mosaicView.isHidden = false
         } else {
             mosaicHeightConstraint.constant = 0

@@ -14,16 +14,23 @@ final class Message: Identifiable {
     var createdAt: Date
     var tab: Tab?
     var photoFileNames: [String] = []
+    var photoAspectRatios: [Double] = []
 
-    init(text: String, tab: Tab, photoFileNames: [String] = []) {
+    init(text: String, tab: Tab, photoFileNames: [String] = [], photoAspectRatios: [Double] = []) {
         self.id = UUID()
         self.text = text
         self.createdAt = Date()
         self.tab = tab
         self.photoFileNames = photoFileNames
+        self.photoAspectRatios = photoAspectRatios
     }
 
-    /// Get UIImages for attached photos
+    /// Get aspect ratios as CGFloat array
+    var aspectRatios: [CGFloat] {
+        photoAspectRatios.map { CGFloat($0) }
+    }
+
+    /// Get UIImages for attached photos (use only for gallery, not for thumbnails)
     var photos: [UIImage] {
         photoFileNames.compactMap { fileName in
             let url = Message.photosDirectory.appendingPathComponent(fileName)
@@ -57,8 +64,8 @@ final class Message: Identifiable {
         return photosPath
     }
 
-    /// Save image and return file name
-    static func savePhoto(_ image: UIImage) -> String? {
+    /// Save image and return file name and aspect ratio
+    static func savePhoto(_ image: UIImage) -> (fileName: String, aspectRatio: Double)? {
         let fileName = UUID().uuidString + ".jpg"
         let url = photosDirectory.appendingPathComponent(fileName)
 
@@ -66,7 +73,8 @@ final class Message: Identifiable {
 
         do {
             try data.write(to: url)
-            return fileName
+            let aspectRatio = Double(image.size.width / image.size.height)
+            return (fileName, aspectRatio)
         } catch {
             print("Failed to save photo: \(error)")
             return nil

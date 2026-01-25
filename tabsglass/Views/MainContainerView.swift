@@ -158,15 +158,17 @@ struct MainContainerView: View {
         guard !trimmedText.isEmpty || !attachedImages.isEmpty else { return }
         guard let tab = currentTab else { return }
 
-        // Save attached images and get file names
+        // Save attached images and get file names with aspect ratios
         var photoFileNames: [String] = []
+        var photoAspectRatios: [Double] = []
         for image in attachedImages {
-            if let fileName = Message.savePhoto(image) {
-                photoFileNames.append(fileName)
+            if let result = Message.savePhoto(image) {
+                photoFileNames.append(result.fileName)
+                photoAspectRatios.append(result.aspectRatio)
             }
         }
 
-        let message = Message(text: trimmedText, tab: tab, photoFileNames: photoFileNames)
+        let message = Message(text: trimmedText, tab: tab, photoFileNames: photoFileNames, photoAspectRatios: photoAspectRatios)
         modelContext.insert(message)
         messageText = ""
         attachedImages = []

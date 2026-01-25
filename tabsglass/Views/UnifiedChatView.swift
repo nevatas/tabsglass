@@ -251,8 +251,8 @@ final class UnifiedChatViewController: UIViewController {
         vc.onEditMessage = { [weak self] message in
             self?.onEditMessage?(message)
         }
-        vc.onOpenGallery = { [weak self] startIndex, photos, sourceFrame in
-            self?.presentGallery(startIndex: startIndex, photos: photos, sourceFrame: sourceFrame)
+        vc.onOpenGallery = { [weak self] startIndex, fileNames, sourceFrame in
+            self?.presentGallery(startIndex: startIndex, fileNames: fileNames, sourceFrame: sourceFrame)
         }
         messageControllers[index] = vc
         return vc
@@ -322,16 +322,36 @@ final class UnifiedChatViewController: UIViewController {
 
     // MARK: - Gallery
 
-    private func presentGallery(startIndex: Int, photos: [UIImage], sourceFrame: CGRect) {
-        guard !photos.isEmpty, startIndex < photos.count else { return }
+    private func presentGallery(startIndex: Int, fileNames: [String], sourceFrame: CGRect) {
+        guard !fileNames.isEmpty, startIndex < fileNames.count else { return }
 
-        let galleryVC = GalleryViewController(
-            photos: photos,
-            startIndex: startIndex,
-            sourceFrame: sourceFrame,
-            sourceImage: photos[startIndex]
-        )
-        present(galleryVC, animated: true)
+        // Load full images asynchronously
+        let group = DispatchGroup()
+        var loadedImages: [Int: UIImage] = [:]
+
+        for (index, fileName) in fileNames.enumerated() {
+            group.enter()
+            ImageCache.shared.loadFullImage(for: fileName) { image in
+                if let image = image {
+                    loadedImages[index] = image
+                }
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) { [weak self] in
+            // Convert to ordered array
+            let photos = (0..<fileNames.count).compactMap { loadedImages[$0] }
+            guard !photos.isEmpty, startIndex < photos.count else { return }
+
+            let galleryVC = GalleryViewController(
+                photos: photos,
+                startIndex: startIndex,
+                sourceFrame: sourceFrame,
+                sourceImage: photos[startIndex]
+            )
+            self?.present(galleryVC, animated: true)
+        }
     }
 
 }
@@ -457,8 +477,8 @@ final class MessageListViewController: UIViewController {
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, Tab) -> Void)?
     var onEditMessage: ((Message) -> Void)?
-    /// Callback when a gallery should be opened: (startIndex, photos, sourceFrame)
-    var onOpenGallery: ((Int, [UIImage], CGRect) -> Void)?
+    /// Callback when a gallery should be opened: (startIndex, fileNames, sourceFrame)
+    var onOpenGallery: ((Int, [String], CGRect) -> Void)?
 
     private let tableView = UITableView()
     private var sortedMessages: [Message] = []
@@ -647,8 +667,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
         let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
         cell.configure(with: sortedMessages[indexPath.row])
-        cell.onPhotoTapped = { [weak self] index, sourceFrame, _, photos in
-            self?.onOpenGallery?(index, photos, sourceFrame)
+        cell.onPhotoTapped = { [weak self] index, sourceFrame, _, fileNames in
+            self?.onOpenGallery?(index, fileNames, sourceFrame)
         }
         cell.transform = CGAffineTransform(scaleX: 1, y: -1)
         return cell

@@ -461,11 +461,12 @@ struct MosaicLayoutCalculator {
 final class MosaicMediaView: UIView {
     private var imageViews: [UIImageView] = []
     private var layoutItems: [MosaicLayoutItem] = []
+    private var currentFileNames: [String] = []
     /// Corner radius for outer corners (should match bubble corner radius)
     var cornerRadius: CGFloat = 18
 
-    /// Callback when a photo is tapped: (index, sourceFrame in window coordinates, image)
-    var onPhotoTapped: ((Int, CGRect, UIImage) -> Void)?
+    /// Callback when a photo is tapped: (index, sourceFrame in window coordinates, image, allFileNames)
+    var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -482,34 +483,33 @@ final class MosaicMediaView: UIView {
         return imageViews[index]
     }
 
-    /// Configure with images
+    /// Configure with file names (async loading with cache)
     /// - Parameters:
-    ///   - images: Array of images to display
+    ///   - fileNames: Array of photo file names
+    ///   - aspectRatios: Pre-calculated aspect ratios for layout
     ///   - maxWidth: Maximum width for the mosaic
     ///   - isAtBottom: If true, bottom corners will be rounded (for photos-only messages)
-    func configure(with images: [UIImage], maxWidth: CGFloat, isAtBottom: Bool = true) {
+    func configure(with fileNames: [String], aspectRatios: [CGFloat], maxWidth: CGFloat, isAtBottom: Bool = true) {
         // Clear old views
         imageViews.forEach { $0.removeFromSuperview() }
         imageViews.removeAll()
+        currentFileNames = fileNames
 
-        guard !images.isEmpty else { return }
-
-        // Calculate aspect ratios
-        let aspectRatios = images.map { $0.size.width / $0.size.height }
+        guard !fileNames.isEmpty, !aspectRatios.isEmpty else { return }
 
         // Calculate layout
         let calculator = MosaicLayoutCalculator(maxWidth: maxWidth, maxHeight: 300, spacing: 2)
         layoutItems = calculator.calculateLayout(aspectRatios: aspectRatios)
 
-        // Create image views
+        // Create image views with placeholder
         for (index, item) in layoutItems.enumerated() {
-            let imageView = UIImageView(image: images[index])
+            let imageView = UIImageView()
             imageView.contentMode = .scaleAspectFill
             imageView.clipsToBounds = true
+            imageView.backgroundColor = UIColor.systemGray5
             imageView.frame = item.frame
 
             // Apply corner mask based on position
-            // If not at bottom of bubble, remove bottom corners from the mask
             var position = item.position
             if !isAtBottom {
                 position.remove(.bottom)
@@ -525,6 +525,15 @@ final class MosaicMediaView: UIView {
 
             addSubview(imageView)
             imageViews.append(imageView)
+
+            // Load thumbnail async
+            if index < fileNames.count {
+                let fileName = fileNames[index]
+                let targetSize = item.frame.size
+                ImageCache.shared.loadThumbnail(for: fileName, targetSize: targetSize) { [weak imageView] image in
+                    imageView?.image = image
+                }
+            }
         }
 
         // Update frame height
@@ -533,15 +542,62 @@ final class MosaicMediaView: UIView {
         }
     }
 
-    /// Calculate total height for given images and width
-    static func calculateHeight(for images: [UIImage], maxWidth: CGFloat) -> CGFloat {
-        guard !images.isEmpty else { return 0 }
+    /// Configure with images (legacy, still used for initial layout calculation)
+    func configure(with images: [UIImage], maxWidth: CGFloat, isAtBottom: Bool = true) {
+        // Clear old views
+        imageViews.forEach { $0.removeFromSuperview() }
+        imageViews.removeAll()
+        currentFileNames = []
+
+        guard !images.isEmpty else { return }
 
         let aspectRatios = images.map { $0.size.width / $0.size.height }
+        let calculator = MosaicLayoutCalculator(maxWidth: maxWidth, maxHeight: 300, spacing: 2)
+        layoutItems = calculator.calculateLayout(aspectRatios: aspectRatios)
+
+        for (index, item) in layoutItems.enumerated() {
+            let imageView = UIImageView(image: images[index])
+            imageView.contentMode = .scaleAspectFill
+            imageView.clipsToBounds = true
+            imageView.frame = item.frame
+
+            var position = item.position
+            if !isAtBottom {
+                position.remove(.bottom)
+            }
+            imageView.layer.maskedCorners = cornerMask(for: position)
+            imageView.layer.cornerRadius = cornerRadius
+
+            imageView.isUserInteractionEnabled = true
+            imageView.tag = index
+            let tap = UITapGestureRecognizer(target: self, action: #selector(imageTapped(_:)))
+            imageView.addGestureRecognizer(tap)
+
+            addSubview(imageView)
+            imageViews.append(imageView)
+        }
+
+        if let maxY = layoutItems.map({ $0.frame.maxY }).max() {
+            frame.size.height = maxY
+        }
+    }
+
+    /// Calculate total height for given aspect ratios and width
+    static func calculateHeight(for aspectRatios: [CGFloat], maxWidth: CGFloat) -> CGFloat {
+        guard !aspectRatios.isEmpty else { return 0 }
+
         let calculator = MosaicLayoutCalculator(maxWidth: maxWidth, maxHeight: 300, spacing: 2)
         let items = calculator.calculateLayout(aspectRatios: aspectRatios)
 
         return items.map { $0.frame.maxY }.max() ?? 0
+    }
+
+    /// Calculate total height for given images and width (legacy)
+    static func calculateHeight(for images: [UIImage], maxWidth: CGFloat) -> CGFloat {
+        guard !images.isEmpty else { return 0 }
+
+        let aspectRatios = images.map { $0.size.width / $0.size.height }
+        return calculateHeight(for: aspectRatios, maxWidth: maxWidth)
     }
 
     private func cornerMask(for position: MosaicItemPosition) -> CACornerMask {
@@ -575,6 +631,6 @@ final class MosaicMediaView: UIView {
 
         let index = imageView.tag
         let frameInWindow = imageView.convert(imageView.bounds, to: window)
-        onPhotoTapped?(index, frameInWindow, image)
+        onPhotoTapped?(index, frameInWindow, image, currentFileNames)
     }
 }
