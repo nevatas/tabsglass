@@ -22,7 +22,6 @@ struct MainContainerView: View {
     @State private var messageText = ""
     @State private var scrollProgress: CGFloat = 0
     @State private var attachedImages: [UIImage] = []
-    @FocusState private var isComposerFocused: Bool
 
     private var currentTab: Tab? {
         guard selectedTabIndex >= 0 && selectedTabIndex < tabs.count else { return nil }

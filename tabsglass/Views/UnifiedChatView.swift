@@ -1,5 +1,4 @@
-//
-//  UnifiedChatView.swift
+//  СмотUnifiedChatView.swift
 //  tabsglass
 //
 //  Single input bar with swipeable message tabs
@@ -79,7 +78,6 @@ final class UnifiedChatViewController: UIViewController {
     private var isUserSwiping: Bool = false
 
     // MARK: - Input Container (Auto Layout)
-    private var isComposerFocused: Bool = false
     private var hasAutoFocused: Bool = false
     private var inputBottomToKeyboard: NSLayoutConstraint?
     private var inputBottomToSafeArea: NSLayoutConstraint?
@@ -152,7 +150,6 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onFocusChange = { [weak self] isFocused in
             guard let self = self else { return }
-            self.isComposerFocused = isFocused
             self.updateKeyboardConstraint(followKeyboard: isFocused)
         }
 
@@ -206,7 +203,6 @@ final class UnifiedChatViewController: UIViewController {
     private func resetComposerPosition() {
         // Just dismiss keyboard - Auto Layout handles positioning
         view.endEditing(true)
-        isComposerFocused = false
         updateAllContentInsets()
     }
 
@@ -321,15 +317,6 @@ final class UnifiedChatViewController: UIViewController {
         present(picker, animated: true)
     }
 
-    /// Get currently attached images
-    func getAttachedImages() -> [UIImage] {
-        inputContainer.attachedImages
-    }
-
-    /// Clear attached images after sending
-    func clearAttachedImages() {
-        inputContainer.clearText()
-    }
 }
 
 // MARK: - PHPickerViewControllerDelegate

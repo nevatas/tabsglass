@@ -2,148 +2,11 @@
 //  MessengerView.swift
 //  tabsglass
 //
-//  UIKit-based messenger view with keyboard-synced scrolling
+//  Shared composer and message cell components used by UnifiedChatView
 //
 
 import SwiftUI
 import UIKit
-
-// MARK: - SwiftUI Bridge
-
-struct MessengerView: UIViewControllerRepresentable {
-    let tab: Tab
-    @Binding var messageText: String
-    let onSend: () -> Void
-    let onTapOutside: () -> Void
-
-    func makeUIViewController(context: Context) -> MessengerViewController {
-        let vc = MessengerViewController()
-        vc.currentTab = tab
-        vc.onSend = onSend
-        vc.onTapOutside = onTapOutside
-        vc.textBinding = $messageText
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: MessengerViewController, context: Context) {
-        uiViewController.currentTab = tab
-        uiViewController.textBinding = $messageText
-        uiViewController.reloadMessages()
-    }
-}
-
-// MARK: - MessengerViewController
-
-final class MessengerViewController: UIViewController {
-    var currentTab: Tab!
-    var textBinding: Binding<String>!
-    var onSend: (() -> Void)?
-    var onTapOutside: (() -> Void)?
-
-    private let tableView = UITableView()
-    private let inputContainer = SwiftUIComposerContainer()
-    private var sortedMessages: [Message] = []
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .clear
-        setupTableView()
-        setupInputView()
-    }
-
-    private func setupTableView() {
-        tableView.translatesAutoresizingMaskIntoConstraints = false
-        tableView.backgroundColor = .clear
-        tableView.separatorStyle = .none
-        tableView.keyboardDismissMode = .interactive
-        tableView.delegate = self
-        tableView.dataSource = self
-        tableView.register(MessageTableCell.self, forCellReuseIdentifier: "MessageCell")
-        tableView.register(EmptyTableCell.self, forCellReuseIdentifier: "EmptyCell")
-        tableView.transform = CGAffineTransform(scaleX: 1, y: -1) // Flip for bottom-up
-        tableView.contentInset = UIEdgeInsets(top: 90, left: 0, bottom: 0, right: 0) // Space for input
-
-        view.addSubview(tableView)
-
-        NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.topAnchor),
-            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        ])
-
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
-        tap.cancelsTouchesInView = false
-        tableView.addGestureRecognizer(tap)
-    }
-
-    private func setupInputView() {
-        inputContainer.translatesAutoresizingMaskIntoConstraints = false
-        inputContainer.onTextChange = { [weak self] text in
-            self?.textBinding.wrappedValue = text
-        }
-        inputContainer.onSend = { [weak self] in
-            self?.onSend?()
-            self?.inputContainer.clearText()
-        }
-
-        view.addSubview(inputContainer)
-
-        // Use keyboardLayoutGuide - automatically handles keyboard
-        NSLayoutConstraint.activate([
-            inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputContainer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
-        ])
-    }
-
-    private func updateTableInsets() {
-        let inputHeight = inputContainer.bounds.height
-        tableView.contentInset.top = inputHeight
-        tableView.verticalScrollIndicatorInsets.top = inputHeight
-    }
-
-    @objc private func handleTap() {
-        view.endEditing(true)
-        onTapOutside?()
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        reloadMessages()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        updateTableInsets()
-    }
-
-    func reloadMessages() {
-        sortedMessages = currentTab.messages.sorted { $0.createdAt > $1.createdAt }
-        tableView.reloadData()
-    }
-}
-
-// MARK: - UITableViewDataSource & Delegate
-
-extension MessengerViewController: UITableViewDataSource, UITableViewDelegate {
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        sortedMessages.isEmpty ? 1 : sortedMessages.count
-    }
-
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        if sortedMessages.isEmpty {
-            let cell = tableView.dequeueReusableCell(withIdentifier: "EmptyCell", for: indexPath) as! EmptyTableCell
-            cell.transform = CGAffineTransform(scaleX: 1, y: -1)
-            return cell
-        }
-
-        let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
-        cell.configure(with: sortedMessages[indexPath.row])
-        cell.transform = CGAffineTransform(scaleX: 1, y: -1)
-        return cell
-    }
-}
 
 // MARK: - Composer State (Observable)
 
@@ -316,6 +179,7 @@ final class SwiftUIComposerContainer: UIView {
         let newHeight = calculateHeight()
         if abs(newHeight - currentHeight) > 1 {
             currentHeight = newHeight
+            invalidateIntrinsicContentSize()
             onHeightChange?(newHeight)
         }
     }
@@ -341,10 +205,7 @@ final class SwiftUIComposerContainer: UIView {
 
     // Use intrinsicContentSize from hosting controller
     override var intrinsicContentSize: CGSize {
-        guard let hc = hostingController else {
-            return CGSize(width: UIView.noIntrinsicMetric, height: 102)
-        }
-        return hc.view.intrinsicContentSize
+        CGSize(width: UIView.noIntrinsicMetric, height: currentHeight)
     }
 }
 
@@ -354,6 +215,8 @@ struct EmbeddedComposerView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Bindable var state: ComposerState
     @FocusState private var isFocused: Bool
+
+    private let maxTextLines = 7
 
     private var canSend: Bool {
         !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.attachedImages.isEmpty
@@ -389,7 +252,7 @@ struct EmbeddedComposerView: View {
 
                     TextField("Note...", text: $state.text, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .lineLimit(1...10)
+                    .lineLimit(1...maxTextLines)
                     .submitLabel(.send)
                     .focused($isFocused)
                     .onSubmit {
