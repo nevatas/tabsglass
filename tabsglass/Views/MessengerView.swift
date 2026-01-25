@@ -439,7 +439,7 @@ final class MessageTableCell: UITableViewCell {
 
     private func updateBubbleColor() {
         if traitCollection.userInterfaceStyle == .dark {
-            bubbleView.backgroundColor = UIColor(white: 0.12, alpha: 1)
+            bubbleView.backgroundColor = UIColor(red: 0x24/255.0, green: 0x25/255.0, blue: 0x29/255.0, alpha: 1)
             messageLabel.textColor = .white
         } else {
             bubbleView.backgroundColor = UIColor(white: 0.96, alpha: 1)

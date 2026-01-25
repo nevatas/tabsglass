@@ -254,6 +254,8 @@ extension GalleryViewController: UIScrollViewDelegate {
         UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, animations: {
             self.dismissScrollView.contentOffset.y = self.centerOffset + direction * self.view.bounds.height
             self.backgroundView.alpha = 0
+            self.closeButton.alpha = 0
+            self.pageControl.alpha = 0
         }) { _ in
             self.dismissGallery()
         }

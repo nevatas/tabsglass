@@ -139,9 +139,9 @@ struct TabChipView: View {
     let title: String
     let selectionProgress: CGFloat  // 0 = not selected, 1 = fully selected
 
-    // Glass opacity: 0.3 when not selected, 1.0 when selected
+    // Glass opacity: 0 when not selected, 1.0 when selected
     private var glassOpacity: CGFloat {
-        0.3 + (selectionProgress * 0.7)
+        selectionProgress
     }
 
     // Text color: light gray when inactive, white/black when active
