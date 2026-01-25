@@ -18,10 +18,10 @@ struct TabBarView: View {
         VStack(spacing: 6) {
             // Header buttons row
             HStack {
-                // Burger menu button (left) - circular liquid glass
+                // Settings button (left) - circular liquid glass
                 Button(action: onMenuTap) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 13, weight: .medium))
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 17, weight: .medium))
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.glass)
@@ -40,7 +40,7 @@ struct TabBarView: View {
                 // Plus button (right) - circular liquid glass
                 Button(action: onAddTap) {
                     Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 17, weight: .medium))
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.glass)

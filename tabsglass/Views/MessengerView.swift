@@ -292,7 +292,7 @@ struct EmbeddedComposerView: View {
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(colorScheme == .dark ? .white : .black)
                     }
 
                     Spacer()

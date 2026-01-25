@@ -14,6 +14,7 @@ struct MainContainerView: View {
     @State private var showNewTabAlert = false
     @State private var showRenameAlert = false
     @State private var showDeleteAlert = false
+    @State private var showSettings = false
     @State private var tabToRename: Tab?
     @State private var tabToDelete: Tab?
     @State private var messageToEdit: Message?
@@ -63,7 +64,7 @@ struct MainContainerView: View {
                     newTabTitle = ""
                     showNewTabAlert = true
                 },
-                onMenuTap: { /* TODO: Open menu */ },
+                onMenuTap: { showSettings = true },
                 onRenameTab: { tab in
                     tabToRename = tab
                     renameTabTitle = tab.title
@@ -145,6 +146,9 @@ struct MainContainerView: View {
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.hidden)
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
     }
 
