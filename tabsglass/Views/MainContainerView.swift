@@ -124,9 +124,14 @@ struct MainContainerView: View {
             }
         }
         .onChange(of: selectedTabIndex) { _, newValue in
-            // Sync scrollProgress when tab is selected by tap
-            withAnimation(.easeInOut(duration: 0.2)) {
-                scrollProgress = CGFloat(newValue)
+            let targetProgress = CGFloat(newValue)
+            // Only animate if far from target (tap on tab), otherwise just set (end of swipe)
+            if abs(scrollProgress - targetProgress) > 0.3 {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    scrollProgress = targetProgress
+                }
+            } else {
+                scrollProgress = targetProgress
             }
         }
         .sheet(item: $messageToEdit) { message in
