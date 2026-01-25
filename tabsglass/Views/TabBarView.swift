@@ -31,7 +31,7 @@ struct TabBarView: View {
                 Spacer()
 
                 // Title
-                Text("Serejen's Space")
+                Text("Taby")
                     .font(.headline)
                     .fontWeight(.semibold)
 
