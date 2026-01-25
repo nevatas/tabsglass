@@ -49,6 +49,9 @@ struct MainContainerView: View {
                     },
                     onEditMessage: { message in
                         messageToEdit = message
+                    },
+                    onRestoreMessage: {
+                        restoreDeletedMessage()
                     }
                 )
                 .ignoresSafeArea(.keyboard)
@@ -175,13 +178,42 @@ struct MainContainerView: View {
     }
 
     private func deleteMessage(_ message: Message) {
-        // Delete photo files first
-        message.deletePhotoFiles()
+        // Clean up previous deleted message's photos (if any)
+        if let previousDeleted = DeletedMessageStore.shared.lastDeleted {
+            for fileName in previousDeleted.photoFileNames {
+                let url = Message.photosDirectory.appendingPathComponent(fileName)
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        // Store for undo (don't delete photos yet)
+        DeletedMessageStore.shared.store(message)
+
+        // Delete from database (photos kept for potential restore)
         modelContext.delete(message)
     }
 
     private func moveMessage(_ message: Message, to targetTab: Tab) {
         message.tab = targetTab
+    }
+
+    private func restoreDeletedMessage() {
+        guard let snapshot = DeletedMessageStore.shared.popSnapshot() else { return }
+
+        // Find the tab
+        guard let tab = tabs.first(where: { $0.id == snapshot.tabId }) else { return }
+
+        // Create new message with the snapshot data
+        let message = Message(
+            text: snapshot.text,
+            tab: tab,
+            photoFileNames: snapshot.photoFileNames,
+            photoAspectRatios: snapshot.photoAspectRatios
+        )
+        // Restore original creation date
+        message.createdAt = snapshot.createdAt
+
+        modelContext.insert(message)
     }
 
     private func createTab(title: String) {

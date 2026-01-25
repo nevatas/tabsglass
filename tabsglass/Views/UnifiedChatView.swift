@@ -20,6 +20,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, Tab) -> Void)?
     var onEditMessage: ((Message) -> Void)?
+    var onRestoreMessage: (() -> Void)?
 
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
@@ -29,6 +30,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onDeleteMessage = onDeleteMessage
         vc.onMoveMessage = onMoveMessage
         vc.onEditMessage = onEditMessage
+        vc.onRestoreMessage = onRestoreMessage
         vc.onIndexChange = { newIndex in
             selectedIndex = newIndex
         }
@@ -49,6 +51,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onDeleteMessage = onDeleteMessage
         uiViewController.onMoveMessage = onMoveMessage
         uiViewController.onEditMessage = onEditMessage
+        uiViewController.onRestoreMessage = onRestoreMessage
         if uiViewController.selectedIndex != selectedIndex {
             uiViewController.selectedIndex = selectedIndex
             uiViewController.updatePageSelection(animated: true)
@@ -70,6 +73,7 @@ final class UnifiedChatViewController: UIViewController {
     var onMoveMessage: ((Message, Tab) -> Void)?
     var onEditMessage: ((Message) -> Void)?
     var onImagesChange: (([UIImage]) -> Void)?
+    var onRestoreMessage: (() -> Void)?
 
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
@@ -295,6 +299,34 @@ final class UnifiedChatViewController: UIViewController {
                 self?.inputContainer.focus()
             }
         }
+    }
+
+    // MARK: - Shake to Undo
+
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        guard motion == .motionShake else { return }
+
+        // Check if we can undo in current tab
+        guard selectedIndex < tabs.count else { return }
+        let currentTabId = tabs[selectedIndex].id
+
+        guard DeletedMessageStore.shared.canUndo(in: currentTabId) else { return }
+
+        // Show confirmation alert
+        let alert = UIAlertController(
+            title: "Восстановить заметку?",
+            message: "Недавно удалённая заметка будет восстановлена",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Восстановить", style: .default) { [weak self] _ in
+            self?.onRestoreMessage?()
+        })
+
+        present(alert, animated: true)
     }
 
     // MARK: - Photo Picker
