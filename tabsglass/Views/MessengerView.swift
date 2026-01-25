@@ -434,14 +434,31 @@ final class MessageTableCell: UITableViewCell {
                 self.updateBubbleColor()
             }
         }
+
+        // Listen for theme changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleThemeChange),
+            name: .themeDidChange,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleThemeChange() {
+        updateBubbleColor()
     }
 
     private func updateBubbleColor() {
+        let theme = ThemeManager.shared.currentTheme
         if traitCollection.userInterfaceStyle == .dark {
-            bubbleView.backgroundColor = UIColor(red: 0x24/255.0, green: 0x25/255.0, blue: 0x29/255.0, alpha: 1)
+            bubbleView.backgroundColor = theme.bubbleColorDark
             messageLabel.textColor = .white
         } else {
-            bubbleView.backgroundColor = UIColor(white: 0.96, alpha: 1)
+            bubbleView.backgroundColor = theme.bubbleColor
             messageLabel.textColor = .black
         }
     }
