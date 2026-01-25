@@ -464,6 +464,9 @@ final class MosaicMediaView: UIView {
     /// Corner radius for outer corners (should match bubble corner radius)
     var cornerRadius: CGFloat = 18
 
+    /// Callback when a photo is tapped: (index, sourceFrame in window coordinates, image)
+    var onPhotoTapped: ((Int, CGRect, UIImage) -> Void)?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         clipsToBounds = true
@@ -471,6 +474,12 @@ final class MosaicMediaView: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Get image view at index for transition animations
+    func getImageView(at index: Int) -> UIImageView? {
+        guard index >= 0 && index < imageViews.count else { return nil }
+        return imageViews[index]
     }
 
     /// Configure with images
@@ -507,6 +516,12 @@ final class MosaicMediaView: UIView {
             }
             imageView.layer.maskedCorners = cornerMask(for: position)
             imageView.layer.cornerRadius = cornerRadius
+
+            // Enable tap gesture
+            imageView.isUserInteractionEnabled = true
+            imageView.tag = index
+            let tap = UITapGestureRecognizer(target: self, action: #selector(imageTapped(_:)))
+            imageView.addGestureRecognizer(tap)
 
             addSubview(imageView)
             imageViews.append(imageView)
@@ -551,5 +566,15 @@ final class MosaicMediaView: UIView {
     override var intrinsicContentSize: CGSize {
         let height = layoutItems.map { $0.frame.maxY }.max() ?? 0
         return CGSize(width: UIView.noIntrinsicMetric, height: height)
+    }
+
+    @objc private func imageTapped(_ gesture: UITapGestureRecognizer) {
+        guard let imageView = gesture.view as? UIImageView,
+              let image = imageView.image,
+              let window = window else { return }
+
+        let index = imageView.tag
+        let frameInWindow = imageView.convert(imageView.bounds, to: window)
+        onPhotoTapped?(index, frameInWindow, image)
     }
 }

@@ -364,6 +364,9 @@ final class MessageTableCell: UITableViewCell {
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
 
+    /// Callback when a photo is tapped: (index, sourceFrame in window, image, allPhotos)
+    var onPhotoTapped: ((Int, CGRect, UIImage, [UIImage]) -> Void)?
+
     private var messageLabelTopToMosaic: NSLayoutConstraint!
     private var messageLabelTopToBubble: NSLayoutConstraint!
     private var messageLabelBottomToBubble: NSLayoutConstraint!
@@ -390,6 +393,10 @@ final class MessageTableCell: UITableViewCell {
 
         // Mosaic media view
         mosaicView.translatesAutoresizingMaskIntoConstraints = false
+        mosaicView.onPhotoTapped = { [weak self] index, sourceFrame, image in
+            guard let self = self, let message = self.cachedMessage else { return }
+            self.onPhotoTapped?(index, sourceFrame, image, message.photos)
+        }
         bubbleView.addSubview(mosaicView)
 
         // Message label
