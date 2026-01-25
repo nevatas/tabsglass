@@ -43,8 +43,15 @@ final class KeyboardWarmer {
     }
 
     private func performWarmUp() {
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first else {
+            return
+        }
+
         // Create an off-screen window
-        let window = UIWindow(frame: CGRect(x: -100, y: -100, width: 10, height: 10))
+        let window = UIWindow(windowScene: windowScene)
+        window.frame = CGRect(x: -100, y: -100, width: 10, height: 10)
         window.windowLevel = .init(rawValue: -1000)
         window.isHidden = false
 

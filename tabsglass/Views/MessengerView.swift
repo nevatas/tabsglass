@@ -30,15 +30,10 @@ final class ComposerState {
         let isLastImage = attachedImages.count == 1
 
         if isLastImage {
-            // For last image: first animate height to 0, then remove
-            withAnimation(.easeOut(duration: 0.25)) {
-                imagesSectionHeight = 0
-            }
-            // Remove after animation completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                self?.attachedImages.removeAll()
-                self?.onAttachmentChange?()
-            }
+            // For last image: remove immediately without animation
+            imagesSectionHeight = 0
+            attachedImages.removeAll()
+            onAttachmentChange?()
         } else {
             // For non-last: just remove
             attachedImages.remove(at: index)
@@ -169,7 +164,8 @@ final class SwiftUIComposerContainer: UIView {
     /// Вычисляет текущую требуемую высоту
     func calculateHeight() -> CGFloat {
         guard let hc = hostingController else { return 102 }
-        let targetWidth = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
+        let screenWidth = window?.windowScene?.screen.bounds.width
+        let targetWidth = bounds.width > 0 ? bounds.width : (screenWidth ?? bounds.width)
         let fittingSize = hc.sizeThatFits(in: CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
         return max(102, fittingSize.height)
     }
@@ -192,7 +188,12 @@ final class SwiftUIComposerContainer: UIView {
         hostingController?.view.setNeedsLayout()
         hostingController?.view.layoutIfNeeded()
 
-        // Recalculate actual height after clearing
+        // Collapse immediately to the base height after clearing.
+        currentHeight = 102
+        invalidateIntrinsicContentSize()
+        onHeightChange?(currentHeight)
+
+        // Recalculate actual height after clearing (safety for SwiftUI updates)
         DispatchQueue.main.async { [weak self] in
             self?.updateHeight()
         }
@@ -315,7 +316,6 @@ struct EmbeddedComposerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .animation(.easeOut(duration: 0.25), value: state.attachedImages.count)
             .glassEffect(
                 .regular.tint(colorScheme == .dark
                     ? Color(white: 0.1).opacity(0.9)
@@ -360,6 +360,9 @@ final class MessageTableCell: UITableViewCell {
     private let bubbleView = UIView()
     private let mosaicView = MosaicMediaView()
     private let messageLabel = UILabel()
+
+    private var cachedMessage: Message?
+    private var lastLayoutWidth: CGFloat = 0
 
     private var messageLabelTopToMosaic: NSLayoutConstraint!
     private var messageLabelTopToBubble: NSLayoutConstraint!
@@ -420,6 +423,11 @@ final class MessageTableCell: UITableViewCell {
         ])
 
         updateBubbleColor()
+        if #available(iOS 17.0, *) {
+            registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: MessageTableCell, _) in
+                self.updateBubbleColor()
+            }
+        }
     }
 
     private func updateBubbleColor() {
@@ -432,15 +440,20 @@ final class MessageTableCell: UITableViewCell {
         }
     }
 
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
-            updateBubbleColor()
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let message = cachedMessage else { return }
+        let width = contentView.bounds.width
+        if width > 0, abs(width - lastLayoutWidth) > 0.5 {
+            lastLayoutWidth = width
+            applyLayout(for: message, width: width)
         }
     }
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        cachedMessage = nil
+        lastLayoutWidth = 0
         // Reset constraints
         messageLabelTopToMosaic.isActive = false
         messageLabelTopToBubble.isActive = false
@@ -449,9 +462,18 @@ final class MessageTableCell: UITableViewCell {
     }
 
     func configure(with message: Message) {
+        cachedMessage = message
         messageLabel.text = message.text
         updateBubbleColor()
 
+        let width = contentView.bounds.width
+        if width > 0 {
+            lastLayoutWidth = width
+            applyLayout(for: message, width: width)
+        }
+    }
+
+    private func applyLayout(for message: Message, width: CGFloat) {
         let photos = message.photos
         let hasPhotos = !photos.isEmpty
         let hasText = !message.text.isEmpty
@@ -462,8 +484,8 @@ final class MessageTableCell: UITableViewCell {
         messageLabelBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
 
-        // Calculate bubble width (screen width - 32 for margins)
-        let bubbleWidth = UIScreen.main.bounds.width - 32
+        // Calculate bubble width (cell width - 32 for margins)
+        let bubbleWidth = max(width - 32, 0)
 
         // Configure photos with mosaic layout
         if hasPhotos {
