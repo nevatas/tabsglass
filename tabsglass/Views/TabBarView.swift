@@ -71,10 +71,13 @@ struct TabBarView: View {
                                     Label("Переименовать", systemImage: "pencil")
                                 }
 
-                                Button(role: .destructive) {
-                                    onDeleteTab(tab)
-                                } label: {
-                                    Label("Удалить", systemImage: "trash")
+                                // Hide delete for Inbox tab
+                                if !tab.isInbox {
+                                    Button(role: .destructive) {
+                                        onDeleteTab(tab)
+                                    } label: {
+                                        Label("Удалить", systemImage: "trash")
+                                    }
                                 }
                             } preview: {
                                 // Always show selected style in preview

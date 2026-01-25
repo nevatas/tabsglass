@@ -31,9 +31,8 @@ struct MainContainerView: View {
     var body: some View {
         ZStack(alignment: .top) {
             // Content layer (full screen)
-            if tabs.isEmpty {
-                emptyStateView
-            } else {
+            // Inbox tab is always created, so we always show the chat view
+            if !tabs.isEmpty {
                 UnifiedChatView(
                     tabs: tabs,
                     selectedIndex: $selectedTabIndex,
@@ -71,6 +70,8 @@ struct MainContainerView: View {
                     showRenameAlert = true
                 },
                 onDeleteTab: { tab in
+                    // Prevent deleting Inbox tab
+                    guard !tab.isInbox else { return }
                     tabToDelete = tab
                     showDeleteAlert = true
                 }
@@ -107,9 +108,6 @@ struct MainContainerView: View {
             if let tab = tabToDelete {
                 Text("Таб \"\(tab.title)\" и все его сообщения будут удалены")
             }
-        }
-        .onAppear {
-            createDefaultTabIfNeeded()
         }
         .onChange(of: tabs.count) { oldValue, newValue in
             if newValue > oldValue && newValue > 0 {
@@ -180,30 +178,6 @@ struct MainContainerView: View {
         message.tab = targetTab
     }
 
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "note.text")
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
-            Text("No tabs yet")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Button("Create your first tab") {
-                newTabTitle = ""
-                showNewTabAlert = true
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func createDefaultTabIfNeeded() {
-        if tabs.isEmpty {
-            let defaultTab = Tab(title: "Notes", sortOrder: 0)
-            modelContext.insert(defaultTab)
-        }
-    }
-
     private func createTab(title: String) {
         let maxSortOrder = tabs.map(\.sortOrder).max() ?? -1
         let newTab = Tab(title: title, sortOrder: maxSortOrder + 1)
@@ -215,6 +189,9 @@ struct MainContainerView: View {
     }
 
     private func deleteTab(_ tab: Tab) {
+        // Prevent deleting Inbox tab
+        guard !tab.isInbox else { return }
+
         // Adjust selected index if needed
         if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
             if selectedTabIndex >= index && selectedTabIndex > 0 {

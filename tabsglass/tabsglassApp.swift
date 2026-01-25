@@ -11,16 +11,37 @@ import UIKit
 
 @main
 struct tabsglassApp: App {
+    let modelContainer: ModelContainer
+
     init() {
         // Warm up keyboard on app launch to avoid delay on first use
         KeyboardWarmer.shared.warmUp()
+
+        // Initialize model container and ensure Inbox exists
+        do {
+            let container = try ModelContainer(for: Tab.self, Message.self)
+            self.modelContainer = container
+
+            // Ensure Inbox tab exists on startup
+            let context = container.mainContext
+            let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.isInbox == true })
+            let inboxTabs = try context.fetch(descriptor)
+
+            if inboxTabs.isEmpty {
+                let inboxTab = Tab(title: "Inbox", sortOrder: 0, isInbox: true)
+                context.insert(inboxTab)
+                try context.save()
+            }
+        } catch {
+            fatalError("Failed to initialize model container: \(error)")
+        }
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: [Tab.self, Message.self])
+        .modelContainer(modelContainer)
     }
 }
 
