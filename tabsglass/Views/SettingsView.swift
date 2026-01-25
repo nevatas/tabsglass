@@ -9,6 +9,7 @@ import SwiftData
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Tab.sortOrder) private var tabs: [Tab]
+    @State private var autoFocusInput = AppSettings.shared.autoFocusInput
 
     var body: some View {
         NavigationStack {
@@ -18,6 +19,15 @@ struct SettingsView: View {
                         ReorderTabsView()
                     } label: {
                         Label("Упорядочить табы", systemImage: "arrow.up.arrow.down")
+                    }
+                }
+
+                Section {
+                    Toggle(isOn: $autoFocusInput) {
+                        Label("Автофокус ввода", systemImage: "keyboard")
+                    }
+                    .onChange(of: autoFocusInput) { _, newValue in
+                        AppSettings.shared.autoFocusInput = newValue
                     }
                 }
 

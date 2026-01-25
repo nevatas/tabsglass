@@ -287,8 +287,8 @@ final class UnifiedChatViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        // Auto-focus composer on first appearance
-        if !hasAutoFocused {
+        // Auto-focus composer on first appearance (if enabled in settings)
+        if !hasAutoFocused && AppSettings.shared.autoFocusInput {
             hasAutoFocused = true
             // Small delay to ensure view is fully laid out
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
