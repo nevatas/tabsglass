@@ -343,11 +343,10 @@ final class GalleryPageViewController: UIViewController {
         scrollView.frame = view.bounds
         scrollView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         scrollView.delegate = self
-        scrollView.minimumZoomScale = 1.0
-        scrollView.maximumZoomScale = 3.0
         scrollView.showsVerticalScrollIndicator = false
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.bouncesZoom = true
         view.addSubview(scrollView)
     }
 
@@ -372,22 +371,35 @@ final class GalleryPageViewController: UIViewController {
     private func updateZoomScale() {
         guard image.size.width > 0, image.size.height > 0 else { return }
 
-        let widthScale = view.bounds.width / image.size.width
-        let heightScale = view.bounds.height / image.size.height
+        let boundsSize = view.bounds.size
+        let imageSize = image.size
+
+        // Calculate min scale (fit image to screen) - Telegram approach
+        let widthScale = boundsSize.width / imageSize.width
+        let heightScale = boundsSize.height / imageSize.height
         let minScale = min(widthScale, heightScale)
 
-        scrollView.minimumZoomScale = minScale
-        scrollView.maximumZoomScale = max(minScale * 3, 1.0)
+        // Calculate max scale - Telegram uses max(fillScale, minScale * 3.0)
+        // We use 5.0 multiplier for more zoom capability
+        let fillScale = max(widthScale, heightScale)
+        let maxScale = max(fillScale, minScale * 5.0)
 
-        if scrollView.zoomScale < minScale {
+        scrollView.minimumZoomScale = minScale
+        scrollView.maximumZoomScale = maxScale
+
+        // Set initial zoom to minimum (fit)
+        if scrollView.zoomScale < minScale || scrollView.zoomScale == 1.0 {
             scrollView.zoomScale = minScale
         }
 
-        // Update image view frame
-        let scaledWidth = image.size.width * minScale
-        let scaledHeight = image.size.height * minScale
+        // Update image view frame at minimum scale
+        let scaledWidth = imageSize.width * minScale
+        let scaledHeight = imageSize.height * minScale
         imageView.frame = CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight)
         scrollView.contentSize = imageView.frame.size
+
+        // Disable scroll when at minimum zoom (Telegram behavior)
+        scrollView.isScrollEnabled = scrollView.zoomScale > minScale + 0.01
     }
 
     private func centerImage() {
@@ -410,14 +422,15 @@ final class GalleryPageViewController: UIViewController {
     }
 
     @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-        if scrollView.zoomScale > scrollView.minimumZoomScale {
-            // Zoom out
-            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
-        } else {
-            // Zoom in to tap location
+        // Telegram logic: use <= for comparison to handle floating point
+        if scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01 {
+            // At minimum → zoom IN to tap location at maximum scale
             let location = gesture.location(in: imageView)
-            let zoomRect = zoomRectForScale(scrollView.maximumZoomScale * 0.7, center: location)
+            let zoomRect = zoomRectForScale(scrollView.maximumZoomScale, center: location)
             scrollView.zoom(to: zoomRect, animated: true)
+        } else {
+            // Zoomed in → zoom OUT to minimum (fit)
+            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
         }
     }
 
@@ -443,8 +456,20 @@ extension GalleryPageViewController: UIScrollViewDelegate {
 
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
         centerImage()
-        let isZoomed = scrollView.zoomScale > scrollView.minimumZoomScale + 0.01
-        onZoomChange?(isZoomed)
+
+        // Telegram: disable scroll when at minimum zoom
+        let isAtMinimum = scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01
+        scrollView.isScrollEnabled = !isAtMinimum
+
+        // Notify parent about zoom state
+        onZoomChange?(!isAtMinimum)
+    }
+
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+        // Ensure we snap to exactly minimum if very close (prevents floating point issues)
+        if scale < scrollView.minimumZoomScale + 0.01 && scale != scrollView.minimumZoomScale {
+            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
+        }
     }
 }
 
