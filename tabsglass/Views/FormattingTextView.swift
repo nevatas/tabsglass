@@ -466,6 +466,52 @@ struct FormattingTextViewRepresentable: UIViewRepresentable {
     }
 }
 
+// MARK: - Shake Modifier
+
+struct ShakeModifier: ViewModifier {
+    @Binding var trigger: Bool
+    @State private var shakeOffset: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: shakeOffset)
+            .onChange(of: trigger) { _, newValue in
+                if newValue {
+                    performShake()
+                    // Reset trigger after animation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        trigger = false
+                    }
+                }
+            }
+    }
+
+    private func performShake() {
+        let amplitude: CGFloat = 8.0
+        let duration: Double = 0.08
+
+        withAnimation(.linear(duration: duration)) { shakeOffset = amplitude }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            withAnimation(.linear(duration: duration)) { shakeOffset = -amplitude }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration * 2) {
+            withAnimation(.linear(duration: duration)) { shakeOffset = amplitude * 0.6 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration * 3) {
+            withAnimation(.linear(duration: duration)) { shakeOffset = -amplitude * 0.6 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration * 4) {
+            withAnimation(.spring(duration: 0.15)) { shakeOffset = 0 }
+        }
+    }
+}
+
+extension View {
+    func shake(trigger: Binding<Bool>) -> some View {
+        self.modifier(ShakeModifier(trigger: trigger))
+    }
+}
+
 // MARK: - Link Input Sheet (SwiftUI)
 
 struct LinkInputSheet: View {
@@ -474,7 +520,7 @@ struct LinkInputSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var urlText = ""
-    @State private var shakeOffset: CGFloat = 0
+    @State private var shouldShake = false
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -503,7 +549,7 @@ struct LinkInputSheet: View {
                     .focused($isFocused)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 16)
-                    .offset(x: shakeOffset)
+                    .shake(trigger: $shouldShake)
                     .onSubmit {
                         validateAndSubmit()
                     }
@@ -546,7 +592,7 @@ struct LinkInputSheet: View {
         let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmed.isEmpty else {
-            shake()
+            triggerShake()
             return
         }
 
@@ -554,33 +600,16 @@ struct LinkInputSheet: View {
             dismiss()
             onDone(trimmed)
         } else {
-            shake()
+            triggerShake()
         }
     }
 
-    private func shake() {
-        withAnimation(.default) {
-            shakeOffset = 10
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.default) {
-                shakeOffset = -8
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.default) {
-                shakeOffset = 6
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.default) {
-                shakeOffset = -4
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            withAnimation(.spring()) {
-                shakeOffset = 0
-            }
-        }
+    private func triggerShake() {
+        // Haptic feedback
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.error)
+
+        // Trigger shake animation
+        shouldShake = true
     }
 }
