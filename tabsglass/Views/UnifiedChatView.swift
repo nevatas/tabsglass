@@ -11,20 +11,22 @@ import PhotosUI
 // MARK: - SwiftUI Bridge
 
 struct UnifiedChatView: UIViewControllerRepresentable {
-    let tabs: [Tab]
-    @Binding var selectedIndex: Int
+    let tabs: [Tab]  // Real tabs only (Inbox is virtual)
+    let messages: [Message]  // All messages
+    @Binding var selectedIndex: Int  // 0 = Inbox, 1+ = real tabs
     @Binding var messageText: String
     @Binding var switchFraction: CGFloat  // -1.0 to 1.0 swipe progress
     @Binding var attachedImages: [UIImage]
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
-    var onMoveMessage: ((Message, Tab) -> Void)?
+    var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
     var onEditMessage: ((Message) -> Void)?
     var onRestoreMessage: (() -> Void)?
 
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
         vc.tabs = tabs
+        vc.allMessages = messages
         vc.selectedIndex = selectedIndex
         vc.onSend = onSend
         vc.onDeleteMessage = onDeleteMessage
@@ -48,6 +50,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UnifiedChatViewController, context: Context) {
         uiViewController.tabs = tabs
+        uiViewController.allMessages = messages
         uiViewController.onDeleteMessage = onDeleteMessage
         uiViewController.onMoveMessage = onMoveMessage
         uiViewController.onEditMessage = onEditMessage
@@ -63,14 +66,18 @@ struct UnifiedChatView: UIViewControllerRepresentable {
 // MARK: - Unified Chat View Controller
 
 final class UnifiedChatViewController: UIViewController {
-    var tabs: [Tab] = []
-    var selectedIndex: Int = 0
+    var tabs: [Tab] = []  // Real tabs only (Inbox is virtual)
+    var allMessages: [Message] = []  // All messages from SwiftUI
+    var selectedIndex: Int = 0  // 0 = Inbox, 1+ = real tabs
     var onSend: (() -> Void)?
+
+    /// Total tab count including virtual Inbox
+    private var totalTabCount: Int { 1 + tabs.count }
     var onIndexChange: ((Int) -> Void)?
     var onTextChange: ((String) -> Void)?
     var onSwitchFraction: ((CGFloat) -> Void)?  // -1.0 to 1.0
     var onDeleteMessage: ((Message) -> Void)?
-    var onMoveMessage: ((Message, Tab) -> Void)?
+    var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
     var onEditMessage: ((Message) -> Void)?
     var onImagesChange: (([UIImage]) -> Void)?
     var onRestoreMessage: (() -> Void)?
@@ -126,11 +133,9 @@ final class UnifiedChatViewController: UIViewController {
             }
         }
 
-        // Set initial page
-        if !tabs.isEmpty {
-            let initialVC = getMessageController(for: 0)
-            pageViewController.setViewControllers([initialVC], direction: .forward, animated: false)
-        }
+        // Set initial page (always show Inbox at index 0)
+        let initialVC = getMessageController(for: 0)
+        pageViewController.setViewControllers([initialVC], direction: .forward, animated: false)
     }
 
     private func setupInputView() {
@@ -240,9 +245,24 @@ final class UnifiedChatViewController: UIViewController {
         }
     }
 
+    /// Calculate tabId for given index: 0 = nil (Inbox), 1+ = real tab ID
+    private func tabId(for index: Int) -> UUID? {
+        guard index > 0 && index <= tabs.count else { return nil }
+        return tabs[index - 1].id
+    }
+
+    /// Filter messages for a given tabId
+    private func messages(for tabId: UUID?) -> [Message] {
+        allMessages.filter { $0.tabId == tabId }
+    }
+
     private func getMessageController(for index: Int) -> MessageListViewController {
+        let currentTabId = tabId(for: index)
+
         if let existing = messageControllers[index] {
             existing.allTabs = tabs
+            existing.currentTabId = currentTabId
+            existing.messages = messages(for: currentTabId)
             existing.onContextMenuWillShow = { [weak self] in
                 self?.resetComposerPosition()
             }
@@ -251,10 +271,9 @@ final class UnifiedChatViewController: UIViewController {
 
         let vc = MessageListViewController()
         vc.pageIndex = index
-        if index < tabs.count {
-            vc.currentTab = tabs[index]
-        }
+        vc.currentTabId = currentTabId
         vc.allTabs = tabs
+        vc.messages = messages(for: currentTabId)
         vc.onTap = { [weak self] in
             self?.view.endEditing(true)
         }
@@ -271,8 +290,8 @@ final class UnifiedChatViewController: UIViewController {
         vc.onDeleteMessage = { [weak self] message in
             self?.onDeleteMessage?(message)
         }
-        vc.onMoveMessage = { [weak self] message, targetTab in
-            self?.onMoveMessage?(message, targetTab)
+        vc.onMoveMessage = { [weak self] message, targetTabId in
+            self?.onMoveMessage?(message, targetTabId)
         }
         vc.onEditMessage = { [weak self] message in
             self?.onEditMessage?(message)
@@ -285,7 +304,7 @@ final class UnifiedChatViewController: UIViewController {
     }
 
     func updatePageSelection(animated: Bool) {
-        guard !tabs.isEmpty, selectedIndex < tabs.count else { return }
+        guard selectedIndex < totalTabCount else { return }
         let vc = getMessageController(for: selectedIndex)
 
         // Determine direction based on current position
@@ -299,8 +318,11 @@ final class UnifiedChatViewController: UIViewController {
 
     func reloadCurrentTab() {
         if let currentVC = pageViewController.viewControllers?.first as? MessageListViewController {
-            if currentVC.pageIndex < tabs.count {
-                currentVC.currentTab = tabs[currentVC.pageIndex]
+            let index = currentVC.pageIndex
+            if index < totalTabCount {
+                currentVC.currentTabId = tabId(for: index)
+                currentVC.allTabs = tabs
+                currentVC.messages = messages(for: currentVC.currentTabId)
                 currentVC.reloadMessages()
             }
         }
@@ -331,10 +353,10 @@ final class UnifiedChatViewController: UIViewController {
         guard motion == .motionShake else { return }
 
         // Check if we can undo in current tab
-        guard selectedIndex < tabs.count else { return }
-        let currentTabId = tabs[selectedIndex].id
+        guard selectedIndex < totalTabCount else { return }
+        let currentTabId = tabId(for: selectedIndex)
 
-        guard DeletedMessageStore.shared.canUndo(in: currentTabId) else { return }
+        guard DeletedMessageStore.shared.canUndo(forTabId: currentTabId) else { return }
 
         // Show confirmation alert
         let alert = UIAlertController(
@@ -469,7 +491,7 @@ extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewC
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
         guard let vc = viewController as? MessageListViewController else { return nil }
         let index = vc.pageIndex + 1
-        guard index < tabs.count else { return nil }
+        guard index < totalTabCount else { return nil }
         return getMessageController(for: index)
     }
 
@@ -523,15 +545,16 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
 // MARK: - Message List View Controller
 
 final class MessageListViewController: UIViewController {
-    var pageIndex: Int = 0
-    var currentTab: Tab?
-    var allTabs: [Tab] = []
+    var pageIndex: Int = 0  // 0 = Inbox, 1+ = real tabs
+    var currentTabId: UUID?  // nil = Inbox
+    var allTabs: [Tab] = []  // Real tabs only
+    var messages: [Message] = []  // Messages passed from SwiftUI
     var onTap: (() -> Void)?
     var onContextMenuWillShow: (() -> Void)?
     var getBottomPadding: (() -> CGFloat)?
     var getSafeAreaBottom: (() -> CGFloat)?
     var onDeleteMessage: ((Message) -> Void)?
-    var onMoveMessage: ((Message, Tab) -> Void)?
+    var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
     var onEditMessage: ((Message) -> Void)?
     /// Callback when a gallery should be opened: (startIndex, fileNames, sourceFrame)
     var onOpenGallery: ((Int, [String], CGRect) -> Void)?
@@ -615,14 +638,8 @@ final class MessageListViewController: UIViewController {
     }
 
     func reloadMessages() {
-        guard let tab = currentTab else {
-            sortedMessages = []
-            UIView.performWithoutAnimation {
-                tableView.reloadData()
-            }
-            return
-        }
-        sortedMessages = tab.messages
+        // Messages are passed from SwiftUI, already filtered by tabId
+        sortedMessages = messages
             .filter { !$0.isEmpty }
             .sorted { $0.createdAt > $1.createdAt }
         // Disable animations to prevent glitches with flipped tableView and context menu
@@ -758,17 +775,29 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             }
             actions.append(editAction)
 
-            // Move action (only if more than one tab)
-            let otherTabs = self.allTabs.filter { $0.id != self.currentTab?.id }
-            if !otherTabs.isEmpty {
-                let moveMenuChildren = otherTabs.map { tab in
-                    UIAction(title: tab.title) { [weak self] _ in
-                        // Animate removal first, then move to target tab
-                        self?.animateDeleteMessage(message) {
-                            self?.onMoveMessage?(message, tab)
-                        }
+            // Move action (show other tabs + Inbox if not already in Inbox)
+            var moveMenuChildren: [UIAction] = []
+
+            // Add Inbox option if not already in Inbox
+            if self.currentTabId != nil {
+                moveMenuChildren.append(UIAction(title: "Inbox") { [weak self] _ in
+                    self?.animateDeleteMessage(message) {
+                        self?.onMoveMessage?(message, nil)
                     }
-                }
+                })
+            }
+
+            // Add other real tabs
+            let otherTabs = self.allTabs.filter { $0.id != self.currentTabId }
+            for tab in otherTabs {
+                moveMenuChildren.append(UIAction(title: tab.title) { [weak self] _ in
+                    self?.animateDeleteMessage(message) {
+                        self?.onMoveMessage?(message, tab.id)
+                    }
+                })
+            }
+
+            if !moveMenuChildren.isEmpty {
                 let moveMenu = UIMenu(
                     title: "Переместить",
                     image: UIImage(systemName: "arrow.right.doc.on.clipboard"),

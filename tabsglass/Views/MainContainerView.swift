@@ -9,10 +9,12 @@ import UIKit
 
 struct MainContainerView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Tab.sortOrder) private var tabs: [Tab]
-    @State private var selectedTabIndex = 0
+    @Query(sort: \Tab.position) private var tabs: [Tab]
+    @Query(sort: \Message.createdAt) private var allMessages: [Message]
+    @State private var selectedTabIndex = 0  // 0 = Inbox (virtual), 1+ = real tabs
     @State private var showNewTabAlert = false
     @State private var showRenameAlert = false
+    @State private var showRenameInboxAlert = false
     @State private var showDeleteAlert = false
     @State private var showSettings = false
     @State private var tabToRename: Tab?
@@ -20,43 +22,54 @@ struct MainContainerView: View {
     @State private var messageToEdit: Message?
     @State private var newTabTitle = ""
     @State private var renameTabTitle = ""
+    @State private var renameInboxTitle = ""
     @State private var messageText = ""
     @State private var switchFraction: CGFloat = 0  // -1.0 to 1.0 swipe progress
     @State private var attachedImages: [UIImage] = []
 
-    private var currentTab: Tab? {
-        guard selectedTabIndex >= 0 && selectedTabIndex < tabs.count else { return nil }
-        return tabs[selectedTabIndex]
+    /// Total number of tabs including virtual Inbox
+    private var totalTabCount: Int {
+        1 + tabs.count  // Inbox + real tabs
+    }
+
+    /// Get tabId for current selection (nil = Inbox)
+    private var currentTabId: UUID? {
+        guard selectedTabIndex > 0 && selectedTabIndex <= tabs.count else { return nil }
+        return tabs[selectedTabIndex - 1].id
+    }
+
+    /// Check if currently on Inbox
+    private var isOnInbox: Bool {
+        selectedTabIndex == 0
     }
 
     var body: some View {
         ZStack(alignment: .top) {
             // Content layer (full screen)
-            // Inbox tab is always created, so we always show the chat view
-            if !tabs.isEmpty {
-                UnifiedChatView(
-                    tabs: tabs,
-                    selectedIndex: $selectedTabIndex,
-                    messageText: $messageText,
-                    switchFraction: $switchFraction,
-                    attachedImages: $attachedImages,
-                    onSend: { sendMessage() },
-                    onDeleteMessage: { message in
-                        deleteMessage(message)
-                    },
-                    onMoveMessage: { message, targetTab in
-                        moveMessage(message, to: targetTab)
-                    },
-                    onEditMessage: { message in
-                        messageToEdit = message
-                    },
-                    onRestoreMessage: {
-                        restoreDeletedMessage()
-                    }
-                )
-                .ignoresSafeArea(.keyboard)
-                .scrollEdgeEffectStyle(.soft, for: .top)
-            }
+            // Always show chat view (Inbox is always available as virtual tab)
+            UnifiedChatView(
+                tabs: tabs,
+                messages: allMessages,
+                selectedIndex: $selectedTabIndex,
+                messageText: $messageText,
+                switchFraction: $switchFraction,
+                attachedImages: $attachedImages,
+                onSend: { sendMessage() },
+                onDeleteMessage: { message in
+                    deleteMessage(message)
+                },
+                onMoveMessage: { message, targetTabId in
+                    moveMessage(message, toTabId: targetTabId)
+                },
+                onEditMessage: { message in
+                    messageToEdit = message
+                },
+                onRestoreMessage: {
+                    restoreDeletedMessage()
+                }
+            )
+            .ignoresSafeArea(.keyboard)
+            .scrollEdgeEffectStyle(.soft, for: .top)
 
             // Header layer (floating on top)
             TabBarView(
@@ -73,9 +86,11 @@ struct MainContainerView: View {
                     renameTabTitle = tab.title
                     showRenameAlert = true
                 },
+                onRenameInbox: {
+                    renameInboxTitle = AppSettings.shared.inboxTitle
+                    showRenameInboxAlert = true
+                },
                 onDeleteTab: { tab in
-                    // Prevent deleting Inbox tab
-                    guard !tab.isInbox else { return }
                     tabToDelete = tab
                     showDeleteAlert = true
                 }
@@ -101,6 +116,16 @@ struct MainContainerView: View {
                 }
             }
         }
+        .alert("Переименовать Inbox", isPresented: $showRenameInboxAlert) {
+            TextField("Название", text: $renameInboxTitle)
+            Button("Отмена", role: .cancel) { }
+            Button("Сохранить") {
+                let trimmed = renameInboxTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    AppSettings.shared.inboxTitle = trimmed
+                }
+            }
+        }
         .alert("Удалить таб?", isPresented: $showDeleteAlert) {
             Button("Отмена", role: .cancel) { }
             Button("Удалить", role: .destructive) {
@@ -110,19 +135,20 @@ struct MainContainerView: View {
             }
         } message: {
             if let tab = tabToDelete {
-                Text("Таб \"\(tab.title)\" и все его сообщения будут удалены")
+                Text("Таб \"\(tab.title)\" будет удалён, его сообщения перенесутся в Inbox")
             }
         }
         .onChange(of: tabs.count) { oldValue, newValue in
-            if newValue > oldValue && newValue > 0 {
-                // New tab created - select it with animation
+            if newValue > oldValue {
+                // New tab created - select it with animation (index = newValue because of Inbox at 0)
                 withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
-                    selectedTabIndex = newValue - 1
+                    selectedTabIndex = newValue  // Last real tab index
                     switchFraction = 0
                 }
             }
-            if selectedTabIndex >= newValue && newValue > 0 {
-                selectedTabIndex = newValue - 1
+            // Ensure selected index is valid
+            if selectedTabIndex > newValue {
+                selectedTabIndex = max(0, newValue)
             }
         }
         .onChange(of: selectedTabIndex) { _, _ in
@@ -156,7 +182,6 @@ struct MainContainerView: View {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         // Allow sending if there's text OR images
         guard !trimmedText.isEmpty || !attachedImages.isEmpty else { return }
-        guard let tab = currentTab else { return }
 
         // Save attached images and get file names with aspect ratios
         var photoFileNames: [String] = []
@@ -168,7 +193,17 @@ struct MainContainerView: View {
             }
         }
 
-        let message = Message(content: trimmedText, tab: tab, photoFileNames: photoFileNames, photoAspectRatios: photoAspectRatios)
+        // Detect URLs in text
+        let entities = TextEntity.detectURLs(in: trimmedText)
+
+        // tabId = nil for Inbox, or actual tab ID
+        let message = Message(
+            content: trimmedText,
+            tabId: currentTabId,
+            entities: entities.isEmpty ? nil : entities,
+            photoFileNames: photoFileNames,
+            photoAspectRatios: photoAspectRatios
+        )
         modelContext.insert(message)
         messageText = ""
         attachedImages = []
@@ -190,23 +225,25 @@ struct MainContainerView: View {
         modelContext.delete(message)
     }
 
-    private func moveMessage(_ message: Message, to targetTab: Tab) {
-        message.tab = targetTab
+    private func moveMessage(_ message: Message, toTabId targetTabId: UUID?) {
+        message.tabId = targetTabId
     }
 
     private func restoreDeletedMessage() {
         guard let snapshot = DeletedMessageStore.shared.popSnapshot() else { return }
 
-        // Find the tab
-        guard let tab = tabs.first(where: { $0.id == snapshot.tabId }) else { return }
-
         // Create new message with the snapshot data
+        // tabId can be nil (Inbox) or a real tab ID
         let message = Message(
             content: snapshot.content,
-            tab: tab,
+            tabId: snapshot.tabId,
             entities: snapshot.entities,
             photoFileNames: snapshot.photoFileNames,
-            photoAspectRatios: snapshot.photoAspectRatios
+            photoAspectRatios: snapshot.photoAspectRatios,
+            position: snapshot.position,
+            sourceUrl: snapshot.sourceUrl,
+            linkPreview: snapshot.linkPreview,
+            mediaGroupId: snapshot.mediaGroupId
         )
         // Restore original creation date
         message.createdAt = snapshot.createdAt
@@ -215,8 +252,8 @@ struct MainContainerView: View {
     }
 
     private func createTab(title: String) {
-        let maxSortOrder = tabs.map(\.sortOrder).max() ?? -1
-        let newTab = Tab(title: title, sortOrder: maxSortOrder + 1)
+        let maxPosition = tabs.map(\.position).max() ?? -1
+        let newTab = Tab(title: title, position: maxPosition + 1)
         modelContext.insert(newTab)
     }
 
@@ -225,15 +262,23 @@ struct MainContainerView: View {
     }
 
     private func deleteTab(_ tab: Tab) {
-        // Prevent deleting Inbox tab
-        guard !tab.isInbox else { return }
-
-        // Adjust selected index if needed
-        if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
-            if selectedTabIndex >= index && selectedTabIndex > 0 {
-                selectedTabIndex -= 1
+        // Move all messages from this tab to Inbox (tabId = nil)
+        let tabId = tab.id
+        let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.tabId == tabId })
+        if let messages = try? modelContext.fetch(descriptor) {
+            for message in messages {
+                message.tabId = nil
             }
         }
+
+        // Adjust selected index if needed (account for Inbox at index 0)
+        if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
+            let tabIndex = index + 1  // +1 because Inbox is at 0
+            if selectedTabIndex >= tabIndex {
+                selectedTabIndex = max(0, selectedTabIndex - 1)
+            }
+        }
+
         modelContext.delete(tab)
     }
 }

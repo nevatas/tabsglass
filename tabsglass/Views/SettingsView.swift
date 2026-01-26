@@ -8,7 +8,6 @@ import SwiftData
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Tab.sortOrder) private var tabs: [Tab]
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
     @ObservedObject private var themeManager = ThemeManager.shared
 
@@ -69,37 +68,35 @@ struct SettingsView: View {
 
 struct ReorderTabsView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Tab.sortOrder) private var tabs: [Tab]
+    @Query(sort: \tabsglass.Tab.position) private var tabs: [tabsglass.Tab]
 
-    // Local state for reordering (excluding Inbox)
-    @State private var reorderableTabs: [Tab] = []
+    // Local state for reordering
+    @State private var reorderableTabs: [tabsglass.Tab] = []
     @State private var hasAppeared = false
-
-    private var inboxTab: Tab? {
-        tabs.first { $0.isInbox }
-    }
 
     var body: some View {
         List {
-            // Inbox always at top, not movable
-            if let inbox = inboxTab {
-                Section {
-                    HStack {
-                        Text(inbox.title)
-                        Spacer()
-                        Image(systemName: "lock.fill")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
+            // Inbox section (virtual, not editable)
+            Section {
+                HStack {
+                    Text("Inbox")
+                    Spacer()
+                    Image(systemName: "tray.fill")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
+            } footer: {
+                Text("Inbox всегда отображается первым")
             }
 
             // Reorderable tabs
-            Section {
-                ForEach(reorderableTabs) { tab in
-                    Text(tab.title)
+            if !reorderableTabs.isEmpty {
+                Section {
+                    ForEach(reorderableTabs) { tab in
+                        Text(tab.title)
+                    }
+                    .onMove(perform: moveTab)
                 }
-                .onMove(perform: moveTab)
             }
         }
         .environment(\.editMode, .constant(.active))
@@ -107,12 +104,12 @@ struct ReorderTabsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if !hasAppeared {
-                reorderableTabs = tabs.filter { !$0.isInbox }
+                reorderableTabs = tabs
                 hasAppeared = true
             }
         }
         .onDisappear {
-            saveSortOrder()
+            savePositions()
         }
     }
 
@@ -120,13 +117,10 @@ struct ReorderTabsView: View {
         reorderableTabs.move(fromOffsets: source, toOffset: destination)
     }
 
-    private func saveSortOrder() {
-        // Inbox always has sortOrder 0
-        inboxTab?.sortOrder = 0
-
-        // Update sortOrder for reorderable tabs (starting from 1)
+    private func savePositions() {
+        // Update position for all tabs (0-indexed)
         for (index, tab) in reorderableTabs.enumerated() {
-            tab.sortOrder = index + 1
+            tab.position = index
         }
     }
 }

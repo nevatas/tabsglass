@@ -17,21 +17,11 @@ struct tabsglassApp: App {
         // Warm up keyboard on app launch to avoid delay on first use
         KeyboardWarmer.shared.warmUp()
 
-        // Initialize model container and ensure Inbox exists
+        // Initialize model container
+        // Note: Inbox is virtual (messages with tabId = nil), not a real tab
         do {
             let container = try ModelContainer(for: Tab.self, Message.self)
             self.modelContainer = container
-
-            // Ensure Inbox tab exists on startup
-            let context = container.mainContext
-            let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.isInbox == true })
-            let inboxTabs = try context.fetch(descriptor)
-
-            if inboxTabs.isEmpty {
-                let inboxTab = Tab(title: "Inbox", sortOrder: 0, isInbox: true)
-                context.insert(inboxTab)
-                try context.save()
-            }
         } catch {
             fatalError("Failed to initialize model container: \(error)")
         }

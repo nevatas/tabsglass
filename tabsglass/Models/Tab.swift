@@ -2,6 +2,8 @@
 //  Tab.swift
 //  tabsglass
 //
+//  Note: Inbox is virtual (messages with tabId = nil), not a real tab
+//
 
 import Foundation
 import SwiftData
@@ -9,20 +11,16 @@ import SwiftData
 @Model
 final class Tab {
     var id: UUID
+    var serverId: Int?  // Backend ID for sync (nil = local only)
     var title: String
     var createdAt: Date
-    var sortOrder: Int
-    var isInbox: Bool = false
+    var position: Int   // for sorting, 0 = first
 
-    @Relationship(deleteRule: .cascade, inverse: \Message.tab)
-    var messages: [Message]
-
-    init(title: String, sortOrder: Int = 0, isInbox: Bool = false) {
+    init(title: String, position: Int = 0) {
         self.id = UUID()
+        self.serverId = nil
         self.title = title
         self.createdAt = Date()
-        self.sortOrder = sortOrder
-        self.isInbox = isInbox
-        self.messages = []
+        self.position = position
     }
 }

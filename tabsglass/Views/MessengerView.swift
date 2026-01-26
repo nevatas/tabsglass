@@ -359,7 +359,7 @@ struct AttachedImageView: View {
 final class MessageTableCell: UITableViewCell {
     private let bubbleView = UIView()
     private let mosaicView = MosaicMediaView()
-    private let messageLabel = UILabel()
+    private let messageTextView = UITextView()
 
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
@@ -367,9 +367,9 @@ final class MessageTableCell: UITableViewCell {
     /// Callback when a photo is tapped: (index, sourceFrame in window, image, fileNames)
     var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
 
-    private var messageLabelTopToMosaic: NSLayoutConstraint!
-    private var messageLabelTopToBubble: NSLayoutConstraint!
-    private var messageLabelBottomToBubble: NSLayoutConstraint!
+    private var messageTextViewTopToMosaic: NSLayoutConstraint!
+    private var messageTextViewTopToBubble: NSLayoutConstraint!
+    private var messageTextViewBottomToBubble: NSLayoutConstraint!
     private var mosaicHeightConstraint: NSLayoutConstraint!
     private var mosaicBottomToBubble: NSLayoutConstraint!
 
@@ -398,17 +398,27 @@ final class MessageTableCell: UITableViewCell {
         }
         bubbleView.addSubview(mosaicView)
 
-        // Message label
-        messageLabel.textColor = .white
-        messageLabel.font = .systemFont(ofSize: 16)
-        messageLabel.numberOfLines = 0
-        messageLabel.translatesAutoresizingMaskIntoConstraints = false
-        bubbleView.addSubview(messageLabel)
+        // Message text view (configured to look like a label but with clickable links)
+        messageTextView.backgroundColor = .clear
+        messageTextView.textColor = .white
+        messageTextView.font = .systemFont(ofSize: 16)
+        messageTextView.isEditable = false
+        messageTextView.isScrollEnabled = false
+        messageTextView.isSelectable = true
+        messageTextView.dataDetectorTypes = []  // We handle links via entities
+        messageTextView.textContainerInset = .zero
+        messageTextView.textContainer.lineFragmentPadding = 0
+        messageTextView.linkTextAttributes = [
+            .foregroundColor: UIColor.systemBlue,
+            .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
+        messageTextView.translatesAutoresizingMaskIntoConstraints = false
+        bubbleView.addSubview(messageTextView)
 
         mosaicHeightConstraint = mosaicView.heightAnchor.constraint(equalToConstant: 0)
-        messageLabelTopToMosaic = messageLabel.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 10)
-        messageLabelTopToBubble = messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
-        messageLabelBottomToBubble = messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
+        messageTextViewTopToMosaic = messageTextView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 10)
+        messageTextViewTopToBubble = messageTextView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
+        messageTextViewBottomToBubble = messageTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
         mosaicBottomToBubble = mosaicView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
 
         NSLayoutConstraint.activate([
@@ -423,9 +433,9 @@ final class MessageTableCell: UITableViewCell {
             mosaicView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
             mosaicHeightConstraint,
 
-            // Message label - horizontal constraints always active
-            messageLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
-            messageLabel.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
+            // Message text view - horizontal constraints always active
+            messageTextView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
+            messageTextView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
         ])
 
         updateBubbleColor()
@@ -456,10 +466,10 @@ final class MessageTableCell: UITableViewCell {
         let theme = ThemeManager.shared.currentTheme
         if traitCollection.userInterfaceStyle == .dark {
             bubbleView.backgroundColor = theme.bubbleColorDark
-            messageLabel.textColor = .white
+            messageTextView.textColor = .white
         } else {
             bubbleView.backgroundColor = theme.bubbleColor
-            messageLabel.textColor = .black
+            messageTextView.textColor = .black
         }
     }
 
@@ -478,23 +488,18 @@ final class MessageTableCell: UITableViewCell {
         cachedMessage = nil
         lastLayoutWidth = 0
         // Reset constraints
-        messageLabelTopToMosaic.isActive = false
-        messageLabelTopToBubble.isActive = false
-        messageLabelBottomToBubble.isActive = false
+        messageTextViewTopToMosaic.isActive = false
+        messageTextViewTopToBubble.isActive = false
+        messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
     }
 
     func configure(with message: Message) {
         cachedMessage = message
 
-        // Apply line spacing to message text
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 2
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 16),
-            .paragraphStyle: paragraphStyle
-        ]
-        messageLabel.attributedText = NSAttributedString(string: message.content, attributes: attributes)
+        // Create attributed string with entities (links, formatting)
+        let attributedText = createAttributedString(for: message)
+        messageTextView.attributedText = attributedText
 
         updateBubbleColor()
 
@@ -505,6 +510,75 @@ final class MessageTableCell: UITableViewCell {
         }
     }
 
+    private func createAttributedString(for message: Message) -> NSAttributedString {
+        let text = message.content
+
+        // Base attributes with line spacing
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 2
+
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 16),
+            .paragraphStyle: paragraphStyle
+        ]
+
+        let attributedString = NSMutableAttributedString(string: text, attributes: baseAttributes)
+
+        // Apply entities (if any)
+        guard let entities = message.entities else {
+            return attributedString
+        }
+
+        let nsString = text as NSString
+
+        for entity in entities {
+            // Validate range
+            guard entity.offset >= 0,
+                  entity.length > 0,
+                  entity.offset + entity.length <= nsString.length else {
+                continue
+            }
+
+            let range = NSRange(location: entity.offset, length: entity.length)
+
+            switch entity.type {
+            case "url":
+                // URL entity - make it a clickable link
+                let urlString = entity.url ?? nsString.substring(with: range)
+                if let url = URL(string: urlString) {
+                    attributedString.addAttribute(.link, value: url, range: range)
+                }
+
+            case "text_link":
+                // Text link - custom text with URL
+                if let urlString = entity.url, let url = URL(string: urlString) {
+                    attributedString.addAttribute(.link, value: url, range: range)
+                }
+
+            case "bold":
+                attributedString.addAttribute(.font, value: UIFont.boldSystemFont(ofSize: 16), range: range)
+
+            case "italic":
+                attributedString.addAttribute(.font, value: UIFont.italicSystemFont(ofSize: 16), range: range)
+
+            case "underline":
+                attributedString.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+
+            case "strikethrough":
+                attributedString.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+
+            case "code", "pre":
+                attributedString.addAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: 15, weight: .regular), range: range)
+                attributedString.addAttribute(.backgroundColor, value: UIColor.systemGray5, range: range)
+
+            default:
+                break
+            }
+        }
+
+        return attributedString
+    }
+
     private func applyLayout(for message: Message, width: CGFloat) {
         let fileNames = message.photoFileNames
         let aspectRatios = message.aspectRatios
@@ -512,9 +586,9 @@ final class MessageTableCell: UITableViewCell {
         let hasText = !message.content.isEmpty
 
         // Reset constraints first
-        messageLabelTopToMosaic.isActive = false
-        messageLabelTopToBubble.isActive = false
-        messageLabelBottomToBubble.isActive = false
+        messageTextViewTopToMosaic.isActive = false
+        messageTextViewTopToBubble.isActive = false
+        messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
 
         // Calculate bubble width (cell width - 32 for margins)
@@ -535,18 +609,18 @@ final class MessageTableCell: UITableViewCell {
         // Configure layout based on content
         if hasPhotos && hasText {
             // Both photos and text
-            messageLabelTopToMosaic.isActive = true
-            messageLabelBottomToBubble.isActive = true
-            messageLabel.isHidden = false
+            messageTextViewTopToMosaic.isActive = true
+            messageTextViewBottomToBubble.isActive = true
+            messageTextView.isHidden = false
         } else if hasPhotos && !hasText {
             // Photos only - mosaic fills to bottom
             mosaicBottomToBubble.isActive = true
-            messageLabel.isHidden = true
+            messageTextView.isHidden = true
         } else {
             // Text only (or empty)
-            messageLabelTopToBubble.isActive = true
-            messageLabelBottomToBubble.isActive = true
-            messageLabel.isHidden = false
+            messageTextViewTopToBubble.isActive = true
+            messageTextViewBottomToBubble.isActive = true
+            messageTextView.isHidden = false
         }
     }
 }

@@ -21,6 +21,55 @@ struct TextEntity: Codable, Hashable {
         self.length = length
         self.url = url
     }
+
+    /// Detect URLs in text and return entities
+    static func detectURLs(in text: String) -> [TextEntity] {
+        guard !text.isEmpty else { return [] }
+
+        var entities: [TextEntity] = []
+
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        let nsString = text as NSString
+        let range = NSRange(location: 0, length: nsString.length)
+
+        detector?.enumerateMatches(in: text, options: [], range: range) { result, _, _ in
+            guard let result = result, let url = result.url else { return }
+
+            let entity = TextEntity(
+                type: "url",
+                offset: result.range.location,
+                length: result.range.length,
+                url: url.absoluteString
+            )
+            entities.append(entity)
+        }
+
+        return entities
+    }
+}
+
+// MARK: - Link Preview
+
+struct LinkPreview: Codable, Hashable {
+    let url: String
+    let title: String?
+    let previewDescription: String?  // "description" is reserved by Swift
+    let image: String?               // URL to preview image
+    let siteName: String?
+
+    init(url: String, title: String? = nil, previewDescription: String? = nil, image: String? = nil, siteName: String? = nil) {
+        self.url = url
+        self.title = title
+        self.previewDescription = previewDescription
+        self.image = image
+        self.siteName = siteName
+    }
+
+    // Custom coding keys to map "description" from JSON to "previewDescription"
+    enum CodingKeys: String, CodingKey {
+        case url, title, image, siteName
+        case previewDescription = "description"
+    }
 }
 
 // MARK: - Message Model
@@ -28,19 +77,40 @@ struct TextEntity: Codable, Hashable {
 @Model
 final class Message: Identifiable {
     var id: UUID
+    var serverId: Int?              // Backend ID for sync (nil = local only)
     var content: String
     var entities: [TextEntity]?
     var createdAt: Date
-    var tab: Tab?
+    var tabId: UUID?                // nil = Inbox (virtual tab)
+    var position: Int = 0           // For custom sorting (0 = default/newest first)
+    var sourceUrl: String?          // Original source URL (e.g., Telegram message link)
+    var linkPreview: LinkPreview?   // Rich link preview data
+    var mediaGroupId: String?       // Groups multiple media in same message
     var photoFileNames: [String] = []
     var photoAspectRatios: [Double] = []
 
-    init(content: String, tab: Tab, entities: [TextEntity]? = nil, photoFileNames: [String] = [], photoAspectRatios: [Double] = []) {
+    /// Create a message in a specific tab (or Inbox if tabId is nil)
+    init(
+        content: String,
+        tabId: UUID? = nil,
+        entities: [TextEntity]? = nil,
+        photoFileNames: [String] = [],
+        photoAspectRatios: [Double] = [],
+        position: Int = 0,
+        sourceUrl: String? = nil,
+        linkPreview: LinkPreview? = nil,
+        mediaGroupId: String? = nil
+    ) {
         self.id = UUID()
+        self.serverId = nil
         self.content = content
         self.entities = entities
         self.createdAt = Date()
-        self.tab = tab
+        self.tabId = tabId
+        self.position = position
+        self.sourceUrl = sourceUrl
+        self.linkPreview = linkPreview
+        self.mediaGroupId = mediaGroupId
         self.photoFileNames = photoFileNames
         self.photoAspectRatios = photoAspectRatios
     }

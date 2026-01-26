@@ -3,9 +3,45 @@
 //  tabsglass
 //
 //  Telegram-style horizontal tab bar with unified glass container
+//  Note: Index 0 = Inbox (virtual), Index 1+ = real tabs
 //
 
 import SwiftUI
+
+// MARK: - Tab Display Item (Virtual Inbox + Real Tabs)
+
+/// Type alias to avoid conflict with SwiftUI.Tab
+typealias AppTab = Tab
+
+/// Represents either the virtual Inbox or a real Tab for display in tab bar
+enum TabDisplayItem: Identifiable {
+    case inbox
+    case realTab(AppTab)
+
+    var id: String {
+        switch self {
+        case .inbox: return "inbox"
+        case .realTab(let tab): return tab.id.uuidString
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .inbox: return AppSettings.shared.inboxTitle
+        case .realTab(let tab): return tab.title
+        }
+    }
+
+    var isInbox: Bool {
+        if case .inbox = self { return true }
+        return false
+    }
+
+    var tab: AppTab? {
+        if case .realTab(let tab) = self { return tab }
+        return nil
+    }
+}
 
 // MARK: - Tab Bar View
 
@@ -16,6 +52,7 @@ struct TabBarView: View {
     let onAddTap: () -> Void
     let onMenuTap: () -> Void
     let onRenameTab: (Tab) -> Void
+    let onRenameInbox: () -> Void
     let onDeleteTab: (Tab) -> Void
 
     var body: some View {
@@ -59,6 +96,7 @@ struct TabBarView: View {
                 selectedIndex: $selectedIndex,
                 switchFraction: $switchFraction,
                 onRenameTab: onRenameTab,
+                onRenameInbox: onRenameInbox,
                 onDeleteTab: onDeleteTab
             )
             .padding(.horizontal, 12)
@@ -106,10 +144,18 @@ struct TelegramTabBar: View {
     @Binding var selectedIndex: Int
     @Binding var switchFraction: CGFloat
     let onRenameTab: (Tab) -> Void
+    let onRenameInbox: () -> Void
     let onDeleteTab: (Tab) -> Void
 
     // Track frames of each tab for selection indicator positioning
     @State private var tabFrames: [Int: CGRect] = [:]
+
+    /// Combined list: Inbox (virtual) + real tabs
+    private var allItems: [TabDisplayItem] {
+        var items: [TabDisplayItem] = [.inbox]
+        items.append(contentsOf: tabs.map { TabDisplayItem.realTab($0) })
+        return items
+    }
 
     var body: some View {
         // ONE glass container for the entire tab bar
@@ -122,17 +168,27 @@ struct TelegramTabBar: View {
 
                     // Tabs ABOVE the indicator
                     HStack(spacing: 0) {
-                        ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                        ForEach(Array(allItems.enumerated()), id: \.element.id) { index, item in
                             TabLabelView(
-                                tab: tab,
+                                item: item,
                                 selectionProgress: selectionProgress(for: index),
                                 onTap: {
                                     withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
                                         selectedIndex = index
                                     }
                                 },
-                                onRename: { onRenameTab(tab) },
-                                onDelete: { onDeleteTab(tab) }
+                                onRename: {
+                                    if item.isInbox {
+                                        onRenameInbox()
+                                    } else if let tab = item.tab {
+                                        onRenameTab(tab)
+                                    }
+                                },
+                                onDelete: {
+                                    if let tab = item.tab {
+                                        onDeleteTab(tab)
+                                    }
+                                }
                             )
                             .background(
                                 GeometryReader { geo in
@@ -161,7 +217,7 @@ struct TelegramTabBar: View {
             .onChange(of: switchFraction) { _, _ in
                 // Scroll to interpolated position during swipe
                 let targetIndex = Int((CGFloat(selectedIndex) + switchFraction).rounded())
-                if targetIndex >= 0 && targetIndex < tabs.count && targetIndex != selectedIndex {
+                if targetIndex >= 0 && targetIndex < allItems.count && targetIndex != selectedIndex {
                     withAnimation(.interactiveSpring) {
                         proxy.scrollTo(targetIndex, anchor: .center)
                     }
@@ -190,7 +246,7 @@ struct TelegramTabBar: View {
 
         if index == selectedIndex {
             return 1.0 - fraction  // Current tab loses selection
-        } else if index == targetIndex && targetIndex >= 0 && targetIndex < tabs.count {
+        } else if index == targetIndex && targetIndex >= 0 && targetIndex < allItems.count {
             return fraction  // Target tab gains selection
         }
         return 0.0
@@ -209,7 +265,7 @@ struct TelegramTabBar: View {
 
         // Find target tab based on swipe direction
         let targetIndex = switchFraction > 0 ? selectedIndex + 1 : selectedIndex - 1
-        guard targetIndex >= 0 && targetIndex < tabs.count,
+        guard targetIndex >= 0 && targetIndex < allItems.count,
               let targetFrame = tabFrames[targetIndex] else {
             return currentFrame
         }
@@ -247,7 +303,7 @@ struct SelectionIndicatorView: View {
 
 struct TabLabelView: View {
     @Environment(\.colorScheme) private var colorScheme
-    let tab: Tab
+    let item: TabDisplayItem
     let selectionProgress: CGFloat
     let onTap: () -> Void
     let onRename: () -> Void
@@ -266,7 +322,7 @@ struct TabLabelView: View {
 
     var body: some View {
         Button(action: onTap) {
-            Text(tab.title)
+            Text(item.title)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(textColor)
                 .padding(.horizontal, 14)
@@ -274,13 +330,15 @@ struct TabLabelView: View {
         }
         .buttonStyle(TabPressStyle())
         .contextMenu {
+            // Rename available for all tabs (including Inbox)
             Button {
                 onRename()
             } label: {
                 Label("Переименовать", systemImage: "pencil")
             }
 
-            if !tab.isInbox {
+            // Delete only for real tabs (not Inbox)
+            if !item.isInbox {
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
@@ -289,7 +347,7 @@ struct TabLabelView: View {
             }
         } preview: {
             // Fixed-size preview to prevent scaling animation
-            Text(tab.title)
+            Text(item.title)
                 .font(.system(size: 15, weight: .medium))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -321,6 +379,7 @@ struct TabPressStyle: ButtonStyle {
             onAddTap: {},
             onMenuTap: {},
             onRenameTab: { _ in },
+            onRenameInbox: {},
             onDeleteTab: { _ in }
         )
         Spacer()

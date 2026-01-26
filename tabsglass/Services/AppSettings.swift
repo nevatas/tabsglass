@@ -178,9 +178,16 @@ final class AppSettings {
     private enum Keys {
         static let autoFocusInput = "autoFocusInput"
         static let theme = "appTheme"
+        static let inboxTitle = "inboxTitle"
     }
 
     private init() {}
+
+    /// Custom title for virtual Inbox tab (default: "Inbox")
+    var inboxTitle: String {
+        get { defaults.string(forKey: Keys.inboxTitle) ?? "Inbox" }
+        set { defaults.set(newValue, forKey: Keys.inboxTitle) }
+    }
 
     /// Auto-focus composer input when app opens
     var autoFocusInput: Bool {
