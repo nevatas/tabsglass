@@ -21,7 +21,7 @@ struct MainContainerView: View {
     @State private var newTabTitle = ""
     @State private var renameTabTitle = ""
     @State private var messageText = ""
-    @State private var scrollProgress: CGFloat = 0
+    @State private var switchFraction: CGFloat = 0  // -1.0 to 1.0 swipe progress
     @State private var attachedImages: [UIImage] = []
 
     private var currentTab: Tab? {
@@ -38,7 +38,7 @@ struct MainContainerView: View {
                     tabs: tabs,
                     selectedIndex: $selectedTabIndex,
                     messageText: $messageText,
-                    scrollProgress: $scrollProgress,
+                    switchFraction: $switchFraction,
                     attachedImages: $attachedImages,
                     onSend: { sendMessage() },
                     onDeleteMessage: { message in
@@ -62,7 +62,7 @@ struct MainContainerView: View {
             TabBarView(
                 tabs: tabs,
                 selectedIndex: $selectedTabIndex,
-                scrollProgress: scrollProgress,
+                switchFraction: $switchFraction,
                 onAddTap: {
                     newTabTitle = ""
                     showNewTabAlert = true
@@ -116,24 +116,21 @@ struct MainContainerView: View {
         .onChange(of: tabs.count) { oldValue, newValue in
             if newValue > oldValue && newValue > 0 {
                 // New tab created - select it with animation
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
                     selectedTabIndex = newValue - 1
-                    scrollProgress = CGFloat(newValue - 1)
+                    switchFraction = 0
                 }
             }
             if selectedTabIndex >= newValue && newValue > 0 {
                 selectedTabIndex = newValue - 1
             }
         }
-        .onChange(of: selectedTabIndex) { _, newValue in
-            let targetProgress = CGFloat(newValue)
-            // Only animate if far from target (tap on tab), otherwise just set (end of swipe)
-            if abs(scrollProgress - targetProgress) > 0.3 {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    scrollProgress = targetProgress
+        .onChange(of: selectedTabIndex) { _, _ in
+            // Reset fraction when tab changes (from tap or swipe completion)
+            if abs(switchFraction) > 0.01 {
+                withAnimation(.spring(duration: 0.2)) {
+                    switchFraction = 0
                 }
-            } else {
-                scrollProgress = targetProgress
             }
         }
         .sheet(item: $messageToEdit) { message in

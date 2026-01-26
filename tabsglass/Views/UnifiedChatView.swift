@@ -14,7 +14,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     let tabs: [Tab]
     @Binding var selectedIndex: Int
     @Binding var messageText: String
-    @Binding var scrollProgress: CGFloat
+    @Binding var switchFraction: CGFloat  // -1.0 to 1.0 swipe progress
     @Binding var attachedImages: [UIImage]
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
@@ -37,8 +37,8 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onTextChange = { text in
             messageText = text
         }
-        vc.onScrollProgress = { progress in
-            scrollProgress = progress
+        vc.onSwitchFraction = { fraction in
+            switchFraction = fraction
         }
         vc.onImagesChange = { images in
             attachedImages = images
@@ -68,7 +68,7 @@ final class UnifiedChatViewController: UIViewController {
     var onSend: (() -> Void)?
     var onIndexChange: ((Int) -> Void)?
     var onTextChange: ((String) -> Void)?
-    var onScrollProgress: ((CGFloat) -> Void)?
+    var onSwitchFraction: ((CGFloat) -> Void)?  // -1.0 to 1.0
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, Tab) -> Void)?
     var onEditMessage: ((Message) -> Void)?
@@ -476,22 +476,24 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
         // contentOffset.x is pageWidth when at rest (center page)
         // < pageWidth = swiping right (to previous), > pageWidth = swiping left (to next)
         let offset = scrollView.contentOffset.x - pageWidth
-        let progress = offset / pageWidth
+        let fraction = offset / pageWidth
 
-        // progress: -1 = fully swiped to previous, 0 = center, +1 = fully swiped to next
-        let clampedProgress = max(-1, min(1, progress))
-        onScrollProgress?(CGFloat(selectedIndex) + clampedProgress)
+        // fraction: -1 = fully swiped to previous, 0 = center, +1 = fully swiped to next
+        let clampedFraction = max(-1, min(1, fraction))
+        onSwitchFraction?(clampedFraction)
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
         isUserSwiping = false
+        onSwitchFraction?(0)  // Reset fraction when swipe completes
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         guard scrollView === pageScrollView else { return }
         if !decelerate {
             isUserSwiping = false
+            onSwitchFraction?(0)  // Reset fraction when drag ends without deceleration
         }
     }
 }
