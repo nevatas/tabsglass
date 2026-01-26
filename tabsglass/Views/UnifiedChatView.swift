@@ -820,31 +820,47 @@ final class BottomFadeGradientView: UIView {
     }
 
     private func setupGradient() {
-        // Gradient from transparent to background color (bottom to top visually)
-        gradientLayer.colors = [
-            UIColor.systemBackground.withAlphaComponent(0).cgColor,
-            UIColor.systemBackground.cgColor
-        ]
         gradientLayer.locations = [0.0, 1.0]
         gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)  // Top (transparent)
         gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)    // Bottom (solid)
         layer.addSublayer(gradientLayer)
+        updateColors()
 
         // Update colors when trait collection changes
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: BottomFadeGradientView, _) in
             self.updateColors()
         }
+
+        // Update colors when theme changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleThemeChange),
+            name: Notification.Name("ThemeChanged"),
+            object: nil
+        )
+    }
+
+    @objc private func handleThemeChange() {
+        updateColors()
     }
 
     private func updateColors() {
+        let theme = ThemeManager.shared.currentTheme
+        let isDark = traitCollection.userInterfaceStyle == .dark
+        let bgColor = isDark ? UIColor(theme.backgroundColorDark) : UIColor(theme.backgroundColor)
+
         gradientLayer.colors = [
-            UIColor.systemBackground.withAlphaComponent(0).cgColor,
-            UIColor.systemBackground.cgColor
+            bgColor.withAlphaComponent(0).cgColor,
+            bgColor.cgColor
         ]
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         gradientLayer.frame = bounds
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }
