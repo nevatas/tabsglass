@@ -164,8 +164,10 @@ struct MainContainerView: View {
         .sheet(item: $messageToEdit) { message in
             EditMessageSheet(
                 originalText: message.content,
-                onSave: { newText in
+                originalEntities: message.entities,
+                onSave: { newText, newEntities in
                     message.content = newText
+                    message.entities = newEntities
                     messageToEdit = nil
                 },
                 onCancel: {
