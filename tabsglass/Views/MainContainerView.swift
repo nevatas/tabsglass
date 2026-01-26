@@ -197,8 +197,25 @@ struct MainContainerView: View {
             }
         }
 
-        // Merge formatting entities with detected URL entities
-        var allEntities = formattingEntities
+        // Calculate leading whitespace offset for entity adjustment
+        let leadingWhitespace = messageText.prefix(while: { $0.isWhitespace || $0.isNewline }).count
+
+        // Adjust formatting entity offsets for trimmed text
+        var allEntities: [TextEntity] = []
+        for entity in formattingEntities {
+            let newOffset = entity.offset - leadingWhitespace
+            // Only include entities that are within the trimmed text bounds
+            if newOffset >= 0 && newOffset + entity.length <= trimmedText.count {
+                allEntities.append(TextEntity(
+                    type: entity.type,
+                    offset: newOffset,
+                    length: entity.length,
+                    url: entity.url
+                ))
+            }
+        }
+
+        // Add URL entities (already relative to trimmed text)
         let urlEntities = TextEntity.detectURLs(in: trimmedText)
         allEntities.append(contentsOf: urlEntities)
 

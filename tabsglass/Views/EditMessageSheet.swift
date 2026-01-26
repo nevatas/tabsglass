@@ -29,11 +29,29 @@ struct EditMessageSheet: View {
                 Button {
                     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
-                        let entities = textView?.extractEntities() ?? []
+                        // Calculate leading whitespace offset for entity adjustment
+                        let leadingWhitespace = text.prefix(while: { $0.isWhitespace || $0.isNewline }).count
+
+                        // Get entities and adjust offsets for trimmed text
+                        let rawEntities = textView?.extractEntities() ?? []
+                        var adjustedEntities: [TextEntity] = []
+
+                        for entity in rawEntities {
+                            let newOffset = entity.offset - leadingWhitespace
+                            // Only include entities that are within the trimmed text bounds
+                            if newOffset >= 0 && newOffset + entity.length <= trimmed.count {
+                                adjustedEntities.append(TextEntity(
+                                    type: entity.type,
+                                    offset: newOffset,
+                                    length: entity.length,
+                                    url: entity.url
+                                ))
+                            }
+                        }
+
                         // Also detect URLs
-                        var allEntities = entities
-                        allEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))
-                        onSave(trimmed, allEntities.isEmpty ? nil : allEntities)
+                        adjustedEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))
+                        onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities)
                     }
                 } label: {
                     Image(systemName: "checkmark")
