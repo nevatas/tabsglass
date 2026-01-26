@@ -367,13 +367,13 @@ final class UnifiedChatViewController: UIViewController {
 
         // Show confirmation alert
         let alert = UIAlertController(
-            title: "Восстановить заметку?",
-            message: "Недавно удалённая заметка будет восстановлена",
+            title: L10n.Menu.restoreTitle,
+            message: L10n.Menu.restoreMessage,
             preferredStyle: .alert
         )
 
-        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Восстановить", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: L10n.Tab.cancel, style: .cancel))
+        alert.addAction(UIAlertAction(title: L10n.Menu.restore, style: .default) { [weak self] _ in
             self?.onRestoreMessage?()
         })
 
@@ -818,7 +818,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
             // Copy action
             let copyAction = UIAction(
-                title: "Скопировать",
+                title: L10n.Menu.copy,
                 image: UIImage(systemName: "doc.on.doc")
             ) { _ in
                 UIPasteboard.general.string = message.content
@@ -827,7 +827,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
             // Edit action
             let editAction = UIAction(
-                title: "Изменить",
+                title: L10n.Menu.edit,
                 image: UIImage(systemName: "pencil")
             ) { _ in
                 self.onEditMessage?(message)
@@ -839,7 +839,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
             // Add Inbox option if not already in Inbox
             if self.currentTabId != nil {
-                moveMenuChildren.append(UIAction(title: "Inbox") { [weak self] _ in
+                moveMenuChildren.append(UIAction(title: L10n.Reorder.inbox) { [weak self] _ in
                     self?.animateDeleteMessage(message) {
                         self?.onMoveMessage?(message, nil)
                     }
@@ -858,7 +858,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
             if !moveMenuChildren.isEmpty {
                 let moveMenu = UIMenu(
-                    title: "Переместить",
+                    title: L10n.Menu.move,
                     image: UIImage(systemName: "arrow.right.doc.on.clipboard"),
                     children: moveMenuChildren
                 )
@@ -867,7 +867,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
             // Delete action
             let deleteAction = UIAction(
-                title: "Удалить",
+                title: L10n.Menu.delete,
                 image: UIImage(systemName: "trash"),
                 attributes: .destructive
             ) { [weak self] _ in

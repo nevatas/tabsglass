@@ -146,28 +146,28 @@ final class FormattingTextView: UITextView {
         // Only add formatting when there's a selection
         if selectedRange.length > 0 {
             // Create formatting submenu
-            let boldAction = UIAction(title: "Bold", image: UIImage(systemName: "bold")) { [weak self] _ in
+            let boldAction = UIAction(title: L10n.Format.bold, image: UIImage(systemName: "bold")) { [weak self] _ in
                 self?.applyBold(nil)
             }
 
-            let italicAction = UIAction(title: "Italic", image: UIImage(systemName: "italic")) { [weak self] _ in
+            let italicAction = UIAction(title: L10n.Format.italic, image: UIImage(systemName: "italic")) { [weak self] _ in
                 self?.applyItalic(nil)
             }
 
-            let underlineAction = UIAction(title: "Underline", image: UIImage(systemName: "underline")) { [weak self] _ in
+            let underlineAction = UIAction(title: L10n.Format.underline, image: UIImage(systemName: "underline")) { [weak self] _ in
                 self?.toggleUnderline(nil)
             }
 
-            let strikethroughAction = UIAction(title: "Strikethrough", image: UIImage(systemName: "strikethrough")) { [weak self] _ in
+            let strikethroughAction = UIAction(title: L10n.Format.strikethrough, image: UIImage(systemName: "strikethrough")) { [weak self] _ in
                 self?.applyStrikethrough(nil)
             }
 
-            let linkAction = UIAction(title: "Link", image: UIImage(systemName: "link")) { [weak self] _ in
+            let linkAction = UIAction(title: L10n.Format.link, image: UIImage(systemName: "link")) { [weak self] _ in
                 self?.showLinkAlert()
             }
 
             let formattingMenu = UIMenu(
-                title: "Format",
+                title: L10n.Format.bold,  // Using a short title for the menu
                 image: UIImage(systemName: "textformat"),
                 children: [boldAction, italicAction, underlineAction, strikethroughAction, linkAction]
             )
@@ -541,7 +541,7 @@ struct LinkInputSheet: View {
             // Alert container
             VStack(spacing: 16) {
                 // Title
-                Text("Добавить ссылку")
+                Text(L10n.Format.addLink)
                     .font(.body.weight(.semibold))
                     .padding(.top, 4)
                     .padding(.bottom, 12)
@@ -568,7 +568,7 @@ struct LinkInputSheet: View {
                     Button {
                         dismiss()
                     } label: {
-                        Text("Отмена")
+                        Text(L10n.Tab.cancel)
                             .font(.body.weight(.semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -582,7 +582,7 @@ struct LinkInputSheet: View {
                     Button {
                         validateAndSubmit()
                     } label: {
-                        Text("Готово")
+                        Text(L10n.Settings.done)
                             .font(.body.weight(.semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)

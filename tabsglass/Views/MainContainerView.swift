@@ -98,46 +98,46 @@ struct MainContainerView: View {
                 }
             )
         }
-        .alert("Новый таб", isPresented: $showNewTabAlert) {
-            TextField("Название", text: $newTabTitle)
-            Button("Отмена", role: .cancel) { }
-            Button("Создать") {
+        .alert(L10n.Tab.new, isPresented: $showNewTabAlert) {
+            TextField(L10n.Tab.titlePlaceholder, text: $newTabTitle)
+            Button(L10n.Tab.cancel, role: .cancel) { }
+            Button(L10n.Tab.create) {
                 let trimmed = newTabTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     createTab(title: trimmed)
                 }
             }
         }
-        .alert("Переименовать", isPresented: $showRenameAlert) {
-            TextField("Название", text: $renameTabTitle)
-            Button("Отмена", role: .cancel) { }
-            Button("Сохранить") {
+        .alert(L10n.Tab.rename, isPresented: $showRenameAlert) {
+            TextField(L10n.Tab.titlePlaceholder, text: $renameTabTitle)
+            Button(L10n.Tab.cancel, role: .cancel) { }
+            Button(L10n.Tab.save) {
                 let trimmed = renameTabTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty, let tab = tabToRename {
                     renameTab(tab, to: trimmed)
                 }
             }
         }
-        .alert("Переименовать Inbox", isPresented: $showRenameInboxAlert) {
-            TextField("Название", text: $renameInboxTitle)
-            Button("Отмена", role: .cancel) { }
-            Button("Сохранить") {
+        .alert(L10n.Tab.renameInbox, isPresented: $showRenameInboxAlert) {
+            TextField(L10n.Tab.titlePlaceholder, text: $renameInboxTitle)
+            Button(L10n.Tab.cancel, role: .cancel) { }
+            Button(L10n.Tab.save) {
                 let trimmed = renameInboxTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     AppSettings.shared.inboxTitle = trimmed
                 }
             }
         }
-        .alert("Удалить таб?", isPresented: $showDeleteAlert) {
-            Button("Отмена", role: .cancel) { }
-            Button("Удалить", role: .destructive) {
+        .alert(L10n.Tab.deleteTitle, isPresented: $showDeleteAlert) {
+            Button(L10n.Tab.cancel, role: .cancel) { }
+            Button(L10n.Tab.delete, role: .destructive) {
                 if let tab = tabToDelete {
                     deleteTab(tab)
                 }
             }
         } message: {
             if let tab = tabToDelete {
-                Text("Таб \"\(tab.title)\" будет удалён, его сообщения перенесутся в Inbox")
+                Text(L10n.Tab.deleteMessage(tab.title))
             }
         }
         .onChange(of: tabs.count) { oldValue, newValue in

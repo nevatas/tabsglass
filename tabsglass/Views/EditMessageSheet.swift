@@ -25,7 +25,7 @@ struct EditMessageSheet: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Button("Отмена") {
+                Button(L10n.Tab.cancel) {
                     onCancel()
                 }
                 .foregroundColor(.primary)

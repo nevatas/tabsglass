@@ -269,7 +269,7 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
 
     func makeUIView(context: Context) -> FormattingTextView {
         let textView = FormattingTextView()
-        textView.placeholder = "Note..."
+        textView.placeholder = L10n.Composer.placeholder
         textView.textColor = colorScheme == .dark ? .white : .black
 
         textView.onTextChange = { [self] attrText in
@@ -370,13 +370,13 @@ struct EmbeddedComposerView: View {
                         Button {
                             state.onShowCamera?()
                         } label: {
-                            Label("Камера", systemImage: "camera")
+                            Label(L10n.Composer.camera, systemImage: "camera")
                         }
 
                         Button {
                             state.onShowPhotoPicker?()
                         } label: {
-                            Label("Фото", systemImage: "photo.on.rectangle")
+                            Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
                         }
                     } label: {
                         Image(systemName: "plus")
@@ -743,12 +743,12 @@ final class EmptyTableCell: UITableViewCell {
         iconView.widthAnchor.constraint(equalToConstant: 48).isActive = true
 
         let titleLabel = UILabel()
-        titleLabel.text = "No messages yet"
+        titleLabel.text = L10n.Empty.title
         titleLabel.textColor = .secondaryLabel
         titleLabel.font = .preferredFont(forTextStyle: .subheadline)
 
         let subtitleLabel = UILabel()
-        subtitleLabel.text = "Type a note below to get started"
+        subtitleLabel.text = L10n.Empty.subtitle
         subtitleLabel.textColor = .tertiaryLabel
         subtitleLabel.font = .preferredFont(forTextStyle: .caption1)
 

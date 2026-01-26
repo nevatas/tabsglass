@@ -1,0 +1,75 @@
+/*
+  Localizable.strings (German)
+  tabsglass
+*/
+
+// MARK: - Settings
+
+"settings.title" = "Einstellungen";
+"settings.appearance" = "Erscheinungsbild";
+"settings.reorder_tabs" = "Tabs neu anordnen";
+"settings.auto_focus" = "Auto-Fokus";
+"settings.privacy_policy" = "Datenschutzrichtlinie";
+"settings.terms" = "Nutzungsbedingungen";
+"settings.contact" = "Entwickler kontaktieren";
+"settings.done" = "Fertig";
+
+// MARK: - Reorder
+
+"reorder.title" = "Anordnen";
+"reorder.inbox" = "Posteingang";
+"reorder.inbox_footer" = "Posteingang wird immer zuerst angezeigt";
+
+// MARK: - Tabs
+
+"tab.new" = "Neuer Tab";
+"tab.rename" = "Umbenennen";
+"tab.rename_inbox" = "Posteingang umbenennen";
+"tab.delete_title" = "Tab löschen?";
+"tab.delete_message" = "Tab \"%@\" wird gelöscht, seine Nachrichten werden in den Posteingang verschoben";
+"tab.title_placeholder" = "Titel";
+"tab.create" = "Erstellen";
+"tab.save" = "Speichern";
+"tab.delete" = "Löschen";
+"tab.cancel" = "Abbrechen";
+
+// MARK: - Context Menu
+
+"menu.copy" = "Kopieren";
+"menu.edit" = "Bearbeiten";
+"menu.move" = "Verschieben";
+"menu.delete" = "Löschen";
+"menu.restore_title" = "Notiz wiederherstellen?";
+"menu.restore_message" = "Die kürzlich gelöschte Notiz wird wiederhergestellt";
+"menu.restore" = "Wiederherstellen";
+
+// MARK: - Themes
+
+"theme.system" = "System";
+"theme.light" = "Hell";
+"theme.dark" = "Dunkel";
+"theme.pink" = "Rosa";
+"theme.beige" = "Beige";
+"theme.green" = "Grün";
+"theme.brown" = "Braun";
+"theme.blue" = "Blau";
+
+// MARK: - Empty State
+
+"empty.title" = "Noch keine Nachrichten";
+"empty.subtitle" = "Schreiben Sie unten eine Notiz, um zu beginnen";
+
+// MARK: - Formatting
+
+"format.bold" = "Fett";
+"format.italic" = "Kursiv";
+"format.underline" = "Unterstrichen";
+"format.strikethrough" = "Durchgestrichen";
+"format.link" = "Link";
+"format.add_link" = "Link hinzufügen";
+
+// MARK: - Composer
+
+"composer.placeholder" = "Notiz...";
+"composer.camera" = "Kamera";
+"composer.photo" = "Foto";

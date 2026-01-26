@@ -1,0 +1,75 @@
+/*
+  Localizable.strings (Spanish)
+  tabsglass
+*/
+
+// MARK: - Settings
+
+"settings.title" = "Ajustes";
+"settings.appearance" = "Apariencia";
+"settings.reorder_tabs" = "Reordenar pestañas";
+"settings.auto_focus" = "Enfoque automático";
+"settings.privacy_policy" = "Política de Privacidad";
+"settings.terms" = "Términos de Uso";
+"settings.contact" = "Contactar al desarrollador";
+"settings.done" = "Listo";
+
+// MARK: - Reorder
+
+"reorder.title" = "Reordenar";
+"reorder.inbox" = "Bandeja de entrada";
+"reorder.inbox_footer" = "La bandeja de entrada siempre se muestra primero";
+
+// MARK: - Tabs
+
+"tab.new" = "Nueva pestaña";
+"tab.rename" = "Renombrar";
+"tab.rename_inbox" = "Renombrar bandeja";
+"tab.delete_title" = "¿Eliminar pestaña?";
+"tab.delete_message" = "La pestaña \"%@\" será eliminada, sus mensajes se moverán a la bandeja de entrada";
+"tab.title_placeholder" = "Título";
+"tab.create" = "Crear";
+"tab.save" = "Guardar";
+"tab.delete" = "Eliminar";
+"tab.cancel" = "Cancelar";
+
+// MARK: - Context Menu
+
+"menu.copy" = "Copiar";
+"menu.edit" = "Editar";
+"menu.move" = "Mover";
+"menu.delete" = "Eliminar";
+"menu.restore_title" = "¿Restaurar nota?";
+"menu.restore_message" = "La nota eliminada recientemente será restaurada";
+"menu.restore" = "Restaurar";
+
+// MARK: - Themes
+
+"theme.system" = "Sistema";
+"theme.light" = "Claro";
+"theme.dark" = "Oscuro";
+"theme.pink" = "Rosa";
+"theme.beige" = "Beige";
+"theme.green" = "Verde";
+"theme.brown" = "Marrón";
+"theme.blue" = "Azul";
+
+// MARK: - Empty State
+
+"empty.title" = "Aún no hay mensajes";
+"empty.subtitle" = "Escribe una nota abajo para comenzar";
+
+// MARK: - Formatting
+
+"format.bold" = "Negrita";
+"format.italic" = "Cursiva";
+"format.underline" = "Subrayado";
+"format.strikethrough" = "Tachado";
+"format.link" = "Enlace";
+"format.add_link" = "Añadir enlace";
+
+// MARK: - Composer
+
+"composer.placeholder" = "Nota...";
+"composer.camera" = "Cámara";
+"composer.photo" = "Foto";

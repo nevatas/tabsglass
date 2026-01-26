@@ -26,14 +26,14 @@ enum AppTheme: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .system: return "Системная"
-        case .light: return "Светлая"
-        case .dark: return "Тёмная"
-        case .pink: return "Розовая"
-        case .beige: return "Бежевая"
-        case .green: return "Зелёная"
-        case .brown: return "Коричневая"
-        case .blue: return "Голубая"
+        case .system: return L10n.Theme.system
+        case .light: return L10n.Theme.light
+        case .dark: return L10n.Theme.dark
+        case .pink: return L10n.Theme.pink
+        case .beige: return L10n.Theme.beige
+        case .green: return L10n.Theme.green
+        case .brown: return L10n.Theme.brown
+        case .blue: return L10n.Theme.blue
         }
     }
 

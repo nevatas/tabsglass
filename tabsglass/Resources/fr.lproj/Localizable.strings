@@ -1,0 +1,75 @@
+/*
+  Localizable.strings (French)
+  tabsglass
+*/
+
+// MARK: - Settings
+
+"settings.title" = "Réglages";
+"settings.appearance" = "Apparence";
+"settings.reorder_tabs" = "Réorganiser les onglets";
+"settings.auto_focus" = "Focus automatique";
+"settings.privacy_policy" = "Politique de Confidentialité";
+"settings.terms" = "Conditions d'Utilisation";
+"settings.contact" = "Contacter le développeur";
+"settings.done" = "Terminé";
+
+// MARK: - Reorder
+
+"reorder.title" = "Réorganiser";
+"reorder.inbox" = "Boîte de réception";
+"reorder.inbox_footer" = "La boîte de réception est toujours affichée en premier";
+
+// MARK: - Tabs
+
+"tab.new" = "Nouvel onglet";
+"tab.rename" = "Renommer";
+"tab.rename_inbox" = "Renommer la boîte";
+"tab.delete_title" = "Supprimer l'onglet ?";
+"tab.delete_message" = "L'onglet \"%@\" sera supprimé, ses messages seront déplacés vers la boîte de réception";
+"tab.title_placeholder" = "Titre";
+"tab.create" = "Créer";
+"tab.save" = "Enregistrer";
+"tab.delete" = "Supprimer";
+"tab.cancel" = "Annuler";
+
+// MARK: - Context Menu
+
+"menu.copy" = "Copier";
+"menu.edit" = "Modifier";
+"menu.move" = "Déplacer";
+"menu.delete" = "Supprimer";
+"menu.restore_title" = "Restaurer la note ?";
+"menu.restore_message" = "La note récemment supprimée sera restaurée";
+"menu.restore" = "Restaurer";
+
+// MARK: - Themes
+
+"theme.system" = "Système";
+"theme.light" = "Clair";
+"theme.dark" = "Sombre";
+"theme.pink" = "Rose";
+"theme.beige" = "Beige";
+"theme.green" = "Vert";
+"theme.brown" = "Marron";
+"theme.blue" = "Bleu";
+
+// MARK: - Empty State
+
+"empty.title" = "Pas encore de messages";
+"empty.subtitle" = "Écrivez une note ci-dessous pour commencer";
+
+// MARK: - Formatting
+
+"format.bold" = "Gras";
+"format.italic" = "Italique";
+"format.underline" = "Souligné";
+"format.strikethrough" = "Barré";
+"format.link" = "Lien";
+"format.add_link" = "Ajouter un lien";
+
+// MARK: - Composer
+
+"composer.placeholder" = "Note...";
+"composer.camera" = "Appareil photo";
+"composer.photo" = "Photo";

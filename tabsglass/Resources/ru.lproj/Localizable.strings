@@ -1,0 +1,75 @@
+/*
+  Localizable.strings (Russian)
+  tabsglass
+*/
+
+// MARK: - Settings
+
+"settings.title" = "Настройки";
+"settings.appearance" = "Оформление";
+"settings.reorder_tabs" = "Упорядочить табы";
+"settings.auto_focus" = "Автофокус ввода";
+"settings.privacy_policy" = "Политика Конфиденциальности";
+"settings.terms" = "Правила Пользования";
+"settings.contact" = "Связь с разработчиком";
+"settings.done" = "Готово";
+
+// MARK: - Reorder
+
+"reorder.title" = "Упорядочить";
+"reorder.inbox" = "Inbox";
+"reorder.inbox_footer" = "Inbox всегда отображается первым";
+
+// MARK: - Tabs
+
+"tab.new" = "Новый таб";
+"tab.rename" = "Переименовать";
+"tab.rename_inbox" = "Переименовать Inbox";
+"tab.delete_title" = "Удалить таб?";
+"tab.delete_message" = "Таб \"%@\" будет удалён, его сообщения перенесутся в Inbox";
+"tab.title_placeholder" = "Название";
+"tab.create" = "Создать";
+"tab.save" = "Сохранить";
+"tab.delete" = "Удалить";
+"tab.cancel" = "Отмена";
+
+// MARK: - Context Menu
+
+"menu.copy" = "Скопировать";
+"menu.edit" = "Изменить";
+"menu.move" = "Переместить";
+"menu.delete" = "Удалить";
+"menu.restore_title" = "Восстановить заметку?";
+"menu.restore_message" = "Недавно удалённая заметка будет восстановлена";
+"menu.restore" = "Восстановить";
+
+// MARK: - Themes
+
+"theme.system" = "Системная";
+"theme.light" = "Светлая";
+"theme.dark" = "Тёмная";
+"theme.pink" = "Розовая";
+"theme.beige" = "Бежевая";
+"theme.green" = "Зелёная";
+"theme.brown" = "Коричневая";
+"theme.blue" = "Голубая";
+
+// MARK: - Empty State
+
+"empty.title" = "Сообщений пока нет";
+"empty.subtitle" = "Напишите заметку ниже, чтобы начать";
+
+// MARK: - Formatting
+
+"format.bold" = "Жирный";
+"format.italic" = "Курсив";
+"format.underline" = "Подчёркнутый";
+"format.strikethrough" = "Зачёркнутый";
+"format.link" = "Ссылка";
+"format.add_link" = "Добавить ссылку";
+
+// MARK: - Composer
+
+"composer.placeholder" = "Заметка...";
+"composer.camera" = "Камера";
+"composer.photo" = "Фото";

@@ -1,0 +1,75 @@
+/*
+  Localizable.strings (English)
+  tabsglass
+*/
+
+// MARK: - Settings
+
+"settings.title" = "Settings";
+"settings.appearance" = "Appearance";
+"settings.reorder_tabs" = "Reorder Tabs";
+"settings.auto_focus" = "Auto-focus Input";
+"settings.privacy_policy" = "Privacy Policy";
+"settings.terms" = "Terms of Service";
+"settings.contact" = "Contact Developer";
+"settings.done" = "Done";
+
+// MARK: - Reorder
+
+"reorder.title" = "Reorder";
+"reorder.inbox" = "Inbox";
+"reorder.inbox_footer" = "Inbox is always displayed first";
+
+// MARK: - Tabs
+
+"tab.new" = "New Tab";
+"tab.rename" = "Rename";
+"tab.rename_inbox" = "Rename Inbox";
+"tab.delete_title" = "Delete Tab?";
+"tab.delete_message" = "Tab \"%@\" will be deleted, its messages will be moved to Inbox";
+"tab.title_placeholder" = "Title";
+"tab.create" = "Create";
+"tab.save" = "Save";
+"tab.delete" = "Delete";
+"tab.cancel" = "Cancel";
+
+// MARK: - Context Menu
+
+"menu.copy" = "Copy";
+"menu.edit" = "Edit";
+"menu.move" = "Move";
+"menu.delete" = "Delete";
+"menu.restore_title" = "Restore Note?";
+"menu.restore_message" = "The recently deleted note will be restored";
+"menu.restore" = "Restore";
+
+// MARK: - Themes
+
+"theme.system" = "System";
+"theme.light" = "Light";
+"theme.dark" = "Dark";
+"theme.pink" = "Pink";
+"theme.beige" = "Beige";
+"theme.green" = "Green";
+"theme.brown" = "Brown";
+"theme.blue" = "Blue";
+
+// MARK: - Empty State
+
+"empty.title" = "No messages yet";
+"empty.subtitle" = "Type a note below to get started";
+
+// MARK: - Formatting
+
+"format.bold" = "Bold";
+"format.italic" = "Italic";
+"format.underline" = "Underline";
+"format.strikethrough" = "Strikethrough";
+"format.link" = "Link";
+"format.add_link" = "Add Link";
+
+// MARK: - Composer
+
+"composer.placeholder" = "Note...";
+"composer.camera" = "Camera";
+"composer.photo" = "Photo";

@@ -18,19 +18,19 @@ struct SettingsView: View {
                     NavigationLink {
                         AppearanceSettingsView()
                     } label: {
-                        Label("Оформление", systemImage: "paintbrush")
+                        Label(L10n.Settings.appearance, systemImage: "paintbrush")
                     }
 
                     NavigationLink {
                         ReorderTabsView()
                     } label: {
-                        Label("Упорядочить табы", systemImage: "arrow.up.arrow.down")
+                        Label(L10n.Settings.reorderTabs, systemImage: "arrow.up.arrow.down")
                     }
                 }
 
                 Section {
                     Toggle(isOn: $autoFocusInput) {
-                        Label("Автофокус ввода", systemImage: "keyboard")
+                        Label(L10n.Settings.autoFocus, systemImage: "keyboard")
                     }
                     .onChange(of: autoFocusInput) { _, newValue in
                         AppSettings.shared.autoFocusInput = newValue
@@ -39,23 +39,23 @@ struct SettingsView: View {
 
                 Section {
                     Link(destination: URL(string: "https://example.com/privacy")!) {
-                        Label("Политика Конфиденциальности", systemImage: "hand.raised")
+                        Label(L10n.Settings.privacyPolicy, systemImage: "hand.raised")
                     }
 
                     Link(destination: URL(string: "https://example.com/terms")!) {
-                        Label("Правила Пользования", systemImage: "doc.text")
+                        Label(L10n.Settings.terms, systemImage: "doc.text")
                     }
 
                     Link(destination: URL(string: "mailto:support@example.com")!) {
-                        Label("Связь с разработчиком", systemImage: "envelope")
+                        Label(L10n.Settings.contact, systemImage: "envelope")
                     }
                 }
             }
-            .navigationTitle("Настройки")
+            .navigationTitle(L10n.Settings.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Готово") {
+                    Button(L10n.Settings.done) {
                         dismiss()
                     }
                 }
@@ -80,14 +80,14 @@ struct ReorderTabsView: View {
             // Inbox section (virtual, not editable)
             Section {
                 HStack {
-                    Text("Inbox")
+                    Text(L10n.Reorder.inbox)
                     Spacer()
                     Image(systemName: "tray.fill")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
             } footer: {
-                Text("Inbox всегда отображается первым")
+                Text(L10n.Reorder.inboxFooter)
             }
 
             // Reorderable tabs
@@ -101,7 +101,7 @@ struct ReorderTabsView: View {
             }
         }
         .environment(\.editMode, .constant(.active))
-        .navigationTitle("Упорядочить")
+        .navigationTitle(L10n.Reorder.title)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if !hasAppeared {
@@ -165,7 +165,7 @@ struct AppearanceSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Оформление")
+        .navigationTitle(L10n.Settings.appearance)
         .navigationBarTitleDisplayMode(.inline)
     }
 }

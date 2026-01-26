@@ -338,7 +338,7 @@ struct TabLabelView: View {
             Button {
                 onRename()
             } label: {
-                Label("Переименовать", systemImage: "pencil")
+                Label(L10n.Tab.rename, systemImage: "pencil")
             }
 
             // Delete only for real tabs (not Inbox)
@@ -346,7 +346,7 @@ struct TabLabelView: View {
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
-                    Label("Удалить", systemImage: "trash")
+                    Label(L10n.Tab.delete, systemImage: "trash")
                 }
             }
         } preview: {
