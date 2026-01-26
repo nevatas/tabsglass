@@ -103,7 +103,7 @@ struct TabBarView: View {
                 onRenameInbox: onRenameInbox,
                 onDeleteTab: onDeleteTab
             )
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 12)
         }
         .padding(.top, 4)
         .padding(.bottom, 16)
