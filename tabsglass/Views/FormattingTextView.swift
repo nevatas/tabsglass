@@ -42,6 +42,9 @@ final class FormattingTextView: UITextView {
         textContainerInset = .zero
         textContainer.lineFragmentPadding = 0
 
+        // Configure link text attributes to use theme color
+        updateLinkTextAttributes()
+
         // Placeholder
         placeholderLabel.text = placeholder
         placeholderLabel.font = font
@@ -61,6 +64,26 @@ final class FormattingTextView: UITextView {
             name: UITextView.textDidChangeNotification,
             object: self
         )
+
+        // Listen for theme changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(themeDidChange),
+            name: .themeDidChange,
+            object: nil
+        )
+    }
+
+    private func updateLinkTextAttributes() {
+        let linkColor = ThemeManager.shared.currentTheme.linkColor
+        linkTextAttributes = [
+            .foregroundColor: linkColor,
+            .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
+    }
+
+    @objc private func themeDidChange() {
+        updateLinkTextAttributes()
     }
 
     deinit {
@@ -76,6 +99,14 @@ final class FormattingTextView: UITextView {
                 .font: UIFont.systemFont(ofSize: 16),
                 .foregroundColor: textColor ?? .label
             ]
+        } else {
+            // Ensure typing attributes don't inherit link styling
+            if typingAttributes[.link] != nil {
+                typingAttributes = [
+                    .font: UIFont.systemFont(ofSize: 16),
+                    .foregroundColor: textColor ?? .label
+                ]
+            }
         }
 
         // Notify SwiftUI about size change
@@ -167,7 +198,7 @@ final class FormattingTextView: UITextView {
             }
 
             let formattingMenu = UIMenu(
-                title: L10n.Format.bold,  // Using a short title for the menu
+                title: L10n.Format.menu,
                 image: UIImage(systemName: "textformat"),
                 children: [boldAction, italicAction, underlineAction, strikethroughAction, linkAction]
             )
@@ -253,18 +284,29 @@ final class FormattingTextView: UITextView {
 
         let mutableAttr = NSMutableAttributedString(attributedString: attributedText)
 
+        // Use theme's link color
+        let linkColor = ThemeManager.shared.currentTheme.linkColor
+
         // Add link attribute and underline style
         mutableAttr.addAttribute(.link, value: normalizedURL, range: range)
         mutableAttr.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-        mutableAttr.addAttribute(.foregroundColor, value: UIColor.link, range: range)
+        mutableAttr.addAttribute(.foregroundColor, value: linkColor, range: range)
+
+        // Insert a zero-width space with normal attributes after the link to break attribute inheritance
+        let normalAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 16),
+            .foregroundColor: textColor ?? UIColor.label
+        ]
+        let zeroWidthSpace = NSAttributedString(string: "\u{200B}", attributes: normalAttributes)
+        mutableAttr.insert(zeroWidthSpace, at: range.location + range.length)
 
         attributedText = mutableAttr
 
-        // Reset typing attributes so new text after link isn't formatted as link
-        typingAttributes = [
-            .font: UIFont.systemFont(ofSize: 16),
-            .foregroundColor: textColor ?? .label
-        ]
+        // Move cursor after the zero-width space
+        selectedRange = NSRange(location: range.location + range.length + 1, length: 0)
+
+        // Reset typing attributes
+        typingAttributes = normalAttributes
 
         onTextChange?(attributedText)
     }
@@ -525,9 +567,19 @@ struct LinkInputSheet: View {
     let validateURL: (String) -> Bool
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var urlText = ""
     @State private var shouldShake = false
     @FocusState private var isFocused: Bool
+
+    @ViewBuilder
+    private func controlBackground() -> some View {
+        if colorScheme == .light {
+            Capsule().fill(Color.black.opacity(0.12))
+        } else {
+            Capsule().fill(.ultraThinMaterial)
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -547,13 +599,10 @@ struct LinkInputSheet: View {
                     .padding(.bottom, 12)
 
                 // Text field - capsule style
-                TextField("", text: $urlText, prompt: Text("URL").foregroundStyle(.gray))
+                TextField("", text: $urlText, prompt: Text("URL").foregroundStyle(colorScheme == .light ? Color.black.opacity(0.4) : .secondary))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
-                    .background {
-                        Capsule()
-                            .fill(.ultraThinMaterial)
-                    }
+                    .background { controlBackground() }
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -570,28 +619,22 @@ struct LinkInputSheet: View {
                     } label: {
                         Text(L10n.Tab.cancel)
                             .font(.body.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colorScheme == .light ? Color.primary : .white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                     }
-                    .background {
-                        Capsule()
-                            .fill(.ultraThinMaterial)
-                    }
+                    .background { controlBackground() }
 
                     Button {
                         validateAndSubmit()
                     } label: {
                         Text(L10n.Settings.done)
                             .font(.body.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colorScheme == .light ? Color.primary : .white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                     }
-                    .background {
-                        Capsule()
-                            .fill(.ultraThinMaterial)
-                    }
+                    .background { controlBackground() }
                 }
             }
             .padding(24)

@@ -76,6 +76,7 @@ enum L10n {
 
     // MARK: - Formatting
     enum Format {
+        static var menu: String { NSLocalizedString("format.menu", comment: "Format menu title") }
         static var bold: String { NSLocalizedString("format.bold", comment: "Bold formatting") }
         static var italic: String { NSLocalizedString("format.italic", comment: "Italic formatting") }
         static var underline: String { NSLocalizedString("format.underline", comment: "Underline formatting") }

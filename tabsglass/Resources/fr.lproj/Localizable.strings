@@ -61,6 +61,7 @@
 
 // MARK: - Formatting
 
+"format.menu" = "Format";
 "format.bold" = "Gras";
 "format.italic" = "Italique";
 "format.underline" = "Souligné";

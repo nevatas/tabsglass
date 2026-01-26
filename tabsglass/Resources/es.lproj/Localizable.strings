@@ -61,6 +61,7 @@
 
 // MARK: - Formatting
 
+"format.menu" = "Formato";
 "format.bold" = "Negrita";
 "format.italic" = "Cursiva";
 "format.underline" = "Subrayado";

@@ -61,6 +61,7 @@
 
 // MARK: - Formatting
 
+"format.menu" = "Форматирование";
 "format.bold" = "Жирный";
 "format.italic" = "Курсив";
 "format.underline" = "Подчёркнутый";
