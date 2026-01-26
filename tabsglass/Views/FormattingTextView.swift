@@ -42,10 +42,6 @@ final class FormattingTextView: UITextView {
         textContainerInset = .zero
         textContainer.lineFragmentPadding = 0
 
-        // Ensure proper text wrapping behavior
-        setContentHuggingPriority(.defaultLow, for: .horizontal)
-        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
         // Placeholder
         placeholderLabel.text = placeholder
         placeholderLabel.font = font
@@ -197,54 +193,24 @@ final class FormattingTextView: UITextView {
 
     private func showLinkAlert() {
         guard selectedRange.length > 0 else { return }
+        guard let viewController = findViewController() else { return }
 
         // Store selection before showing alert (it might be lost)
         let savedRange = selectedRange
 
-        presentLinkAlert(initialText: "", savedRange: savedRange, shouldShake: false)
-    }
+        let linkSheet = LinkInputSheet(
+            onDone: { [weak self] urlString in
+                self?.applyLink(urlString, to: savedRange)
+            },
+            validateURL: isValidURL
+        )
 
-    private func presentLinkAlert(initialText: String, savedRange: NSRange, shouldShake: Bool) {
-        guard let viewController = findViewController() else { return }
+        let hostingController = UIHostingController(rootView: linkSheet)
+        hostingController.modalPresentationStyle = .overFullScreen
+        hostingController.modalTransitionStyle = .crossDissolve
+        hostingController.view.backgroundColor = .clear
 
-        let alert = UIAlertController(title: "Добавить ссылку", message: nil, preferredStyle: .alert)
-
-        var alertTextField: UITextField?
-
-        alert.addTextField { textField in
-            textField.text = initialText
-            textField.placeholder = "https://example.com"
-            textField.keyboardType = .URL
-            textField.autocapitalizationType = .none
-            textField.autocorrectionType = .no
-            alertTextField = textField
-        }
-
-        let cancelAction = UIAlertAction(title: "Отмена", style: .cancel)
-
-        let doneAction = UIAlertAction(title: "Готово", style: .default) { [weak self] _ in
-            guard let self = self,
-                  let urlString = alertTextField?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !urlString.isEmpty else { return }
-
-            if self.isValidURL(urlString) {
-                self.applyLink(urlString, to: savedRange)
-            } else {
-                // Re-present immediately with shake
-                DispatchQueue.main.async {
-                    self.presentLinkAlert(initialText: urlString, savedRange: savedRange, shouldShake: true)
-                }
-            }
-        }
-
-        alert.addAction(cancelAction)
-        alert.addAction(doneAction)
-
-        viewController.present(alert, animated: true) {
-            if shouldShake, let tf = alertTextField {
-                self.shakeTextField(tf)
-            }
-        }
+        viewController.present(hostingController, animated: true)
     }
 
     private func isValidURL(_ string: String) -> Bool {
@@ -493,6 +459,125 @@ struct FormattingTextViewRepresentable: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             parent.attributedText = textView.attributedText
+        }
+    }
+}
+
+// MARK: - Link Input Sheet (SwiftUI)
+
+struct LinkInputSheet: View {
+    let onDone: (String) -> Void
+    let validateURL: (String) -> Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var urlText = ""
+    @State private var shakeOffset: CGFloat = 0
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        ZStack {
+            // Dimmed background
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    dismiss()
+                }
+
+            // Alert container
+            VStack(spacing: 0) {
+                // Title
+                Text("Добавить ссылку")
+                    .font(.headline)
+                    .padding(.top, 20)
+                    .padding(.bottom, 16)
+
+                // Text field
+                TextField("https://example.com", text: $urlText)
+                    .textFieldStyle(.roundedBorder)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($isFocused)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    .offset(x: shakeOffset)
+                    .onSubmit {
+                        validateAndSubmit()
+                    }
+
+                Divider()
+
+                // Buttons
+                HStack(spacing: 0) {
+                    Button("Отмена") {
+                        dismiss()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+
+                    Divider()
+                        .frame(height: 44)
+
+                    Button("Готово") {
+                        validateAndSubmit()
+                    }
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .frame(height: 44)
+            }
+            .frame(width: 270)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .glassEffect(.regular.tint(.white.opacity(0.3)), in: .rect(cornerRadius: 14))
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isFocused = true
+            }
+        }
+    }
+
+    private func validateAndSubmit() {
+        let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else {
+            shake()
+            return
+        }
+
+        if validateURL(trimmed) {
+            dismiss()
+            onDone(trimmed)
+        } else {
+            shake()
+        }
+    }
+
+    private func shake() {
+        withAnimation(.default) {
+            shakeOffset = 10
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.default) {
+                shakeOffset = -8
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.default) {
+                shakeOffset = 6
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.default) {
+                shakeOffset = -4
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.spring()) {
+                shakeOffset = 0
+            }
         }
     }
 }
