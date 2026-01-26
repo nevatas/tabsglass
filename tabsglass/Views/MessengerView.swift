@@ -503,7 +503,6 @@ final class MessageTableCell: UITableViewCell {
         bubbleView.addSubview(messageTextView)
 
         mosaicHeightConstraint = mosaicView.heightAnchor.constraint(equalToConstant: 0)
-        mosaicHeightConstraint.priority = .required - 1  // Allow breaking during layout pass
         messageTextViewTopToMosaic = messageTextView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 10)
         messageTextViewTopToBubble = messageTextView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
         messageTextViewBottomToBubble = messageTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)

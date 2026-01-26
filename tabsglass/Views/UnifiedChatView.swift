@@ -583,6 +583,8 @@ final class MessageListViewController: UIViewController {
         tableView.separatorStyle = .none
         tableView.keyboardDismissMode = .interactive
         tableView.showsVerticalScrollIndicator = false
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 200
         tableView.delegate = self
         tableView.dataSource = self
         tableView.register(MessageTableCell.self, forCellReuseIdentifier: "MessageCell")
@@ -752,6 +754,56 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
         cell.transform = CGAffineTransform(scaleX: 1, y: -1)
         return cell
+    }
+
+    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        if sortedMessages.isEmpty {
+            return 300  // Empty cell height
+        }
+
+        let message = sortedMessages[indexPath.row]
+        let cellWidth = tableView.bounds.width
+        let bubbleWidth = cellWidth - 32  // 16px margins on each side
+
+        var height: CGFloat = 8  // Cell padding (4 top + 4 bottom)
+
+        let hasPhotos = !message.photoFileNames.isEmpty && !message.aspectRatios.isEmpty
+        let hasText = !message.content.isEmpty
+
+        // Calculate mosaic height if has photos
+        if hasPhotos {
+            let mosaicHeight = MosaicMediaView.calculateHeight(for: message.aspectRatios, maxWidth: bubbleWidth)
+            height += mosaicHeight
+        }
+
+        // Calculate text height if has content
+        if hasText {
+            let textWidth = bubbleWidth - 28  // 14px padding on each side
+
+            // Use same paragraph style as in createAttributedString
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineSpacing = 2
+
+            let textHeight = message.content.boundingRect(
+                with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [
+                    .font: UIFont.systemFont(ofSize: 16),
+                    .paragraphStyle: paragraphStyle
+                ],
+                context: nil
+            ).height
+
+            if hasPhotos {
+                // Photos + text: spacing (10) + text + bottom padding (10)
+                height += 10 + ceil(textHeight) + 10
+            } else {
+                // Text only: top padding (10) + text + bottom padding (10)
+                height += 10 + ceil(textHeight) + 10
+            }
+        }
+
+        return max(height, 50)  // Minimum height
     }
 
     func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
