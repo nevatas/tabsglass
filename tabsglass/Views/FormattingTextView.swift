@@ -75,6 +75,9 @@ final class FormattingTextView: UITextView {
             typingAttributes = [.font: UIFont.systemFont(ofSize: 16)]
         }
 
+        // Notify SwiftUI about size change
+        invalidateIntrinsicContentSize()
+
         onTextChange?(attributedText)
     }
 

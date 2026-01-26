@@ -264,10 +264,16 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
         // Handle focus request
         if state.shouldFocus {
             DispatchQueue.main.async {
-                uiView.becomeFirstResponder()
+                _ = uiView.becomeFirstResponder()
                 state.shouldFocus = false
             }
         }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: FormattingTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? UIScreen.main.bounds.width - 32
+        let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: max(24, size.height))  // min height 24
     }
 }
 
