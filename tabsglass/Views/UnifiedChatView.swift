@@ -85,6 +85,9 @@ final class UnifiedChatViewController: UIViewController {
     private var hasAutoFocused: Bool = false
     private var inputBottomToKeyboard: NSLayoutConstraint?
     private var inputBottomToSafeArea: NSLayoutConstraint?
+    private let bottomFadeView = BottomFadeGradientView()
+    private var fadeBottomToKeyboard: NSLayoutConstraint?
+    private var fadeBottomToScreen: NSLayoutConstraint?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -169,18 +172,33 @@ final class UnifiedChatViewController: UIViewController {
             self?.onImagesChange?(images)
         }
 
+        // Bottom fade gradient (behind inputContainer, at screen/keyboard bottom)
+        bottomFadeView.translatesAutoresizingMaskIntoConstraints = false
+        bottomFadeView.isUserInteractionEnabled = false
+        view.addSubview(bottomFadeView)
+
         view.addSubview(inputContainer)
 
-        // Create both bottom constraints
+        // Create bottom constraints for input container
         inputBottomToKeyboard = inputContainer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         inputBottomToSafeArea = inputContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+
+        // Create bottom constraints for fade gradient
+        fadeBottomToKeyboard = bottomFadeView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        fadeBottomToScreen = bottomFadeView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
 
         // Auto Layout: pin leading, trailing, and bottom (start with safe area)
         NSLayoutConstraint.activate([
             inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+            inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+            // Bottom fade gradient constraints
+            bottomFadeView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            bottomFadeView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            bottomFadeView.heightAnchor.constraint(equalToConstant: 80)
         ])
         inputBottomToSafeArea?.isActive = true
+        fadeBottomToScreen?.isActive = true
     }
 
     /// Switch between keyboard-following and safe-area-anchored modes
@@ -188,9 +206,13 @@ final class UnifiedChatViewController: UIViewController {
         if followKeyboard {
             inputBottomToSafeArea?.isActive = false
             inputBottomToKeyboard?.isActive = true
+            fadeBottomToScreen?.isActive = false
+            fadeBottomToKeyboard?.isActive = true
         } else {
             inputBottomToKeyboard?.isActive = false
             inputBottomToSafeArea?.isActive = true
+            fadeBottomToKeyboard?.isActive = false
+            fadeBottomToScreen?.isActive = true
         }
     }
 
@@ -657,7 +679,7 @@ final class MessageListViewController: UIViewController {
         // Visual top (header/tab bar area) - tableView is flipped so bottom = visual top
         // Safe area top + header content + extra padding
         let safeAreaTop = view.safeAreaInsets.top
-        let headerHeight: CGFloat = 115 // TabBarView + extra padding
+        let headerHeight: CGFloat = 115
         let topInset = safeAreaTop + headerHeight
         tableView.contentInset.bottom = topInset
         tableView.verticalScrollIndicatorInsets.bottom = topInset
@@ -779,5 +801,50 @@ extension MessageListViewController: UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         // Allow long press to work with context menu interaction
         return true
+    }
+}
+
+// MARK: - Bottom Fade Gradient View
+
+final class BottomFadeGradientView: UIView {
+    private let gradientLayer = CAGradientLayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGradient()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGradient()
+    }
+
+    private func setupGradient() {
+        // Gradient from transparent to background color (bottom to top visually)
+        gradientLayer.colors = [
+            UIColor.systemBackground.withAlphaComponent(0).cgColor,
+            UIColor.systemBackground.cgColor
+        ]
+        gradientLayer.locations = [0.0, 1.0]
+        gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)  // Top (transparent)
+        gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)    // Bottom (solid)
+        layer.addSublayer(gradientLayer)
+
+        // Update colors when trait collection changes
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: BottomFadeGradientView, _) in
+            self.updateColors()
+        }
+    }
+
+    private func updateColors() {
+        gradientLayer.colors = [
+            UIColor.systemBackground.withAlphaComponent(0).cgColor,
+            UIColor.systemBackground.cgColor
+        ]
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        gradientLayer.frame = bounds
     }
 }

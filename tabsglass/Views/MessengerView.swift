@@ -486,7 +486,16 @@ final class MessageTableCell: UITableViewCell {
 
     func configure(with message: Message) {
         cachedMessage = message
-        messageLabel.text = message.text
+
+        // Apply line spacing to message text
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 2
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 16),
+            .paragraphStyle: paragraphStyle
+        ]
+        messageLabel.attributedText = NSAttributedString(string: message.text, attributes: attributes)
+
         updateBubbleColor()
 
         let width = contentView.bounds.width

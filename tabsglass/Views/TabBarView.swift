@@ -19,7 +19,7 @@ struct TabBarView: View {
     let onDeleteTab: (Tab) -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 10) {
             // Header buttons row
             HStack {
                 // Settings button (left) - circular liquid glass
@@ -287,6 +287,12 @@ struct TabLabelView: View {
                     Label("Удалить", systemImage: "trash")
                 }
             }
+        } preview: {
+            // Fixed-size preview to prevent scaling animation
+            Text(tab.title)
+                .font(.system(size: 15, weight: .medium))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
         }
     }
 }
