@@ -162,6 +162,13 @@ struct EditFormattingTextView: UIViewRepresentable {
                 attributedString.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
             case "strikethrough":
                 attributedString.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+            case "text_link":
+                // Text link - hyperlinked text
+                if let urlString = entity.url {
+                    attributedString.addAttribute(.link, value: urlString, range: range)
+                    attributedString.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                    attributedString.addAttribute(.foregroundColor, value: UIColor.link, range: range)
+                }
             default:
                 break
             }

@@ -135,7 +135,7 @@ final class FormattingTextView: UITextView {
 
         // Remove system menus we don't need
         builder.remove(menu: .autoFill)
-        builder.remove(menu: .format)  // Remove system Format menu (we have our own Formatting)
+        builder.remove(menu: .format)  // Remove system Format menu (we have our own)
 
         // Only add formatting when there's a selection
         if selectedRange.length > 0 {
@@ -156,10 +156,14 @@ final class FormattingTextView: UITextView {
                 self?.applyStrikethrough(nil)
             }
 
+            let linkAction = UIAction(title: "Link", image: UIImage(systemName: "link")) { [weak self] _ in
+                self?.showLinkAlert()
+            }
+
             let formattingMenu = UIMenu(
-                title: "Formatting",
+                title: "Format",
                 image: UIImage(systemName: "textformat"),
-                children: [boldAction, italicAction, underlineAction, strikethroughAction]
+                children: [boldAction, italicAction, underlineAction, strikethroughAction, linkAction]
             )
 
             // Insert after standardEdit menu
@@ -183,6 +187,152 @@ final class FormattingTextView: UITextView {
 
     @objc func applyStrikethrough(_ sender: Any?) {
         applyFormatting(.strikethrough)
+    }
+
+    // MARK: - Link Actions
+
+    private func showLinkAlert() {
+        guard selectedRange.length > 0 else { return }
+
+        // Find the nearest view controller to present the alert
+        guard let viewController = findViewController() else { return }
+
+        // Store selection before showing alert (it might be lost)
+        let savedRange = selectedRange
+
+        let alert = UIAlertController(title: "Добавить ссылку", message: nil, preferredStyle: .alert)
+
+        alert.addTextField { textField in
+            textField.placeholder = "https://example.com"
+            textField.keyboardType = .URL
+            textField.autocapitalizationType = .none
+            textField.autocorrectionType = .no
+        }
+
+        let cancelAction = UIAlertAction(title: "Отмена", style: .cancel)
+
+        let doneAction = UIAlertAction(title: "Готово", style: .default) { [weak self, weak alert] _ in
+            guard let self = self,
+                  let textField = alert?.textFields?.first,
+                  let urlString = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !urlString.isEmpty else { return }
+
+            // Validate URL
+            if self.isValidURL(urlString) {
+                self.applyLink(urlString, to: savedRange)
+            } else {
+                // Shake the text field to indicate invalid URL
+                self.shakeTextField(textField)
+                // Re-show the alert
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.showLinkAlertWithText(urlString, savedRange: savedRange)
+                }
+            }
+        }
+
+        alert.addAction(cancelAction)
+        alert.addAction(doneAction)
+
+        viewController.present(alert, animated: true)
+    }
+
+    private func showLinkAlertWithText(_ initialText: String, savedRange: NSRange) {
+        guard let viewController = findViewController() else { return }
+
+        let alert = UIAlertController(title: "Добавить ссылку", message: nil, preferredStyle: .alert)
+
+        var alertTextField: UITextField?
+
+        alert.addTextField { textField in
+            textField.text = initialText
+            textField.placeholder = "https://example.com"
+            textField.keyboardType = .URL
+            textField.autocapitalizationType = .none
+            textField.autocorrectionType = .no
+            alertTextField = textField
+        }
+
+        let cancelAction = UIAlertAction(title: "Отмена", style: .cancel)
+
+        let doneAction = UIAlertAction(title: "Готово", style: .default) { [weak self, weak alert] _ in
+            guard let self = self,
+                  let textField = alert?.textFields?.first,
+                  let urlString = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !urlString.isEmpty else { return }
+
+            if self.isValidURL(urlString) {
+                self.applyLink(urlString, to: savedRange)
+            } else {
+                self.shakeTextField(textField)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.showLinkAlertWithText(urlString, savedRange: savedRange)
+                }
+            }
+        }
+
+        alert.addAction(cancelAction)
+        alert.addAction(doneAction)
+
+        viewController.present(alert, animated: true) {
+            // Shake immediately if text is invalid on re-show
+            if let tf = alertTextField, !initialText.isEmpty && !self.isValidURL(initialText) {
+                self.shakeTextField(tf)
+            }
+        }
+    }
+
+    private func isValidURL(_ string: String) -> Bool {
+        // Add scheme if missing
+        var urlString = string
+        if !urlString.lowercased().hasPrefix("http://") && !urlString.lowercased().hasPrefix("https://") {
+            urlString = "https://" + urlString
+        }
+
+        guard let url = URL(string: urlString),
+              let host = url.host,
+              host.contains(".") else {
+            return false
+        }
+        return true
+    }
+
+    private func shakeTextField(_ textField: UITextField) {
+        let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        animation.timingFunction = CAMediaTimingFunction(name: .linear)
+        animation.duration = 0.4
+        animation.values = [-10, 10, -8, 8, -5, 5, -2, 2, 0]
+        textField.layer.add(animation, forKey: "shake")
+    }
+
+    private func applyLink(_ urlString: String, to range: NSRange) {
+        guard range.length > 0, range.location + range.length <= attributedText.length else { return }
+
+        // Normalize URL
+        var normalizedURL = urlString
+        if !normalizedURL.lowercased().hasPrefix("http://") && !normalizedURL.lowercased().hasPrefix("https://") {
+            normalizedURL = "https://" + normalizedURL
+        }
+
+        let mutableAttr = NSMutableAttributedString(attributedString: attributedText)
+
+        // Add link attribute and underline style
+        mutableAttr.addAttribute(.link, value: normalizedURL, range: range)
+        mutableAttr.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+        mutableAttr.addAttribute(.foregroundColor, value: UIColor.link, range: range)
+
+        attributedText = mutableAttr
+        onTextChange?(attributedText)
+    }
+
+    private func findViewController() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let nextResponder = responder?.next {
+            if let viewController = nextResponder as? UIViewController {
+                return viewController
+            }
+            responder = nextResponder
+        }
+        return nil
     }
 
     enum FormattingStyle {
@@ -286,14 +436,28 @@ final class FormattingTextView: UITextView {
                 entities.append(TextEntity(type: "italic", offset: range.location, length: range.length))
             }
 
-            // Check for underline
-            if let underline = attributes[.underlineStyle] as? Int, underline != 0 {
+            // Check for underline (but not if it's part of a link - links have their own underline)
+            if let underline = attributes[.underlineStyle] as? Int, underline != 0,
+               attributes[.link] == nil {
                 entities.append(TextEntity(type: "underline", offset: range.location, length: range.length))
             }
 
             // Check for strikethrough
             if let strikethrough = attributes[.strikethroughStyle] as? Int, strikethrough != 0 {
                 entities.append(TextEntity(type: "strikethrough", offset: range.location, length: range.length))
+            }
+
+            // Check for links (text_link type - hyperlinked text)
+            if let link = attributes[.link] {
+                let urlString: String
+                if let url = link as? URL {
+                    urlString = url.absoluteString
+                } else if let string = link as? String {
+                    urlString = string
+                } else {
+                    return
+                }
+                entities.append(TextEntity(type: "text_link", offset: range.location, length: range.length, url: urlString))
             }
         }
 
