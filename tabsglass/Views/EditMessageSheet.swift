@@ -6,6 +6,12 @@
 import SwiftUI
 import UIKit
 
+/// Class to hold textView reference (survives SwiftUI view updates)
+@Observable
+final class EditTextViewHolder {
+    var textView: FormattingTextView?
+}
+
 struct EditMessageSheet: View {
     let originalText: String
     let originalEntities: [TextEntity]?
@@ -13,7 +19,7 @@ struct EditMessageSheet: View {
     let onCancel: () -> Void
 
     @State private var text: String = ""
-    @State private var textView: FormattingTextView?
+    @State private var holder = EditTextViewHolder()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,7 +39,7 @@ struct EditMessageSheet: View {
                         let leadingWhitespace = text.prefix(while: { $0.isWhitespace || $0.isNewline }).count
 
                         // Get entities and adjust offsets for trimmed text
-                        let rawEntities = textView?.extractEntities() ?? []
+                        let rawEntities = holder.textView?.extractEntities() ?? []
                         var adjustedEntities: [TextEntity] = []
 
                         for entity in rawEntities {
@@ -72,9 +78,7 @@ struct EditMessageSheet: View {
                 text: $text,
                 originalText: originalText,
                 originalEntities: originalEntities,
-                onTextViewReady: { tv in
-                    textView = tv
-                }
+                holder: holder
             )
             .padding(.horizontal, 16)
 
@@ -94,16 +98,20 @@ struct EditFormattingTextView: UIViewRepresentable {
     @Binding var text: String
     let originalText: String
     let originalEntities: [TextEntity]?
-    var onTextViewReady: ((FormattingTextView) -> Void)?
+    let holder: EditTextViewHolder
 
     func makeUIView(context: Context) -> FormattingTextView {
         let textView = FormattingTextView()
         textView.font = .systemFont(ofSize: 16)
         textView.isScrollEnabled = true
+        textView.placeholder = ""  // No placeholder for edit mode
 
         // Apply original text with formatting
         let attributedText = createAttributedString(text: originalText, entities: originalEntities)
         textView.attributedText = attributedText
+
+        // Store reference in holder for reliable access from parent view
+        holder.textView = textView
 
         textView.onTextChange = { attrText in
             DispatchQueue.main.async {
@@ -116,13 +124,12 @@ struct EditFormattingTextView: UIViewRepresentable {
             _ = textView.becomeFirstResponder()
         }
 
-        onTextViewReady?(textView)
-
         return textView
     }
 
     func updateUIView(_ uiView: FormattingTextView, context: Context) {
-        // Update handled by callbacks
+        // Keep holder reference updated
+        holder.textView = uiView
     }
 
     private func createAttributedString(text: String, entities: [TextEntity]?) -> NSAttributedString {
