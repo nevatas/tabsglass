@@ -15,7 +15,13 @@ final class FormattingTextView: UITextView {
 
     var onTextChange: ((NSAttributedString) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
-    var placeholder: String = "Note..."
+    var placeholder: String = "Note..." {
+        didSet {
+            placeholderLabel.text = placeholder
+            // Hide if empty or if there's text
+            placeholderLabel.isHidden = placeholder.isEmpty || !text.isEmpty
+        }
+    }
 
     private let placeholderLabel = UILabel()
 
