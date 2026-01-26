@@ -194,6 +194,7 @@ struct ThemeRowView: View {
                 }
             }
         }
+        .buttonStyle(.plain)
     }
 
     private var themeColorPreview: Color {
