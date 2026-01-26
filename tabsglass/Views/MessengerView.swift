@@ -13,6 +13,7 @@ import UIKit
 @Observable
 final class ComposerState {
     var text: String = ""
+    var attributedText: NSAttributedString = NSAttributedString()
     var shouldFocus: Bool = false
     var attachedImages: [UIImage] = []
     var onTextChange: ((String) -> Void)?
@@ -22,8 +23,16 @@ final class ComposerState {
     var onShowPhotoPicker: (() -> Void)?
     var onShowCamera: (() -> Void)?
 
+    /// Reference to the formatting text view for extracting entities
+    weak var formattingTextView: FormattingTextView?
+
     /// Height of images section (80 when visible, 0 when hidden)
     var imagesSectionHeight: CGFloat = 0
+
+    /// Extract formatting entities from current text
+    func extractEntities() -> [TextEntity] {
+        return formattingTextView?.extractEntities() ?? []
+    }
 
     func removeImage(at index: Int) {
         guard index < attachedImages.count else { return }
@@ -57,6 +66,13 @@ final class ComposerState {
     func clearAttachments() {
         attachedImages.removeAll()
         imagesSectionHeight = 0
+    }
+
+    func clearAll() {
+        text = ""
+        attributedText = NSAttributedString()
+        formattingTextView?.clear()
+        clearAttachments()
     }
 }
 
@@ -181,8 +197,7 @@ final class SwiftUIComposerContainer: UIView {
     }
 
     func clearText() {
-        composerState.text = ""
-        composerState.clearAttachments()
+        composerState.clearAll()
 
         // Принудительно обновляем hosting controller
         hostingController?.view.setNeedsLayout()
@@ -199,6 +214,11 @@ final class SwiftUIComposerContainer: UIView {
         }
     }
 
+    /// Extract formatting entities from current text
+    func extractEntities() -> [TextEntity] {
+        return composerState.extractEntities()
+    }
+
     /// Focus the composer text field
     func focus() {
         composerState.shouldFocus = true
@@ -210,14 +230,52 @@ final class SwiftUIComposerContainer: UIView {
     }
 }
 
-// MARK: - Embedded Composer (without FocusState)
+// MARK: - Formatting Text View Wrapper
+
+struct FormattingTextViewWrapper: UIViewRepresentable {
+    @Bindable var state: ComposerState
+    var colorScheme: ColorScheme
+
+    func makeUIView(context: Context) -> FormattingTextView {
+        let textView = FormattingTextView()
+        textView.placeholder = "Note..."
+        textView.textColor = colorScheme == .dark ? .white : .black
+
+        textView.onTextChange = { attrText in
+            state.text = attrText.string
+            state.attributedText = attrText
+            state.onTextChange?(attrText.string)
+        }
+
+        textView.onFocusChange = { isFocused in
+            state.onFocusChange?(isFocused)
+        }
+
+        // Store reference for entity extraction
+        state.formattingTextView = textView
+
+        return textView
+    }
+
+    func updateUIView(_ uiView: FormattingTextView, context: Context) {
+        // Update text color for theme
+        uiView.textColor = colorScheme == .dark ? .white : .black
+
+        // Handle focus request
+        if state.shouldFocus {
+            DispatchQueue.main.async {
+                uiView.becomeFirstResponder()
+                state.shouldFocus = false
+            }
+        }
+    }
+}
+
+// MARK: - Embedded Composer
 
 struct EmbeddedComposerView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Bindable var state: ComposerState
-    @FocusState private var isFocused: Bool
-
-    private let maxTextLines = 7
 
     private var canSend: Bool {
         !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.attachedImages.isEmpty
@@ -251,28 +309,7 @@ struct EmbeddedComposerView: View {
                         .opacity(state.imagesSectionHeight > 0 ? 1 : 0)
                     }
 
-                    TextField("Note...", text: $state.text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...maxTextLines)
-                    .submitLabel(.send)
-                    .focused($isFocused)
-                    .onSubmit {
-                        if canSend {
-                            state.onSend?()
-                        }
-                    }
-                    .onChange(of: state.text) { _, newValue in
-                        state.onTextChange?(newValue)
-                    }
-                    .onChange(of: state.shouldFocus) { _, shouldFocus in
-                        if shouldFocus {
-                            isFocused = true
-                            state.shouldFocus = false
-                        }
-                    }
-                    .onChange(of: isFocused) { _, newValue in
-                        state.onFocusChange?(newValue)
-                    }
+                    FormattingTextViewWrapper(state: state, colorScheme: colorScheme)
 
                     Spacer().frame(height: 12) // Fixed spacing between textfield and buttons
 

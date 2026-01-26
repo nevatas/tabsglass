@@ -17,6 +17,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var messageText: String
     @Binding var switchFraction: CGFloat  // -1.0 to 1.0 swipe progress
     @Binding var attachedImages: [UIImage]
+    @Binding var formattingEntities: [TextEntity]  // Entities from formatting
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
@@ -45,6 +46,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onImagesChange = { images in
             attachedImages = images
         }
+        vc.onEntitiesExtracted = { entities in
+            formattingEntities = entities
+        }
         return vc
     }
 
@@ -70,6 +74,7 @@ final class UnifiedChatViewController: UIViewController {
     var allMessages: [Message] = []  // All messages from SwiftUI
     var selectedIndex: Int = 0  // 0 = Inbox, 1+ = real tabs
     var onSend: (() -> Void)?
+    var onEntitiesExtracted: (([TextEntity]) -> Void)?
 
     /// Total tab count including virtual Inbox
     private var totalTabCount: Int { 1 + tabs.count }
@@ -151,6 +156,8 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onSend = { [weak self] in
             guard let self = self else { return }
+            // Extract formatting entities before clearing
+            self.onEntitiesExtracted?(self.inputContainer.extractEntities())
             self.onSend?()
             self.inputContainer.clearText()
             self.reloadCurrentTab()

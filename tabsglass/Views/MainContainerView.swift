@@ -26,6 +26,7 @@ struct MainContainerView: View {
     @State private var messageText = ""
     @State private var switchFraction: CGFloat = 0  // -1.0 to 1.0 swipe progress
     @State private var attachedImages: [UIImage] = []
+    @State private var formattingEntities: [TextEntity] = []
 
     /// Total number of tabs including virtual Inbox
     private var totalTabCount: Int {
@@ -54,6 +55,7 @@ struct MainContainerView: View {
                 messageText: $messageText,
                 switchFraction: $switchFraction,
                 attachedImages: $attachedImages,
+                formattingEntities: $formattingEntities,
                 onSend: { sendMessage() },
                 onDeleteMessage: { message in
                     deleteMessage(message)
@@ -193,20 +195,23 @@ struct MainContainerView: View {
             }
         }
 
-        // Detect URLs in text
-        let entities = TextEntity.detectURLs(in: trimmedText)
+        // Merge formatting entities with detected URL entities
+        var allEntities = formattingEntities
+        let urlEntities = TextEntity.detectURLs(in: trimmedText)
+        allEntities.append(contentsOf: urlEntities)
 
         // tabId = nil for Inbox, or actual tab ID
         let message = Message(
             content: trimmedText,
             tabId: currentTabId,
-            entities: entities.isEmpty ? nil : entities,
+            entities: allEntities.isEmpty ? nil : allEntities,
             photoFileNames: photoFileNames,
             photoAspectRatios: photoAspectRatios
         )
         modelContext.insert(message)
         messageText = ""
         attachedImages = []
+        formattingEntities = []
     }
 
     private func deleteMessage(_ message: Message) {
