@@ -90,22 +90,34 @@ final class FormattingTextView: UITextView {
         NotificationCenter.default.removeObserver(self)
     }
 
+    /// Returns the default text color based on current trait collection
+    private var defaultTextColor: UIColor {
+        traitCollection.userInterfaceStyle == .dark ? .white : .black
+    }
+
+    private var defaultTypingAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: UIFont.systemFont(ofSize: 16),
+            .foregroundColor: defaultTextColor
+        ]
+    }
+
     @objc private func textDidChange() {
         placeholderLabel.isHidden = !text.isEmpty
 
         // Reset formatting when text becomes empty
         if text.isEmpty {
-            typingAttributes = [
-                .font: UIFont.systemFont(ofSize: 16),
-                .foregroundColor: textColor ?? .label
-            ]
+            resetToDefaultAttributes()
         } else {
             // Ensure typing attributes don't inherit link styling
-            if typingAttributes[.link] != nil {
-                typingAttributes = [
-                    .font: UIFont.systemFont(ofSize: 16),
-                    .foregroundColor: textColor ?? .label
-                ]
+            let hasLinkAttr = typingAttributes[.link] != nil
+            let hasUnderline = typingAttributes[.underlineStyle] != nil
+            let currentColor = typingAttributes[.foregroundColor] as? UIColor
+            let normalColor = defaultTextColor
+            let isNotNormalColor = currentColor != nil && currentColor != normalColor
+
+            if hasLinkAttr || hasUnderline || isNotNormalColor {
+                typingAttributes = defaultTypingAttributes
             }
         }
 
@@ -113,6 +125,14 @@ final class FormattingTextView: UITextView {
         invalidateIntrinsicContentSize()
 
         onTextChange?(attributedText)
+    }
+
+    private func resetToDefaultAttributes() {
+        let attrs = defaultTypingAttributes
+        attributedText = NSAttributedString(string: "", attributes: attrs)
+        typingAttributes = attrs
+        // Also explicitly set text color
+        textColor = defaultTextColor
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -293,11 +313,7 @@ final class FormattingTextView: UITextView {
         mutableAttr.addAttribute(.foregroundColor, value: linkColor, range: range)
 
         // Insert a zero-width space with normal attributes after the link to break attribute inheritance
-        let normalAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 16),
-            .foregroundColor: textColor ?? UIColor.label
-        ]
-        let zeroWidthSpace = NSAttributedString(string: "\u{200B}", attributes: normalAttributes)
+        let zeroWidthSpace = NSAttributedString(string: "\u{200B}", attributes: defaultTypingAttributes)
         mutableAttr.insert(zeroWidthSpace, at: range.location + range.length)
 
         attributedText = mutableAttr
@@ -306,7 +322,7 @@ final class FormattingTextView: UITextView {
         selectedRange = NSRange(location: range.location + range.length + 1, length: 0)
 
         // Reset typing attributes
-        typingAttributes = normalAttributes
+        typingAttributes = defaultTypingAttributes
 
         onTextChange?(attributedText)
     }
@@ -453,7 +469,7 @@ final class FormattingTextView: UITextView {
 
     /// Clear text and formatting
     func clear() {
-        attributedText = NSAttributedString()
+        resetToDefaultAttributes()
         placeholderLabel.isHidden = false
     }
 }
@@ -485,6 +501,11 @@ struct FormattingTextViewRepresentable: UIViewRepresentable {
         // Update placeholder
         if uiView.placeholder != placeholder {
             uiView.placeholder = placeholder
+        }
+
+        // Sync text from SwiftUI binding - especially important when cleared after send
+        if text.isEmpty && !uiView.text.isEmpty {
+            uiView.clear()
         }
 
         // Handle focus request
