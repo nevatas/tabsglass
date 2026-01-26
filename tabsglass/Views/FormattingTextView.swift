@@ -193,54 +193,24 @@ final class FormattingTextView: UITextView {
 
     private func showLinkAlert() {
         guard selectedRange.length > 0 else { return }
+        guard let viewController = findViewController() else { return }
 
         // Store selection before showing alert (it might be lost)
         let savedRange = selectedRange
 
-        showLinkAlertWithText("", savedRange: savedRange, shouldShake: false)
-    }
-
-    private func showLinkAlertWithText(_ initialText: String, savedRange: NSRange, shouldShake: Bool) {
-        guard let viewController = findViewController() else { return }
-
-        let alert = UIAlertController(title: "Добавить ссылку", message: nil, preferredStyle: .alert)
-
-        var alertTextField: UITextField?
-
-        alert.addTextField { textField in
-            textField.text = initialText
-            textField.placeholder = "https://example.com"
-            textField.keyboardType = .URL
-            textField.autocapitalizationType = .none
-            textField.autocorrectionType = .no
-            alertTextField = textField
-        }
-
-        let cancelAction = UIAlertAction(title: "Отмена", style: .cancel)
-
-        let doneAction = UIAlertAction(title: "Готово", style: .default) { [weak self, weak alert] _ in
-            guard let self = self,
-                  let textField = alert?.textFields?.first,
-                  let urlString = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !urlString.isEmpty else { return }
-
-            if self.isValidURL(urlString) {
-                self.applyLink(urlString, to: savedRange)
-            } else {
-                // Re-show the alert immediately with shake
-                self.showLinkAlertWithText(urlString, savedRange: savedRange, shouldShake: true)
+        let linkAlert = LinkInputAlertController(
+            title: "Добавить ссылку",
+            placeholder: "https://example.com",
+            validateURL: isValidURL,
+            onDone: { [weak self] urlString in
+                self?.applyLink(urlString, to: savedRange)
+            },
+            onShake: { [weak self] textField in
+                self?.shakeTextField(textField)
             }
-        }
+        )
 
-        alert.addAction(cancelAction)
-        alert.addAction(doneAction)
-
-        viewController.present(alert, animated: true) {
-            // Shake if requested (invalid URL on previous attempt)
-            if shouldShake, let tf = alertTextField {
-                self.shakeTextField(tf)
-            }
-        }
+        viewController.present(linkAlert, animated: true)
     }
 
     private func isValidURL(_ string: String) -> Bool {
@@ -490,5 +460,182 @@ struct FormattingTextViewRepresentable: UIViewRepresentable {
             parent.text = textView.text
             parent.attributedText = textView.attributedText
         }
+    }
+}
+
+// MARK: - Custom Link Input Alert
+
+/// Custom alert controller that doesn't dismiss on invalid URL
+final class LinkInputAlertController: UIViewController {
+    private let alertTitle: String
+    private let placeholder: String
+    private let validateURL: (String) -> Bool
+    private let onDone: (String) -> Void
+    private let onShake: (UITextField) -> Void
+
+    private let containerView = UIView()
+    private let titleLabel = UILabel()
+    private let textField = UITextField()
+    private let buttonStack = UIStackView()
+    private let cancelButton = UIButton(type: .system)
+    private let doneButton = UIButton(type: .system)
+
+    init(title: String, placeholder: String, validateURL: @escaping (String) -> Bool, onDone: @escaping (String) -> Void, onShake: @escaping (UITextField) -> Void) {
+        self.alertTitle = title
+        self.placeholder = placeholder
+        self.validateURL = validateURL
+        self.onDone = onDone
+        self.onShake = onShake
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .overFullScreen
+        modalTransitionStyle = .crossDissolve
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        setupUI()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        textField.becomeFirstResponder()
+    }
+
+    private func setupUI() {
+        view.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+
+        // Container
+        containerView.backgroundColor = .secondarySystemBackground
+        containerView.layer.cornerRadius = 14
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(containerView)
+
+        // Title
+        titleLabel.text = alertTitle
+        titleLabel.font = .boldSystemFont(ofSize: 17)
+        titleLabel.textAlignment = .center
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(titleLabel)
+
+        // Text field
+        textField.placeholder = placeholder
+        textField.borderStyle = .roundedRect
+        textField.keyboardType = .URL
+        textField.autocapitalizationType = .none
+        textField.autocorrectionType = .no
+        textField.returnKeyType = .done
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        textField.addTarget(self, action: #selector(textFieldReturnPressed), for: .editingDidEndOnExit)
+        containerView.addSubview(textField)
+
+        // Separator
+        let separator = UIView()
+        separator.backgroundColor = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(separator)
+
+        // Buttons
+        buttonStack.axis = .horizontal
+        buttonStack.distribution = .fillEqually
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(buttonStack)
+
+        cancelButton.setTitle("Отмена", for: .normal)
+        cancelButton.titleLabel?.font = .systemFont(ofSize: 17)
+        cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+
+        doneButton.setTitle("Готово", for: .normal)
+        doneButton.titleLabel?.font = .boldSystemFont(ofSize: 17)
+        doneButton.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
+
+        let verticalSeparator = UIView()
+        verticalSeparator.backgroundColor = .separator
+        verticalSeparator.translatesAutoresizingMaskIntoConstraints = false
+
+        buttonStack.addArrangedSubview(cancelButton)
+        buttonStack.addArrangedSubview(doneButton)
+        containerView.addSubview(verticalSeparator)
+
+        NSLayoutConstraint.activate([
+            containerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            containerView.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -50),
+            containerView.widthAnchor.constraint(equalToConstant: 270),
+
+            titleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 20),
+            titleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
+            titleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+
+            textField.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 16),
+            textField.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
+            textField.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+            textField.heightAnchor.constraint(equalToConstant: 36),
+
+            separator.topAnchor.constraint(equalTo: textField.bottomAnchor, constant: 16),
+            separator.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 0.5),
+
+            buttonStack.topAnchor.constraint(equalTo: separator.bottomAnchor),
+            buttonStack.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            buttonStack.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            buttonStack.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+            buttonStack.heightAnchor.constraint(equalToConstant: 44),
+
+            verticalSeparator.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            verticalSeparator.topAnchor.constraint(equalTo: separator.bottomAnchor),
+            verticalSeparator.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+            verticalSeparator.widthAnchor.constraint(equalToConstant: 0.5),
+        ])
+
+        // Tap outside to dismiss
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(backgroundTapped))
+        tapGesture.delegate = self
+        view.addGestureRecognizer(tapGesture)
+    }
+
+    @objc private func cancelTapped() {
+        textField.resignFirstResponder()
+        dismiss(animated: true)
+    }
+
+    @objc private func doneTapped() {
+        validateAndSubmit()
+    }
+
+    @objc private func textFieldReturnPressed() {
+        validateAndSubmit()
+    }
+
+    @objc private func backgroundTapped() {
+        textField.resignFirstResponder()
+        dismiss(animated: true)
+    }
+
+    private func validateAndSubmit() {
+        guard let urlString = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !urlString.isEmpty else {
+            onShake(textField)
+            return
+        }
+
+        if validateURL(urlString) {
+            textField.resignFirstResponder()
+            dismiss(animated: true) { [weak self] in
+                self?.onDone(urlString)
+            }
+        } else {
+            onShake(textField)
+        }
+    }
+}
+
+extension LinkInputAlertController: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        // Only handle taps outside the container
+        return !containerView.frame.contains(touch.location(in: view))
     }
 }
