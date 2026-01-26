@@ -40,13 +40,13 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var iconName: String {
         switch self {
         case .system: return "circle.lefthalf.filled"
-        case .light: return "sun.max"
-        case .dark: return "moon"
-        case .pink: return "heart"
-        case .beige: return "leaf"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        case .pink: return "heart.fill"
+        case .beige: return "leaf.fill"
         case .green: return "leaf.fill"
-        case .brown: return "cup.and.saucer"
-        case .blue: return "drop"
+        case .brown: return "cup.and.saucer.fill"
+        case .blue: return "drop.fill"
         }
     }
 
@@ -98,7 +98,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Bubble color for messages
+    /// Bubble color for messages (lighter than background for color themes)
     var bubbleColor: UIColor {
         switch self {
         case .system, .light:
@@ -106,33 +106,33 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .dark:
             return UIColor(red: 0x24/255, green: 0x25/255, blue: 0x29/255, alpha: 1)
         case .pink:
-            return UIColor(red: 0xFF/255, green: 0xB8/255, blue: 0xD4/255, alpha: 1)
+            return UIColor(red: 0xFF/255, green: 0xE8/255, blue: 0xF2/255, alpha: 1)
         case .beige:
-            return UIColor(red: 0xE4/255, green: 0xD0/255, blue: 0xB4/255, alpha: 1)
+            return UIColor(red: 0xFA/255, green: 0xF4/255, blue: 0xE8/255, alpha: 1)
         case .green:
-            return UIColor(red: 0xB4/255, green: 0xDC/255, blue: 0xB4/255, alpha: 1)
+            return UIColor(red: 0xE8/255, green: 0xF8/255, blue: 0xE8/255, alpha: 1)
         case .brown:
-            return UIColor(red: 0xD8/255, green: 0xC4/255, blue: 0xAC/255, alpha: 1)
+            return UIColor(red: 0xF8/255, green: 0xF2/255, blue: 0xE8/255, alpha: 1)
         case .blue:
-            return UIColor(red: 0xB8/255, green: 0xD4/255, blue: 0xF4/255, alpha: 1)
+            return UIColor(red: 0xE8/255, green: 0xF4/255, blue: 0xFF/255, alpha: 1)
         }
     }
 
-    /// Bubble color for dark mode
+    /// Bubble color for dark mode (lighter than dark background for color themes)
     var bubbleColorDark: UIColor {
         switch self {
         case .system, .dark, .light:
             return UIColor(red: 0x24/255, green: 0x25/255, blue: 0x29/255, alpha: 1)
         case .pink:
-            return UIColor(red: 0x4C/255, green: 0x24/255, blue: 0x38/255, alpha: 1)
+            return UIColor(red: 0x50/255, green: 0x28/255, blue: 0x38/255, alpha: 1)
         case .beige:
-            return UIColor(red: 0x48/255, green: 0x3C/255, blue: 0x28/255, alpha: 1)
+            return UIColor(red: 0x4C/255, green: 0x3C/255, blue: 0x28/255, alpha: 1)
         case .green:
-            return UIColor(red: 0x24/255, green: 0x44/255, blue: 0x24/255, alpha: 1)
+            return UIColor(red: 0x28/255, green: 0x48/255, blue: 0x28/255, alpha: 1)
         case .brown:
-            return UIColor(red: 0x44/255, green: 0x34/255, blue: 0x24/255, alpha: 1)
+            return UIColor(red: 0x48/255, green: 0x38/255, blue: 0x28/255, alpha: 1)
         case .blue:
-            return UIColor(red: 0x24/255, green: 0x38/255, blue: 0x50/255, alpha: 1)
+            return UIColor(red: 0x28/255, green: 0x3C/255, blue: 0x54/255, alpha: 1)
         }
     }
 
