@@ -194,49 +194,13 @@ final class FormattingTextView: UITextView {
     private func showLinkAlert() {
         guard selectedRange.length > 0 else { return }
 
-        // Find the nearest view controller to present the alert
-        guard let viewController = findViewController() else { return }
-
         // Store selection before showing alert (it might be lost)
         let savedRange = selectedRange
 
-        let alert = UIAlertController(title: "Добавить ссылку", message: nil, preferredStyle: .alert)
-
-        alert.addTextField { textField in
-            textField.placeholder = "https://example.com"
-            textField.keyboardType = .URL
-            textField.autocapitalizationType = .none
-            textField.autocorrectionType = .no
-        }
-
-        let cancelAction = UIAlertAction(title: "Отмена", style: .cancel)
-
-        let doneAction = UIAlertAction(title: "Готово", style: .default) { [weak self, weak alert] _ in
-            guard let self = self,
-                  let textField = alert?.textFields?.first,
-                  let urlString = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !urlString.isEmpty else { return }
-
-            // Validate URL
-            if self.isValidURL(urlString) {
-                self.applyLink(urlString, to: savedRange)
-            } else {
-                // Shake the text field to indicate invalid URL
-                self.shakeTextField(textField)
-                // Re-show the alert
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.showLinkAlertWithText(urlString, savedRange: savedRange)
-                }
-            }
-        }
-
-        alert.addAction(cancelAction)
-        alert.addAction(doneAction)
-
-        viewController.present(alert, animated: true)
+        showLinkAlertWithText("", savedRange: savedRange, shouldShake: false)
     }
 
-    private func showLinkAlertWithText(_ initialText: String, savedRange: NSRange) {
+    private func showLinkAlertWithText(_ initialText: String, savedRange: NSRange, shouldShake: Bool) {
         guard let viewController = findViewController() else { return }
 
         let alert = UIAlertController(title: "Добавить ссылку", message: nil, preferredStyle: .alert)
@@ -263,10 +227,8 @@ final class FormattingTextView: UITextView {
             if self.isValidURL(urlString) {
                 self.applyLink(urlString, to: savedRange)
             } else {
-                self.shakeTextField(textField)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.showLinkAlertWithText(urlString, savedRange: savedRange)
-                }
+                // Re-show the alert immediately with shake
+                self.showLinkAlertWithText(urlString, savedRange: savedRange, shouldShake: true)
             }
         }
 
@@ -274,8 +236,8 @@ final class FormattingTextView: UITextView {
         alert.addAction(doneAction)
 
         viewController.present(alert, animated: true) {
-            // Shake immediately if text is invalid on re-show
-            if let tf = alertTextField, !initialText.isEmpty && !self.isValidURL(initialText) {
+            // Shake if requested (invalid URL on previous attempt)
+            if shouldShake, let tf = alertTextField {
                 self.shakeTextField(tf)
             }
         }
@@ -321,6 +283,10 @@ final class FormattingTextView: UITextView {
         mutableAttr.addAttribute(.foregroundColor, value: UIColor.link, range: range)
 
         attributedText = mutableAttr
+
+        // Reset typing attributes so new text after link isn't formatted as link
+        typingAttributes = [.font: UIFont.systemFont(ofSize: 16)]
+
         onTextChange?(attributedText)
     }
 
