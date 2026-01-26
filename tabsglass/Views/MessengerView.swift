@@ -236,15 +236,26 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
     @Bindable var state: ComposerState
     var colorScheme: ColorScheme
 
+    private let maxLines = 7
+    private let lineHeight: CGFloat = 22  // Approximate line height for 16pt font
+
+    private var maxHeight: CGFloat {
+        CGFloat(maxLines) * lineHeight
+    }
+
     func makeUIView(context: Context) -> FormattingTextView {
         let textView = FormattingTextView()
         textView.placeholder = "Note..."
         textView.textColor = colorScheme == .dark ? .white : .black
 
-        textView.onTextChange = { attrText in
+        textView.onTextChange = { [self] attrText in
             state.text = attrText.string
             state.attributedText = attrText
             state.onTextChange?(attrText.string)
+
+            // Enable/disable scroll based on content height
+            let contentHeight = textView.sizeThatFits(CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)).height
+            textView.isScrollEnabled = contentHeight > maxHeight
         }
 
         textView.onFocusChange = { isFocused in
@@ -268,12 +279,17 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
                 state.shouldFocus = false
             }
         }
+
+        // Update scroll enabled state
+        let contentHeight = uiView.sizeThatFits(CGSize(width: uiView.bounds.width > 0 ? uiView.bounds.width : 300, height: .greatestFiniteMagnitude)).height
+        uiView.isScrollEnabled = contentHeight > maxHeight
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: FormattingTextView, context: Context) -> CGSize? {
-        let width = proposal.width ?? UIScreen.main.bounds.width - 32
-        let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        return CGSize(width: width, height: max(24, size.height))  // min height 24
+        let width = proposal.width ?? 300
+        let naturalSize = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        let height = min(naturalSize.height, maxHeight)  // Cap at maxLines
+        return CGSize(width: width, height: max(24, height))  // min height 24
     }
 }
 
