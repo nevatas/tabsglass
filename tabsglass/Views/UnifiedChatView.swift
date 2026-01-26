@@ -745,7 +745,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 title: "Скопировать",
                 image: UIImage(systemName: "doc.on.doc")
             ) { _ in
-                UIPasteboard.general.string = message.text
+                UIPasteboard.general.string = message.content
             }
             actions.append(copyAction)
 

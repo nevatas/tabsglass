@@ -135,9 +135,9 @@ struct MainContainerView: View {
         }
         .sheet(item: $messageToEdit) { message in
             EditMessageSheet(
-                originalText: message.text,
+                originalText: message.content,
                 onSave: { newText in
-                    message.text = newText
+                    message.content = newText
                     messageToEdit = nil
                 },
                 onCancel: {
@@ -168,7 +168,7 @@ struct MainContainerView: View {
             }
         }
 
-        let message = Message(text: trimmedText, tab: tab, photoFileNames: photoFileNames, photoAspectRatios: photoAspectRatios)
+        let message = Message(content: trimmedText, tab: tab, photoFileNames: photoFileNames, photoAspectRatios: photoAspectRatios)
         modelContext.insert(message)
         messageText = ""
         attachedImages = []
@@ -202,8 +202,9 @@ struct MainContainerView: View {
 
         // Create new message with the snapshot data
         let message = Message(
-            text: snapshot.text,
+            content: snapshot.content,
             tab: tab,
+            entities: snapshot.entities,
             photoFileNames: snapshot.photoFileNames,
             photoAspectRatios: snapshot.photoAspectRatios
         )

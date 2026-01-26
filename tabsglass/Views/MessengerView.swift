@@ -494,7 +494,7 @@ final class MessageTableCell: UITableViewCell {
             .font: UIFont.systemFont(ofSize: 16),
             .paragraphStyle: paragraphStyle
         ]
-        messageLabel.attributedText = NSAttributedString(string: message.text, attributes: attributes)
+        messageLabel.attributedText = NSAttributedString(string: message.content, attributes: attributes)
 
         updateBubbleColor()
 
@@ -509,7 +509,7 @@ final class MessageTableCell: UITableViewCell {
         let fileNames = message.photoFileNames
         let aspectRatios = message.aspectRatios
         let hasPhotos = !fileNames.isEmpty && !aspectRatios.isEmpty
-        let hasText = !message.text.isEmpty
+        let hasText = !message.content.isEmpty
 
         // Reset constraints first
         messageLabelTopToMosaic.isActive = false

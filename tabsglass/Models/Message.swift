@@ -7,18 +7,38 @@ import Foundation
 import SwiftData
 import UIKit
 
+// MARK: - Text Entity (Telegram-style formatting)
+
+struct TextEntity: Codable, Hashable {
+    let type: String      // "bold", "italic", "underline", "strikethrough", "code", "pre", "text_link", "url"
+    let offset: Int       // Start position in UTF-16 code units
+    let length: Int       // Length in UTF-16 code units
+    let url: String?      // URL for "text_link" type
+
+    init(type: String, offset: Int, length: Int, url: String? = nil) {
+        self.type = type
+        self.offset = offset
+        self.length = length
+        self.url = url
+    }
+}
+
+// MARK: - Message Model
+
 @Model
 final class Message: Identifiable {
     var id: UUID
-    var text: String
+    var content: String
+    var entities: [TextEntity]?
     var createdAt: Date
     var tab: Tab?
     var photoFileNames: [String] = []
     var photoAspectRatios: [Double] = []
 
-    init(text: String, tab: Tab, photoFileNames: [String] = [], photoAspectRatios: [Double] = []) {
+    init(content: String, tab: Tab, entities: [TextEntity]? = nil, photoFileNames: [String] = [], photoAspectRatios: [Double] = []) {
         self.id = UUID()
-        self.text = text
+        self.content = content
+        self.entities = entities
         self.createdAt = Date()
         self.tab = tab
         self.photoFileNames = photoFileNames
@@ -41,7 +61,7 @@ final class Message: Identifiable {
 
     /// Check if message has no content (no text and no valid photos)
     var isEmpty: Bool {
-        let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasText = !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if hasText { return false }
 
         // Check if any photo files exist (without loading them)

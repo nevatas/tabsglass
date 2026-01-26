@@ -9,7 +9,8 @@ import Foundation
 
 /// Snapshot of a deleted message for restoration
 struct DeletedMessageSnapshot {
-    let text: String
+    let content: String
+    let entities: [TextEntity]?
     let photoFileNames: [String]
     let photoAspectRatios: [Double]
     let tabId: UUID
@@ -17,7 +18,8 @@ struct DeletedMessageSnapshot {
     let deletedAt: Date
 
     init(message: Message, tabId: UUID) {
-        self.text = message.text
+        self.content = message.content
+        self.entities = message.entities
         self.photoFileNames = message.photoFileNames
         self.photoAspectRatios = message.photoAspectRatios
         self.tabId = tabId
