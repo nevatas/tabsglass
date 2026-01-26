@@ -72,7 +72,10 @@ final class FormattingTextView: UITextView {
 
         // Reset formatting when text becomes empty
         if text.isEmpty {
-            typingAttributes = [.font: UIFont.systemFont(ofSize: 16)]
+            typingAttributes = [
+                .font: UIFont.systemFont(ofSize: 16),
+                .foregroundColor: textColor ?? .label
+            ]
         }
 
         // Notify SwiftUI about size change
@@ -258,7 +261,10 @@ final class FormattingTextView: UITextView {
         attributedText = mutableAttr
 
         // Reset typing attributes so new text after link isn't formatted as link
-        typingAttributes = [.font: UIFont.systemFont(ofSize: 16)]
+        typingAttributes = [
+            .font: UIFont.systemFont(ofSize: 16),
+            .foregroundColor: textColor ?? .label
+        ]
 
         onTextChange?(attributedText)
     }
@@ -512,7 +518,7 @@ extension View {
     }
 }
 
-// MARK: - Link Input Sheet (SwiftUI)
+// MARK: - Link Input Sheet (SwiftUI - iOS 26 Liquid Glass)
 
 struct LinkInputSheet: View {
     let onDone: (String) -> Void
@@ -526,60 +532,75 @@ struct LinkInputSheet: View {
     var body: some View {
         ZStack {
             // Dimmed background
-            Color.black.opacity(0.4)
+            Color.black.opacity(0.3)
                 .ignoresSafeArea()
                 .onTapGesture {
                     dismiss()
                 }
 
             // Alert container
-            VStack(spacing: 0) {
+            VStack(spacing: 16) {
                 // Title
                 Text("Добавить ссылку")
-                    .font(.headline)
-                    .padding(.top, 20)
-                    .padding(.bottom, 16)
+                    .font(.body.weight(.semibold))
+                    .padding(.top, 4)
+                    .padding(.bottom, 12)
 
-                // Text field
-                TextField("https://example.com", text: $urlText)
-                    .textFieldStyle(.roundedBorder)
+                // Text field - capsule style
+                TextField("", text: $urlText, prompt: Text("URL").foregroundStyle(.gray))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background {
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                    }
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .focused($isFocused)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
                     .shake(trigger: $shouldShake)
                     .onSubmit {
                         validateAndSubmit()
                     }
 
-                Divider()
-
-                // Buttons
-                HStack(spacing: 0) {
-                    Button("Отмена") {
+                // Buttons - capsule, same background as input
+                HStack(spacing: 12) {
+                    Button {
                         dismiss()
+                    } label: {
+                        Text("Отмена")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .background {
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                    }
 
-                    Divider()
-                        .frame(height: 44)
-
-                    Button("Готово") {
+                    Button {
                         validateAndSubmit()
+                    } label: {
+                        Text("Готово")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
                     }
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .background {
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                    }
                 }
-                .frame(height: 44)
             }
-            .frame(width: 270)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .glassEffect(.regular.tint(.white.opacity(0.3)), in: .rect(cornerRadius: 14))
+            .padding(24)
+            .background {
+                RoundedRectangle(cornerRadius: 36)
+                    .fill(.clear)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 36))
+            }
+            .padding(.horizontal, 40)
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {

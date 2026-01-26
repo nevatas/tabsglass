@@ -99,12 +99,14 @@ struct EditFormattingTextView: UIViewRepresentable {
     let originalText: String
     let originalEntities: [TextEntity]?
     let holder: EditTextViewHolder
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeUIView(context: Context) -> FormattingTextView {
         let textView = FormattingTextView()
         textView.font = .systemFont(ofSize: 16)
         textView.isScrollEnabled = true
         textView.placeholder = ""  // No placeholder for edit mode
+        textView.textColor = colorScheme == .dark ? .white : .black
 
         // Apply original text with formatting
         let attributedText = createAttributedString(text: originalText, entities: originalEntities)
@@ -130,12 +132,18 @@ struct EditFormattingTextView: UIViewRepresentable {
     func updateUIView(_ uiView: FormattingTextView, context: Context) {
         // Keep holder reference updated
         holder.textView = uiView
+        // Update text color for theme
+        uiView.textColor = colorScheme == .dark ? .white : .black
     }
 
     private func createAttributedString(text: String, entities: [TextEntity]?) -> NSAttributedString {
+        let textColor: UIColor = colorScheme == .dark ? .white : .black
         let attributedString = NSMutableAttributedString(
             string: text,
-            attributes: [.font: UIFont.systemFont(ofSize: 16)]
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 16),
+                .foregroundColor: textColor
+            ]
         )
 
         guard let entities = entities else {
