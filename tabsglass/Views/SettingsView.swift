@@ -61,6 +61,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .tint(themeManager.currentTheme.accentColor)
     }
 }
 
@@ -190,9 +191,10 @@ struct ThemeRowView: View {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(theme.accentColor ?? Color.accentColor)
                 }
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -206,15 +208,15 @@ struct ThemeRowView: View {
         case .dark:
             return .indigo
         case .pink:
-            return Color(red: 0xFF/255, green: 0x69/255, blue: 0xB4/255)
+            return Color(red: 0xFF/255, green: 0x45/255, blue: 0x8A/255)
         case .beige:
-            return Color(red: 0xD2/255, green: 0xB4/255, blue: 0x8C/255)
+            return Color(red: 0xC4/255, green: 0x9A/255, blue: 0x6C/255)
         case .green:
-            return Color(red: 0x4C/255, green: 0xAF/255, blue: 0x50/255)
+            return Color(red: 0x2E/255, green: 0xA0/255, blue: 0x4A/255)
         case .brown:
-            return Color(red: 0x8D/255, green: 0x6E/255, blue: 0x63/255)
+            return Color(red: 0x7D/255, green: 0x5A/255, blue: 0x4F/255)
         case .blue:
-            return Color(red: 0x42/255, green: 0xA5/255, blue: 0xF5/255)
+            return Color(red: 0x29/255, green: 0x8D/255, blue: 0xF5/255)
         }
     }
 }

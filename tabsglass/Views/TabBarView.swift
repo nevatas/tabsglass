@@ -55,6 +55,8 @@ struct TabBarView: View {
     let onRenameInbox: () -> Void
     let onDeleteTab: (Tab) -> Void
 
+    @ObservedObject private var themeManager = ThemeManager.shared
+
     var body: some View {
         VStack(spacing: 10) {
             // Header buttons row
@@ -65,6 +67,7 @@ struct TabBarView: View {
                         .font(.system(size: 17, weight: .medium))
                         .frame(width: 32, height: 32)
                 }
+                .tint(themeManager.currentTheme.accentColor)
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .shadow(color: .clear, radius: 0)
@@ -84,11 +87,12 @@ struct TabBarView: View {
                         .font(.system(size: 17, weight: .medium))
                         .frame(width: 32, height: 32)
                 }
+                .tint(themeManager.currentTheme.accentColor)
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .shadow(color: .clear, radius: 0)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 8)
 
             // Telegram-style unified tab bar
             TelegramTabBar(
@@ -99,7 +103,7 @@ struct TabBarView: View {
                 onRenameInbox: onRenameInbox,
                 onDeleteTab: onDeleteTab
             )
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 8)
         }
         .padding(.top, 4)
         .padding(.bottom, 16)

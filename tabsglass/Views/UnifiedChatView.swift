@@ -871,7 +871,7 @@ final class BottomFadeGradientView: UIView {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleThemeChange),
-            name: Notification.Name("ThemeChanged"),
+            name: .themeDidChange,
             object: nil
         )
     }

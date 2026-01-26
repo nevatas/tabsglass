@@ -68,15 +68,15 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .dark:
             return Color(red: 0x19/255, green: 0x1A/255, blue: 0x1A/255)
         case .pink:
-            return Color(red: 0xFF/255, green: 0xF0/255, blue: 0xF5/255)
+            return Color(red: 0xFF/255, green: 0xC8/255, blue: 0xE0/255)
         case .beige:
-            return Color(red: 0xF5/255, green: 0xF0/255, blue: 0xE6/255)
+            return Color(red: 0xF0/255, green: 0xDC/255, blue: 0xC0/255)
         case .green:
-            return Color(red: 0xF0/255, green: 0xF5/255, blue: 0xF0/255)
+            return Color(red: 0xC8/255, green: 0xE8/255, blue: 0xC8/255)
         case .brown:
-            return Color(red: 0xF5/255, green: 0xF0/255, blue: 0xEB/255)
+            return Color(red: 0xE8/255, green: 0xD8/255, blue: 0xC8/255)
         case .blue:
-            return Color(red: 0xF0/255, green: 0xF5/255, blue: 0xFA/255)
+            return Color(red: 0xC8/255, green: 0xE0/255, blue: 0xF8/255)
         }
     }
 
@@ -86,15 +86,15 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .system, .dark, .light:
             return Color(red: 0x19/255, green: 0x1A/255, blue: 0x1A/255)
         case .pink:
-            return Color(red: 0x2D/255, green: 0x1F/255, blue: 0x26/255)
+            return Color(red: 0x3C/255, green: 0x18/255, blue: 0x28/255)
         case .beige:
-            return Color(red: 0x2A/255, green: 0x27/255, blue: 0x20/255)
+            return Color(red: 0x38/255, green: 0x2C/255, blue: 0x1C/255)
         case .green:
-            return Color(red: 0x1A/255, green: 0x24/255, blue: 0x1A/255)
+            return Color(red: 0x18/255, green: 0x30/255, blue: 0x18/255)
         case .brown:
-            return Color(red: 0x24/255, green: 0x20/255, blue: 0x1A/255)
+            return Color(red: 0x32/255, green: 0x24/255, blue: 0x18/255)
         case .blue:
-            return Color(red: 0x1A/255, green: 0x20/255, blue: 0x28/255)
+            return Color(red: 0x18/255, green: 0x28/255, blue: 0x3C/255)
         }
     }
 
@@ -106,15 +106,15 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .dark:
             return UIColor(red: 0x24/255, green: 0x25/255, blue: 0x29/255, alpha: 1)
         case .pink:
-            return UIColor(red: 0xFF/255, green: 0xE4/255, blue: 0xEC/255, alpha: 1)
+            return UIColor(red: 0xFF/255, green: 0xB8/255, blue: 0xD4/255, alpha: 1)
         case .beige:
-            return UIColor(red: 0xEA/255, green: 0xE4/255, blue: 0xD5/255, alpha: 1)
+            return UIColor(red: 0xE4/255, green: 0xD0/255, blue: 0xB4/255, alpha: 1)
         case .green:
-            return UIColor(red: 0xE0/255, green: 0xEE/255, blue: 0xE0/255, alpha: 1)
+            return UIColor(red: 0xB4/255, green: 0xDC/255, blue: 0xB4/255, alpha: 1)
         case .brown:
-            return UIColor(red: 0xE8/255, green: 0xE0/255, blue: 0xD5/255, alpha: 1)
+            return UIColor(red: 0xD8/255, green: 0xC4/255, blue: 0xAC/255, alpha: 1)
         case .blue:
-            return UIColor(red: 0xE0/255, green: 0xEB/255, blue: 0xF5/255, alpha: 1)
+            return UIColor(red: 0xB8/255, green: 0xD4/255, blue: 0xF4/255, alpha: 1)
         }
     }
 
@@ -124,15 +124,15 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .system, .dark, .light:
             return UIColor(red: 0x24/255, green: 0x25/255, blue: 0x29/255, alpha: 1)
         case .pink:
-            return UIColor(red: 0x3D/255, green: 0x2A/255, blue: 0x33/255, alpha: 1)
+            return UIColor(red: 0x4C/255, green: 0x24/255, blue: 0x38/255, alpha: 1)
         case .beige:
-            return UIColor(red: 0x3A/255, green: 0x36/255, blue: 0x2C/255, alpha: 1)
+            return UIColor(red: 0x48/255, green: 0x3C/255, blue: 0x28/255, alpha: 1)
         case .green:
-            return UIColor(red: 0x28/255, green: 0x38/255, blue: 0x28/255, alpha: 1)
+            return UIColor(red: 0x24/255, green: 0x44/255, blue: 0x24/255, alpha: 1)
         case .brown:
-            return UIColor(red: 0x38/255, green: 0x30/255, blue: 0x28/255, alpha: 1)
+            return UIColor(red: 0x44/255, green: 0x34/255, blue: 0x24/255, alpha: 1)
         case .blue:
-            return UIColor(red: 0x28/255, green: 0x30/255, blue: 0x3D/255, alpha: 1)
+            return UIColor(red: 0x24/255, green: 0x38/255, blue: 0x50/255, alpha: 1)
         }
     }
 
@@ -142,6 +142,80 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .system: return nil
         case .light, .pink, .beige, .green, .brown, .blue: return .light
         case .dark: return .dark
+        }
+    }
+
+    /// Accent color for buttons, icons, links (nil = use system blue)
+    var accentColor: Color? {
+        switch self {
+        case .system, .light, .dark:
+            return nil
+        case .pink:
+            return Color(red: 0xD7/255, green: 0x33/255, blue: 0x82/255)
+        case .beige:
+            return Color(red: 0xA6/255, green: 0x7C/255, blue: 0x52/255)
+        case .green:
+            return Color(red: 0x2E/255, green: 0x7D/255, blue: 0x32/255)
+        case .brown:
+            return Color(red: 0x6D/255, green: 0x4C/255, blue: 0x41/255)
+        case .blue:
+            return Color(red: 0x1E/255, green: 0x88/255, blue: 0xE5/255)
+        }
+    }
+
+    /// Link color - saturated darker version of theme color (UIColor version)
+    var linkColor: UIColor {
+        switch self {
+        case .system, .light, .dark:
+            return .link
+        case .pink:
+            return UIColor(red: 0xD7/255, green: 0x33/255, blue: 0x82/255, alpha: 1)
+        case .beige:
+            return UIColor(red: 0xA6/255, green: 0x7C/255, blue: 0x52/255, alpha: 1)
+        case .green:
+            return UIColor(red: 0x2E/255, green: 0x7D/255, blue: 0x32/255, alpha: 1)
+        case .brown:
+            return UIColor(red: 0x6D/255, green: 0x4C/255, blue: 0x41/255, alpha: 1)
+        case .blue:
+            return UIColor(red: 0x1E/255, green: 0x88/255, blue: 0xE5/255, alpha: 1)
+        }
+    }
+
+    /// Composer glass tint color (light mode)
+    var composerTintColor: Color {
+        switch self {
+        case .system, .light:
+            return .white.opacity(0.9)
+        case .dark:
+            return Color(white: 0.1).opacity(0.9)
+        case .pink:
+            return Color(red: 0xFF/255, green: 0xE0/255, blue: 0xEC/255).opacity(0.95)
+        case .beige:
+            return Color(red: 0xF4/255, green: 0xE8/255, blue: 0xD8/255).opacity(0.95)
+        case .green:
+            return Color(red: 0xE0/255, green: 0xF0/255, blue: 0xE0/255).opacity(0.95)
+        case .brown:
+            return Color(red: 0xF0/255, green: 0xE4/255, blue: 0xD8/255).opacity(0.95)
+        case .blue:
+            return Color(red: 0xE0/255, green: 0xEC/255, blue: 0xFA/255).opacity(0.95)
+        }
+    }
+
+    /// Composer glass tint color (dark mode)
+    var composerTintColorDark: Color {
+        switch self {
+        case .system, .light, .dark:
+            return Color(white: 0.1).opacity(0.9)
+        case .pink:
+            return Color(red: 0x40/255, green: 0x1C/255, blue: 0x2C/255).opacity(0.95)
+        case .beige:
+            return Color(red: 0x3C/255, green: 0x30/255, blue: 0x20/255).opacity(0.95)
+        case .green:
+            return Color(red: 0x1C/255, green: 0x34/255, blue: 0x1C/255).opacity(0.95)
+        case .brown:
+            return Color(red: 0x38/255, green: 0x2C/255, blue: 0x1C/255).opacity(0.95)
+        case .blue:
+            return Color(red: 0x1C/255, green: 0x2C/255, blue: 0x40/255).opacity(0.95)
         }
     }
 }

@@ -297,10 +297,16 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
 
 struct EmbeddedComposerView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var themeManager = ThemeManager.shared
     @Bindable var state: ComposerState
 
     private var canSend: Bool {
         !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.attachedImages.isEmpty
+    }
+
+    private var composerTint: Color {
+        let theme = themeManager.currentTheme
+        return colorScheme == .dark ? theme.composerTintColorDark : theme.composerTintColor
     }
 
     var body: some View {
@@ -351,7 +357,7 @@ struct EmbeddedComposerView: View {
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(colorScheme == .dark ? .white : .black)
+                            .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
                     }
 
                     Spacer()
@@ -365,7 +371,7 @@ struct EmbeddedComposerView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 32, height: 32)
-                            .background(canSend ? Color.accentColor : Color.gray.opacity(0.4))
+                            .background(canSend ? (themeManager.currentTheme.accentColor ?? Color.accentColor) : Color.gray.opacity(0.4))
                             .clipShape(Circle())
                     }
                     .disabled(!canSend)
@@ -376,9 +382,7 @@ struct EmbeddedComposerView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .glassEffect(
-                .regular.tint(colorScheme == .dark
-                    ? Color(white: 0.1).opacity(0.9)
-                    : .white.opacity(0.9)),
+                .regular.tint(composerTint),
                 in: .rect(cornerRadius: 24)
             )
         }
@@ -468,7 +472,7 @@ final class MessageTableCell: UITableViewCell {
         messageTextView.textContainerInset = .zero
         messageTextView.textContainer.lineFragmentPadding = 0
         messageTextView.linkTextAttributes = [
-            .foregroundColor: UIColor.systemBlue,
+            .foregroundColor: ThemeManager.shared.currentTheme.linkColor,
             .underlineStyle: NSUnderlineStyle.single.rawValue
         ]
         messageTextView.translatesAutoresizingMaskIntoConstraints = false
@@ -530,6 +534,11 @@ final class MessageTableCell: UITableViewCell {
             bubbleView.backgroundColor = theme.bubbleColor
             messageTextView.textColor = .black
         }
+        // Update link color for current theme
+        messageTextView.linkTextAttributes = [
+            .foregroundColor: theme.linkColor,
+            .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
     }
 
     override func layoutSubviews() {
