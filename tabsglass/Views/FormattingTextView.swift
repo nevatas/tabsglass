@@ -63,6 +63,12 @@ final class FormattingTextView: UITextView {
 
     @objc private func textDidChange() {
         placeholderLabel.isHidden = !text.isEmpty
+
+        // Reset formatting when text becomes empty
+        if text.isEmpty {
+            typingAttributes = [.font: UIFont.systemFont(ofSize: 16)]
+        }
+
         onTextChange?(attributedText)
     }
 
@@ -121,8 +127,9 @@ final class FormattingTextView: UITextView {
     override func buildMenu(with builder: UIMenuBuilder) {
         super.buildMenu(with: builder)
 
-        // Remove AutoFill menu
+        // Remove system menus we don't need
         builder.remove(menu: .autoFill)
+        builder.remove(menu: .format)  // Remove system Format menu (we have our own Formatting)
 
         // Only add formatting when there's a selection
         if selectedRange.length > 0 {
@@ -326,7 +333,7 @@ struct FormattingTextViewRepresentable: UIViewRepresentable {
         // Handle focus request
         if let shouldFocus = shouldFocus, shouldFocus.wrappedValue {
             DispatchQueue.main.async {
-                uiView.becomeFirstResponder()
+                _ = uiView.becomeFirstResponder()
                 shouldFocus.wrappedValue = false
             }
         }
