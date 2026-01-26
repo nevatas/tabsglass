@@ -100,6 +100,7 @@ final class SwiftUIComposerContainer: UIView {
     private let composerState = ComposerState()
     private var hostingController: UIHostingController<EmbeddedComposerView>?
     private var currentHeight: CGFloat = 102
+    private var didAddToParentVC = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -110,6 +111,29 @@ final class SwiftUIComposerContainer: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // Add hosting controller to parent view controller hierarchy
+        if window != nil, !didAddToParentVC, let hc = hostingController {
+            if let parentVC = findViewController() {
+                parentVC.addChild(hc)
+                hc.didMove(toParent: parentVC)
+                didAddToParentVC = true
+            }
+        }
+    }
+
+    private func findViewController() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let nextResponder = responder?.next {
+            if let vc = nextResponder as? UIViewController {
+                return vc
+            }
+            responder = nextResponder
+        }
+        return nil
     }
 
     private func setupTextChangeHandler() {
@@ -479,6 +503,7 @@ final class MessageTableCell: UITableViewCell {
         bubbleView.addSubview(messageTextView)
 
         mosaicHeightConstraint = mosaicView.heightAnchor.constraint(equalToConstant: 0)
+        mosaicHeightConstraint.priority = .required - 1  // Allow breaking during layout pass
         messageTextViewTopToMosaic = messageTextView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 10)
         messageTextViewTopToBubble = messageTextView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
         messageTextViewBottomToBubble = messageTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
