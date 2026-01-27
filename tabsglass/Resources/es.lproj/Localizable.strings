@@ -23,6 +23,7 @@
 // MARK: - Tabs
 
 "tab.new" = "Nueva pestaña";
+"tab.new_hint" = "Usa emoji en el nombre para encontrar las pestañas más fácil :)";
 "tab.rename" = "Renombrar";
 "tab.rename_inbox" = "Renombrar bandeja";
 "tab.delete_title" = "¿Eliminar pestaña?";

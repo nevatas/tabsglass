@@ -23,6 +23,7 @@
 // MARK: - Tabs
 
 "tab.new" = "Neuer Tab";
+"tab.new_hint" = "Verwende Emoji im Namen, um Tabs leichter zu finden :)";
 "tab.rename" = "Umbenennen";
 "tab.rename_inbox" = "Posteingang umbenennen";
 "tab.delete_title" = "Tab löschen?";

@@ -23,6 +23,7 @@
 // MARK: - Tabs
 
 "tab.new" = "Nouvel onglet";
+"tab.new_hint" = "Utilisez des emoji dans le nom pour mieux repérer vos onglets :)";
 "tab.rename" = "Renommer";
 "tab.rename_inbox" = "Renommer la boîte";
 "tab.delete_title" = "Supprimer l'onglet ?";

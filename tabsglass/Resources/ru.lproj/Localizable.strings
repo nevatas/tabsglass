@@ -22,7 +22,8 @@
 
 // MARK: - Tabs
 
-"tab.new" = "Новый таб";
+"tab.new" = "Новый Таб";
+"tab.new_hint" = "Используйте emoji в названии, так будет проще ориентироваться :)";
 "tab.rename" = "Переименовать";
 "tab.rename_inbox" = "Переименовать Inbox";
 "tab.delete_title" = "Удалить таб?";

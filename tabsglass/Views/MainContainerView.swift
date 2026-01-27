@@ -107,6 +107,8 @@ struct MainContainerView: View {
                     createTab(title: trimmed)
                 }
             }
+        } message: {
+            Text(L10n.Tab.newHint)
         }
         .alert(L10n.Tab.rename, isPresented: $showRenameAlert) {
             TextField(L10n.Tab.titlePlaceholder, text: $renameTabTitle)

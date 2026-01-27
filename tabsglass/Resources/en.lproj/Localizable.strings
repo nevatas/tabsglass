@@ -23,6 +23,7 @@
 // MARK: - Tabs
 
 "tab.new" = "New Tab";
+"tab.new_hint" = "Use emoji in the name to make tabs easier to find :)";
 "tab.rename" = "Rename";
 "tab.rename_inbox" = "Rename Inbox";
 "tab.delete_title" = "Delete Tab?";

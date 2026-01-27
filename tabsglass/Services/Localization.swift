@@ -32,6 +32,7 @@ enum L10n {
     // MARK: - Tabs
     enum Tab {
         static var new: String { NSLocalizedString("tab.new", comment: "New tab alert title") }
+        static var newHint: String { NSLocalizedString("tab.new_hint", comment: "New tab alert message") }
         static var rename: String { NSLocalizedString("tab.rename", comment: "Rename action") }
         static var renameInbox: String { NSLocalizedString("tab.rename_inbox", comment: "Rename inbox alert title") }
         static var deleteTitle: String { NSLocalizedString("tab.delete_title", comment: "Delete tab alert title") }
