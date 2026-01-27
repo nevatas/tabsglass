@@ -6,6 +6,7 @@
 import Foundation
 import SwiftData
 import UIKit
+import os.log
 
 // MARK: - Text Entity (Telegram-style formatting)
 
@@ -166,7 +167,7 @@ final class Message: Identifiable {
             let aspectRatio = Double(image.size.width / image.size.height)
             return (fileName, aspectRatio)
         } catch {
-            print("Failed to save photo: \(error)")
+            Logger().error("Failed to save photo: \(error.localizedDescription)")
             return nil
         }
     }

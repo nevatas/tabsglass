@@ -73,6 +73,6 @@
 
 // MARK: - Composer
 
-"composer.placeholder" = "Your note...";
+"composer.placeholder" = "Заметка...";
 "composer.camera" = "Камера";
 "composer.photo" = "Фото";
