@@ -13,6 +13,7 @@
 "settings.terms" = "Terms of Service";
 "settings.contact" = "Contact Developer";
 "settings.done" = "Done";
+"settings.space_name" = "Title";
 
 // MARK: - Reorder
 

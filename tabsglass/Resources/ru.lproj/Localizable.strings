@@ -13,6 +13,7 @@
 "settings.terms" = "Правила Пользования";
 "settings.contact" = "Связь с разработчиком";
 "settings.done" = "Готово";
+"settings.space_name" = "Заголовок";
 
 // MARK: - Reorder
 
@@ -72,6 +73,6 @@
 
 // MARK: - Composer
 
-"composer.placeholder" = "Заметка...";
+"composer.placeholder" = "Your note...";
 "composer.camera" = "Камера";
 "composer.photo" = "Фото";

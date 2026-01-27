@@ -13,6 +13,7 @@
 "settings.terms" = "Conditions d'Utilisation";
 "settings.contact" = "Contacter le développeur";
 "settings.done" = "Terminé";
+"settings.space_name" = "Titre";
 
 // MARK: - Reorder
 

@@ -72,7 +72,9 @@ final class ComposerState {
     func clearAll() {
         text = ""
         attributedText = NSAttributedString()
+        textViewHeight = 24
         formattingTextView?.clear()
+        formattingTextView?.isScrollEnabled = false
         clearAttachments()
     }
 }
@@ -294,8 +296,10 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
             state.onTextChange?(attrText.string)
 
             guard let textView = textView else { return }
-            textView.layoutIfNeeded()
-            let contentHeight = textView.contentSize.height
+            let targetWidth = textView.bounds.width > 0 ? textView.bounds.width : 300
+            let contentHeight = textView.sizeThatFits(
+                CGSize(width: targetWidth, height: .greatestFiniteMagnitude)
+            ).height
             let clampedHeight = max(24, min(contentHeight, maxHeight))
             if abs(state.textViewHeight - clampedHeight) > 1 {
                 state.textViewHeight = clampedHeight
@@ -331,7 +335,21 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
             }
         }
 
-        // Scroll state is updated on text changes only to avoid layout churn.
+        // Recalculate height when width changes (rotation/layout updates).
+        let currentWidth = uiView.bounds.width
+        if currentWidth > 0, abs(currentWidth - context.coordinator.cachedWidth) > 1 {
+            let contentHeight = uiView.sizeThatFits(
+                CGSize(width: currentWidth, height: .greatestFiniteMagnitude)
+            ).height
+            let clampedHeight = max(24, min(contentHeight, maxHeight))
+            if abs(state.textViewHeight - clampedHeight) > 1 {
+                state.textViewHeight = clampedHeight
+            }
+            let shouldScroll = contentHeight > maxHeight
+            if uiView.isScrollEnabled != shouldScroll {
+                uiView.isScrollEnabled = shouldScroll
+            }
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: FormattingTextView, context: Context) -> CGSize? {
@@ -389,7 +407,7 @@ struct EmbeddedComposerView: View {
 
                     FormattingTextViewWrapper(state: state, colorScheme: colorScheme)
 
-                    Spacer().frame(height: 12) // Fixed spacing between textfield and buttons
+                    Spacer().frame(height: 8) // Tighter spacing between textfield and buttons
 
                     HStack {
                     Menu {

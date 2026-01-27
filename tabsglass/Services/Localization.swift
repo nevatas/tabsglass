@@ -20,6 +20,7 @@ enum L10n {
         static var terms: String { NSLocalizedString("settings.terms", comment: "Terms of service link") }
         static var contact: String { NSLocalizedString("settings.contact", comment: "Contact developer link") }
         static var done: String { NSLocalizedString("settings.done", comment: "Done button") }
+        static var spaceName: String { NSLocalizedString("settings.space_name", comment: "Space name setting") }
     }
 
     // MARK: - Reorder

@@ -9,12 +9,26 @@ import SwiftData
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
+    @AppStorage("spaceName") private var spaceName = "Taby"
     @ObservedObject private var themeManager = ThemeManager.shared
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
+                    HStack {
+                        Label(L10n.Settings.spaceName, systemImage: "character.cursor.ibeam")
+                        Spacer()
+                        TextField("Taby", text: $spaceName)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundStyle(.secondary)
+                            .onChange(of: spaceName) { _, newValue in
+                                if newValue.count > 20 {
+                                    spaceName = String(newValue.prefix(20))
+                                }
+                            }
+                    }
+
                     NavigationLink {
                         AppearanceSettingsView()
                     } label: {
@@ -38,16 +52,16 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Link(destination: URL(string: "https://example.com/privacy")!) {
+                    Link(destination: URL(string: "https://nevatas.github.io/taby-legal/PRIVACY_POLICY")!) {
                         Label(L10n.Settings.privacyPolicy, systemImage: "hand.raised")
                     }
 
-                    Link(destination: URL(string: "https://example.com/terms")!) {
+                    Link(destination: URL(string: "https://nevatas.github.io/taby-legal/TERMS_OF_USE")!) {
                         Label(L10n.Settings.terms, systemImage: "doc.text")
                     }
 
-                    Link(destination: URL(string: "mailto:support@example.com")!) {
-                        Label(L10n.Settings.contact, systemImage: "envelope")
+                    Link(destination: URL(string: "https://t.me/serejens")!) {
+                        Label(L10n.Settings.contact, systemImage: "paperplane")
                     }
                 }
             }

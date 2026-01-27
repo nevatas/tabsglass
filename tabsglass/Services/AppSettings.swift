@@ -253,6 +253,7 @@ final class AppSettings {
         static let autoFocusInput = "autoFocusInput"
         static let theme = "appTheme"
         static let inboxTitle = "inboxTitle"
+        static let spaceName = "spaceName"
     }
 
     private init() {}
@@ -261,6 +262,12 @@ final class AppSettings {
     var inboxTitle: String {
         get { defaults.string(forKey: Keys.inboxTitle) ?? "Inbox" }
         set { defaults.set(newValue, forKey: Keys.inboxTitle) }
+    }
+
+    /// Space name displayed in the header (default: "Taby")
+    var spaceName: String {
+        get { defaults.string(forKey: Keys.spaceName) ?? "Taby" }
+        set { defaults.set(newValue, forKey: Keys.spaceName) }
     }
 
     /// Auto-focus composer input when app opens

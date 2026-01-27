@@ -56,6 +56,7 @@ struct TabBarView: View {
     let onDeleteTab: (Tab) -> Void
 
     @ObservedObject private var themeManager = ThemeManager.shared
+    @AppStorage("spaceName") private var spaceName = "Taby"
 
     var body: some View {
         VStack(spacing: 10) {
@@ -75,7 +76,7 @@ struct TabBarView: View {
                 Spacer()
 
                 // Title
-                Text("Taby")
+                Text(spaceName)
                     .font(.headline)
                     .fontWeight(.semibold)
 
