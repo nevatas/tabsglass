@@ -416,6 +416,10 @@ final class FormattingTextView: UITextView {
         attributedText = mutableAttr
         selectedRange = savedRange
 
+        // Deselect and reset typing attributes so new text is unformatted
+        selectedRange = NSRange(location: savedRange.location + savedRange.length, length: 0)
+        typingAttributes = defaultTypingAttributes
+
         onTextChange?(attributedText)
     }
 
