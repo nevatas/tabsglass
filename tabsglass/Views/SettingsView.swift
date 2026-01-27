@@ -82,7 +82,7 @@ struct ReorderTabsView: View {
                 HStack {
                     Text(L10n.Reorder.inbox)
                     Spacer()
-                    Image(systemName: "tray.fill")
+                    Image(systemName: "lock.fill")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
