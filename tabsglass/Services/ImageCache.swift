@@ -123,7 +123,7 @@ final class ImageCache {
         }
 
         // Calculate max dimension in pixels
-        let scale = UIScreen.main.scale
+        let scale = UITraitCollection.current.displayScale
         let maxDimension = max(pointSize.width, pointSize.height) * scale
 
         // Create thumbnail with downsampling
