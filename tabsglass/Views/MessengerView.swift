@@ -16,6 +16,7 @@ final class ComposerState {
     var attributedText: NSAttributedString = NSAttributedString()
     var shouldFocus: Bool = false
     var attachedImages: [UIImage] = []
+    var textViewHeight: CGFloat = 24
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
@@ -204,6 +205,9 @@ final class SwiftUIComposerContainer: UIView {
     /// Вычисляет текущую требуемую высоту
     func calculateHeight() -> CGFloat {
         guard let hc = hostingController else { return 102 }
+        if composerState.formattingTextView?.isEditMenuLayoutLocked == true {
+            return currentHeight
+        }
         let screenWidth = window?.windowScene?.screen.bounds.width
         let targetWidth = bounds.width > 0 ? bounds.width : (screenWidth ?? bounds.width)
         let fittingSize = hc.sizeThatFits(in: CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
@@ -212,6 +216,9 @@ final class SwiftUIComposerContainer: UIView {
 
     /// Обновляет высоту и уведомляет parent
     private func updateHeight() {
+        if composerState.formattingTextView?.isEditMenuLayoutLocked == true {
+            return
+        }
         let newHeight = calculateHeight()
         if abs(newHeight - currentHeight) > 1 {
             currentHeight = newHeight
@@ -267,19 +274,36 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
         CGFloat(maxLines) * lineHeight
     }
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator {
+        var cachedWidth: CGFloat = 0
+        var cachedHeight: CGFloat = 24
+    }
+
     func makeUIView(context: Context) -> FormattingTextView {
         let textView = FormattingTextView()
         textView.placeholder = L10n.Composer.placeholder
         textView.textColor = colorScheme == .dark ? .white : .black
 
-        textView.onTextChange = { [self] attrText in
+        textView.onTextChange = { [weak textView, self] attrText in
             state.text = attrText.string
             state.attributedText = attrText
             state.onTextChange?(attrText.string)
 
-            // Enable/disable scroll based on content height
-            let contentHeight = textView.sizeThatFits(CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)).height
-            textView.isScrollEnabled = contentHeight > maxHeight
+            guard let textView = textView else { return }
+            textView.layoutIfNeeded()
+            let contentHeight = textView.contentSize.height
+            let clampedHeight = max(24, min(contentHeight, maxHeight))
+            if abs(state.textViewHeight - clampedHeight) > 1 {
+                state.textViewHeight = clampedHeight
+            }
+            let shouldScroll = contentHeight > maxHeight
+            if textView.isScrollEnabled != shouldScroll {
+                textView.isScrollEnabled = shouldScroll
+            }
         }
 
         textView.onFocusChange = { isFocused in
@@ -294,7 +318,10 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
 
     func updateUIView(_ uiView: FormattingTextView, context: Context) {
         // Update text color for theme
-        uiView.textColor = colorScheme == .dark ? .white : .black
+        let desiredColor: UIColor = colorScheme == .dark ? .white : .black
+        if uiView.textColor != desiredColor {
+            uiView.textColor = desiredColor
+        }
 
         // Handle focus request
         if state.shouldFocus {
@@ -304,16 +331,15 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
             }
         }
 
-        // Update scroll enabled state
-        let contentHeight = uiView.sizeThatFits(CGSize(width: uiView.bounds.width > 0 ? uiView.bounds.width : 300, height: .greatestFiniteMagnitude)).height
-        uiView.isScrollEnabled = contentHeight > maxHeight
+        // Scroll state is updated on text changes only to avoid layout churn.
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: FormattingTextView, context: Context) -> CGSize? {
         let width = proposal.width ?? 300
-        let naturalSize = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        let height = min(naturalSize.height, maxHeight)  // Cap at maxLines
-        return CGSize(width: width, height: max(24, height))  // min height 24
+        let height = max(24, min(state.textViewHeight, maxHeight))
+        context.coordinator.cachedWidth = width
+        context.coordinator.cachedHeight = height
+        return CGSize(width: width, height: height)
     }
 }
 

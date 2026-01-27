@@ -15,6 +15,10 @@ final class FormattingTextView: UITextView {
 
     var onTextChange: ((NSAttributedString) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
+    private(set) var isEditMenuVisible: Bool = false
+    private var editMenuLockUntil: CFTimeInterval = 0
+    private var cachedEditMenuTargetRect: CGRect?
+    private var pendingMenuDismissWorkItem: DispatchWorkItem?
     var placeholder: String = "Note..." {
         didSet {
             placeholderLabel.text = placeholder
@@ -24,6 +28,8 @@ final class FormattingTextView: UITextView {
     }
 
     private let placeholderLabel = UILabel()
+    @available(iOS 16.0, *)
+    private lazy var editMenuInteraction = UIEditMenuInteraction(delegate: self)
 
     override init(frame: CGRect, textContainer: NSTextContainer?) {
         super.init(frame: frame, textContainer: textContainer)
@@ -72,6 +78,8 @@ final class FormattingTextView: UITextView {
             name: .themeDidChange,
             object: nil
         )
+
+        setupEditMenuTracking()
     }
 
     private func updateLinkTextAttributes() {
@@ -88,6 +96,7 @@ final class FormattingTextView: UITextView {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        pendingMenuDismissWorkItem?.cancel()
     }
 
     /// Returns the default text color based on current trait collection
@@ -103,6 +112,8 @@ final class FormattingTextView: UITextView {
     }
 
     @objc private func textDidChange() {
+        pendingMenuDismissWorkItem?.cancel()
+        isEditMenuVisible = false
         placeholderLabel.isHidden = !text.isEmpty
 
         // Reset formatting when text becomes empty
@@ -127,6 +138,7 @@ final class FormattingTextView: UITextView {
         onTextChange?(attributedText)
     }
 
+
     private func resetToDefaultAttributes() {
         let attrs = defaultTypingAttributes
         attributedText = NSAttributedString(string: "", attributes: attrs)
@@ -146,9 +158,50 @@ final class FormattingTextView: UITextView {
     override func resignFirstResponder() -> Bool {
         let result = super.resignFirstResponder()
         if result {
+            isEditMenuVisible = false
             onFocusChange?(false)
         }
         return result
+    }
+
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        beginEditMenuSession()
+        cachedEditMenuTargetRect = currentSelectionRect()
+
+        // Remove system menus we don't need
+        builder.remove(menu: .autoFill)
+        builder.remove(menu: .format)  // Remove system Format menu (we have our own)
+
+        // Create formatting submenu
+        let boldAction = UIAction(title: L10n.Format.bold, image: UIImage(systemName: "bold")) { [weak self] _ in
+            self?.applyBold(nil)
+        }
+
+        let italicAction = UIAction(title: L10n.Format.italic, image: UIImage(systemName: "italic")) { [weak self] _ in
+            self?.applyItalic(nil)
+        }
+
+        let underlineAction = UIAction(title: L10n.Format.underline, image: UIImage(systemName: "underline")) { [weak self] _ in
+            self?.toggleUnderline(nil)
+        }
+
+        let strikethroughAction = UIAction(title: L10n.Format.strikethrough, image: UIImage(systemName: "strikethrough")) { [weak self] _ in
+            self?.applyStrikethrough(nil)
+        }
+
+        let linkAction = UIAction(title: L10n.Format.link, image: UIImage(systemName: "link")) { [weak self] _ in
+            self?.showLinkAlert()
+        }
+
+        let formattingMenu = UIMenu(
+            title: "",
+            options: .displayInline,
+            children: [boldAction, italicAction, underlineAction, strikethroughAction, linkAction]
+        )
+
+        // Insert after standardEdit menu
+        builder.insertSibling(formattingMenu, afterMenu: .standardEdit)
     }
 
     // MARK: - Edit Menu Customization
@@ -185,47 +238,6 @@ final class FormattingTextView: UITextView {
         }
 
         return super.canPerformAction(action, withSender: sender)
-    }
-
-    override func buildMenu(with builder: UIMenuBuilder) {
-        super.buildMenu(with: builder)
-
-        // Remove system menus we don't need
-        builder.remove(menu: .autoFill)
-        builder.remove(menu: .format)  // Remove system Format menu (we have our own)
-
-        // Only add formatting when there's a selection
-        if selectedRange.length > 0 {
-            // Create formatting submenu
-            let boldAction = UIAction(title: L10n.Format.bold, image: UIImage(systemName: "bold")) { [weak self] _ in
-                self?.applyBold(nil)
-            }
-
-            let italicAction = UIAction(title: L10n.Format.italic, image: UIImage(systemName: "italic")) { [weak self] _ in
-                self?.applyItalic(nil)
-            }
-
-            let underlineAction = UIAction(title: L10n.Format.underline, image: UIImage(systemName: "underline")) { [weak self] _ in
-                self?.toggleUnderline(nil)
-            }
-
-            let strikethroughAction = UIAction(title: L10n.Format.strikethrough, image: UIImage(systemName: "strikethrough")) { [weak self] _ in
-                self?.applyStrikethrough(nil)
-            }
-
-            let linkAction = UIAction(title: L10n.Format.link, image: UIImage(systemName: "link")) { [weak self] _ in
-                self?.showLinkAlert()
-            }
-
-            let formattingMenu = UIMenu(
-                title: L10n.Format.menu,
-                image: UIImage(systemName: "textformat"),
-                children: [boldAction, italicAction, underlineAction, strikethroughAction, linkAction]
-            )
-
-            // Insert after standardEdit menu
-            builder.insertSibling(formattingMenu, afterMenu: .standardEdit)
-        }
     }
 
     // MARK: - Formatting Actions
@@ -475,6 +487,82 @@ final class FormattingTextView: UITextView {
     func clear() {
         resetToDefaultAttributes()
         placeholderLabel.isHidden = false
+    }
+
+    private func setupEditMenuTracking() {
+        if #available(iOS 16.0, *) {
+            addInteraction(editMenuInteraction)
+        }
+    }
+
+    var isEditMenuLayoutLocked: Bool {
+        isEditMenuVisible || CACurrentMediaTime() < editMenuLockUntil
+    }
+
+    private func lockEditMenuLayout(duration: TimeInterval = 0.8) {
+        isEditMenuVisible = true
+        editMenuLockUntil = CACurrentMediaTime() + duration
+    }
+
+    private func currentSelectionRect() -> CGRect {
+        guard let range = selectedTextRange else {
+            return caretRect(for: endOfDocument)
+        }
+
+        let firstRect = self.firstRect(for: range)
+        if !firstRect.isNull && !firstRect.isEmpty {
+            return firstRect
+        }
+
+        return caretRect(for: range.start)
+    }
+
+    private func beginEditMenuSession() {
+        pendingMenuDismissWorkItem?.cancel()
+        pendingMenuDismissWorkItem = nil
+        lockEditMenuLayout()
+    }
+
+    private func scheduleEndEditMenuSession(delay: TimeInterval = 0.35) {
+        pendingMenuDismissWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.isEditMenuVisible = false
+        }
+        pendingMenuDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+}
+
+@available(iOS 16.0, *)
+extension FormattingTextView: UIEditMenuInteractionDelegate {
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        willPresentMenuFor configuration: UIEditMenuConfiguration,
+        animator: UIEditMenuInteractionAnimating
+    ) {
+        beginEditMenuSession()
+        cachedEditMenuTargetRect = currentSelectionRect()
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        didDismissMenuFor configuration: UIEditMenuConfiguration
+    ) {
+        scheduleEndEditMenuSession(delay: 0.35)
+        editMenuLockUntil = CACurrentMediaTime() + 0.8
+        cachedEditMenuTargetRect = nil
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        targetRectFor configuration: UIEditMenuConfiguration
+    ) -> CGRect {
+        if let cached = cachedEditMenuTargetRect {
+            return cached
+        }
+        let rect = currentSelectionRect()
+        cachedEditMenuTargetRect = rect
+        return rect
     }
 }
 
