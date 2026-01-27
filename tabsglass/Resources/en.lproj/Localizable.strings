@@ -58,8 +58,8 @@
 
 // MARK: - Empty State
 
-"empty.title" = "No messages yet";
-"empty.subtitle" = "Type a note below to get started";
+"empty.title" = "It's empty here";
+"empty.subtitle" = "Go ahead, add something!";
 
 // MARK: - Formatting
 

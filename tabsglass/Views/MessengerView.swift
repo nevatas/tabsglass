@@ -779,12 +779,11 @@ final class EmptyTableCell: UITableViewCell {
         backgroundColor = .clear
         selectionStyle = .none
 
-        let iconView = UIImageView(image: UIImage(systemName: "bubble.left.and.bubble.right"))
-        iconView.tintColor = .tertiaryLabel
-        iconView.contentMode = .scaleAspectFit
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.heightAnchor.constraint(equalToConstant: 48).isActive = true
-        iconView.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        let emojis = ["🤔", "👋", "🤙", "👀", "👻", "🥰", "🤭", "🤗", "🧠", "🩵", "❤️", "💛"]
+        let emojiLabel = UILabel()
+        emojiLabel.text = emojis.randomElement()
+        emojiLabel.font = .systemFont(ofSize: 48)
+        emojiLabel.textAlignment = .center
 
         let titleLabel = UILabel()
         titleLabel.text = L10n.Empty.title
@@ -799,7 +798,7 @@ final class EmptyTableCell: UITableViewCell {
         stackView.axis = .vertical
         stackView.alignment = .center
         stackView.spacing = 8
-        stackView.addArrangedSubview(iconView)
+        stackView.addArrangedSubview(emojiLabel)
         stackView.addArrangedSubview(titleLabel)
         stackView.addArrangedSubview(subtitleLabel)
         stackView.translatesAutoresizingMaskIntoConstraints = false
@@ -809,7 +808,6 @@ final class EmptyTableCell: UITableViewCell {
         NSLayoutConstraint.activate([
             stackView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             stackView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            contentView.heightAnchor.constraint(equalToConstant: 300)
         ])
     }
 }

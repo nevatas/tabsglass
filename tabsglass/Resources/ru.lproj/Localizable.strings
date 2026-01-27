@@ -58,8 +58,8 @@
 
 // MARK: - Empty State
 
-"empty.title" = "Сообщений пока нет";
-"empty.subtitle" = "Напишите заметку ниже, чтобы начать";
+"empty.title" = "Здесь пусто";
+"empty.subtitle" = "Скорее добавьте что-нибудь!";
 
 // MARK: - Formatting
 

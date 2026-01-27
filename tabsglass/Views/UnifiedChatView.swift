@@ -721,6 +721,12 @@ final class MessageListViewController: UIViewController {
             offset.y -= delta
             tableView.contentOffset = offset
         }
+
+        // Recalculate empty cell height to stay centered
+        if sortedMessages.isEmpty {
+            tableView.beginUpdates()
+            tableView.endUpdates()
+        }
     }
 
     func scrollToBottom(animated: Bool) {
@@ -758,7 +764,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
         if sortedMessages.isEmpty {
-            return 300  // Empty cell height
+            let availableHeight = tableView.bounds.height - tableView.contentInset.top - tableView.contentInset.bottom
+            return max(200, availableHeight)
         }
 
         let message = sortedMessages[indexPath.row]
