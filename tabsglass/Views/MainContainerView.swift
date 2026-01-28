@@ -108,7 +108,7 @@ struct MainContainerView: View {
             TextField(L10n.Tab.titlePlaceholder, text: $newTabTitle)
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.create) {
-                let trimmed = newTabTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = String(newTabTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
                 if !trimmed.isEmpty {
                     createTab(title: trimmed)
                 }
@@ -120,7 +120,7 @@ struct MainContainerView: View {
             TextField(L10n.Tab.titlePlaceholder, text: $renameTabTitle)
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.save) {
-                let trimmed = renameTabTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = String(renameTabTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
                 if !trimmed.isEmpty, let tab = tabToRename {
                     renameTab(tab, to: trimmed)
                 }
@@ -130,7 +130,7 @@ struct MainContainerView: View {
             TextField(L10n.Tab.titlePlaceholder, text: $renameInboxTitle)
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.save) {
-                let trimmed = renameInboxTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = String(renameInboxTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
                 if !trimmed.isEmpty {
                     AppSettings.shared.inboxTitle = trimmed
                 }
