@@ -77,8 +77,8 @@ final class KeyboardWarmer {
     private init() {}
 
     func warmUp() {
-        // Run on next run loop to not block app launch
-        DispatchQueue.main.async { [weak self] in
+        // Delay slightly to ensure window scene is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.performWarmUp()
         }
     }
@@ -108,12 +108,12 @@ final class KeyboardWarmer {
         // Briefly become first responder to load keyboard
         textField.becomeFirstResponder()
 
-        // Resign after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        // Resign after keyboard is loaded (longer delay for full preload)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.warmUpTextField?.resignFirstResponder()
 
-            // Clean up after keyboard is loaded
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            // Clean up
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.warmUpTextField?.removeFromSuperview()
                 self?.warmUpTextField = nil
                 self?.warmUpWindow?.isHidden = true
