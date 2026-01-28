@@ -28,7 +28,7 @@
 "tab.rename" = "Renommer";
 "tab.rename_inbox" = "Renommer la boîte";
 "tab.delete_title" = "Supprimer l'onglet ?";
-"tab.delete_message" = "L'onglet \"%@\" sera supprimé, ses messages seront déplacés vers la boîte de réception";
+"tab.delete_message" = "L'onglet \"%@\" et tous ses messages seront définitivement supprimés";
 "tab.title_placeholder" = "Titre";
 "tab.create" = "Créer";
 "tab.save" = "Enregistrer";

@@ -28,7 +28,7 @@
 "tab.rename" = "Переименовать";
 "tab.rename_inbox" = "Переименовать Inbox";
 "tab.delete_title" = "Удалить таб?";
-"tab.delete_message" = "Таб \"%@\" будет удалён, его сообщения перенесутся в Inbox";
+"tab.delete_message" = "Таб \"%@\" и все его сообщения будут удалены безвозвратно";
 "tab.title_placeholder" = "Название";
 "tab.create" = "Создать";
 "tab.save" = "Сохранить";

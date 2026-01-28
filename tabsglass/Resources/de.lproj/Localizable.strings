@@ -28,7 +28,7 @@
 "tab.rename" = "Umbenennen";
 "tab.rename_inbox" = "Posteingang umbenennen";
 "tab.delete_title" = "Tab löschen?";
-"tab.delete_message" = "Tab \"%@\" wird gelöscht, seine Nachrichten werden in den Posteingang verschoben";
+"tab.delete_message" = "Tab \"%@\" und alle seine Nachrichten werden dauerhaft gelöscht";
 "tab.title_placeholder" = "Titel";
 "tab.create" = "Erstellen";
 "tab.save" = "Speichern";

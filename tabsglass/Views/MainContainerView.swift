@@ -288,12 +288,17 @@ struct MainContainerView: View {
     }
 
     private func deleteTab(_ tab: Tab) {
-        // Move all messages from this tab to Inbox (tabId = nil)
+        // Delete all messages from this tab
         let tabId = tab.id
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.tabId == tabId })
         if let messages = try? modelContext.fetch(descriptor) {
             for message in messages {
-                message.tabId = nil
+                // Delete associated photos
+                for fileName in message.photoFileNames {
+                    let url = Message.photosDirectory.appendingPathComponent(fileName)
+                    try? FileManager.default.removeItem(at: url)
+                }
+                modelContext.delete(message)
             }
         }
 

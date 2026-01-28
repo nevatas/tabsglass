@@ -787,13 +787,14 @@ final class EmptyTableCell: UITableViewCell {
 
         let titleLabel = UILabel()
         titleLabel.text = L10n.Empty.title
-        titleLabel.textColor = .secondaryLabel
-        titleLabel.font = .preferredFont(forTextStyle: .subheadline)
+        titleLabel.textColor = .label
+        let bodyDescriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .body)
+        titleLabel.font = UIFont.systemFont(ofSize: bodyDescriptor.pointSize, weight: .semibold)
 
         let subtitleLabel = UILabel()
         subtitleLabel.text = L10n.Empty.subtitle
-        subtitleLabel.textColor = .tertiaryLabel
-        subtitleLabel.font = .preferredFont(forTextStyle: .caption1)
+        subtitleLabel.textColor = .label.withAlphaComponent(0.5)
+        subtitleLabel.font = .preferredFont(forTextStyle: .body)
 
         stackView.axis = .vertical
         stackView.alignment = .center

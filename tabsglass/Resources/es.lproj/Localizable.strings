@@ -28,7 +28,7 @@
 "tab.rename" = "Renombrar";
 "tab.rename_inbox" = "Renombrar bandeja";
 "tab.delete_title" = "¿Eliminar pestaña?";
-"tab.delete_message" = "La pestaña \"%@\" será eliminada, sus mensajes se moverán a la bandeja de entrada";
+"tab.delete_message" = "La pestaña \"%@\" y todos sus mensajes serán eliminados permanentemente";
 "tab.title_placeholder" = "Título";
 "tab.create" = "Crear";
 "tab.save" = "Guardar";

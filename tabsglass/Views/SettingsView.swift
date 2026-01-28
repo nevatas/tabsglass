@@ -65,6 +65,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            .tint(themeManager.currentTheme.accentColor)
             .navigationTitle(L10n.Settings.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -75,7 +76,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .tint(themeManager.currentTheme.accentColor)
     }
 }
 

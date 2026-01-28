@@ -28,7 +28,7 @@
 "tab.rename" = "Rename";
 "tab.rename_inbox" = "Rename Inbox";
 "tab.delete_title" = "Delete Tab?";
-"tab.delete_message" = "Tab \"%@\" will be deleted, its messages will be moved to Inbox";
+"tab.delete_message" = "Tab \"%@\" and all its messages will be permanently deleted";
 "tab.title_placeholder" = "Title";
 "tab.create" = "Create";
 "tab.save" = "Save";
