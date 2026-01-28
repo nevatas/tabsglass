@@ -5,10 +5,12 @@
 
 import SwiftUI
 import SwiftData
+import StoreKit
 import UIKit
 
 struct MainContainerView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.requestReview) private var requestReview
     @Query(sort: \Tab.position) private var tabs: [Tab]
     @Query(sort: \Message.createdAt) private var allMessages: [Message]
     @State private var selectedTabIndex = 0  // 0 = Inbox (virtual), 1+ = real tabs
@@ -281,6 +283,14 @@ struct MainContainerView: View {
         let maxPosition = tabs.map(\.position).max() ?? -1
         let newTab = Tab(title: title, position: maxPosition + 1)
         modelContext.insert(newTab)
+
+        let key = "hasRequestedReviewAfterTabCreate"
+        if !UserDefaults.standard.bool(forKey: key) {
+            UserDefaults.standard.set(true, forKey: key)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                requestReview()
+            }
+        }
     }
 
     private func renameTab(_ tab: Tab, to newTitle: String) {

@@ -76,6 +76,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .preferredColorScheme(themeManager.currentTheme.colorSchemeOverride)
     }
 }
 

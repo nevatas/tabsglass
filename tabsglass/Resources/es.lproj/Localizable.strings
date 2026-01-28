@@ -18,7 +18,7 @@
 // MARK: - Reorder
 
 "reorder.title" = "Reordenar";
-"reorder.inbox" = "Bandeja de entrada";
+"reorder.inbox" = "📥 Entrada";
 "reorder.inbox_footer" = "La bandeja de entrada siempre se muestra primero";
 
 // MARK: - Tabs

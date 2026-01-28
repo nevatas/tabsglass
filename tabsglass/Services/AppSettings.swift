@@ -258,9 +258,9 @@ final class AppSettings {
 
     private init() {}
 
-    /// Custom title for virtual Inbox tab (default: "Inbox")
+    /// Custom title for virtual Inbox tab (default: "📥 Inbox")
     var inboxTitle: String {
-        get { defaults.string(forKey: Keys.inboxTitle) ?? "Inbox" }
+        get { defaults.string(forKey: Keys.inboxTitle) ?? "📥 Inbox" }
         set { defaults.set(newValue, forKey: Keys.inboxTitle) }
     }
 

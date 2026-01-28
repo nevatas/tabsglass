@@ -18,7 +18,7 @@
 // MARK: - Reorder
 
 "reorder.title" = "Reorder";
-"reorder.inbox" = "Inbox";
+"reorder.inbox" = "📥 Inbox";
 "reorder.inbox_footer" = "Inbox is always displayed first";
 
 // MARK: - Tabs

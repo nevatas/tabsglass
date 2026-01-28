@@ -18,7 +18,7 @@
 // MARK: - Reorder
 
 "reorder.title" = "Réorganiser";
-"reorder.inbox" = "Boîte de réception";
+"reorder.inbox" = "📥 Reçus";
 "reorder.inbox_footer" = "La boîte de réception est toujours affichée en premier";
 
 // MARK: - Tabs
