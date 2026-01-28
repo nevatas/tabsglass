@@ -45,6 +45,8 @@
 "menu.restore_title" = "Notiz wiederherstellen?";
 "menu.restore_message" = "Die kürzlich gelöschte Notiz wird wiederhergestellt";
 "menu.restore" = "Wiederherstellen";
+"menu.remind" = "Erinnern";
+"menu.remove_reminder" = "Erinnerung entfernen";
 
 // MARK: - Themes
 
@@ -92,3 +94,23 @@
 "tasklist.item_placeholder" = "Aufgabe";
 "tasklist.add_item" = "Aufgabe hinzufügen";
 "tasklist.completed" = "%d von %d erledigt";
+
+// MARK: - Reminder
+
+"reminder.title" = "Erinnerungszeit";
+"reminder.time" = "Zeit";
+"reminder.repeat" = "Wiederholen";
+"reminder.remove" = "Erinnerung entfernen";
+"reminder.repeat_never" = "Nie";
+"reminder.repeat_daily" = "Täglich";
+"reminder.repeat_weekly" = "Wöchentlich";
+"reminder.repeat_biweekly" = "Alle 2 Wochen";
+"reminder.repeat_monthly" = "Monatlich";
+"reminder.repeat_quarterly" = "Alle 3 Monate";
+"reminder.repeat_semiannually" = "Alle 6 Monate";
+"reminder.repeat_yearly" = "Jährlich";
+"reminder.send_today" = "Heute um %@ erinnern";
+"reminder.send_tomorrow" = "Morgen um %@ erinnern";
+"reminder.send_on_date" = "Am %@ um %@ erinnern";
+"reminder.notification_title" = "Erinnerung";
+"reminder.notification_body_empty" = "Du hast eine Erinnerung";

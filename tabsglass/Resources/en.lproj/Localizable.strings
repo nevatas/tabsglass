@@ -45,6 +45,8 @@
 "menu.restore_title" = "Restore Note?";
 "menu.restore_message" = "The recently deleted note will be restored";
 "menu.restore" = "Restore";
+"menu.remind" = "Remind";
+"menu.remove_reminder" = "Remove Reminder";
 
 // MARK: - Themes
 
@@ -92,3 +94,23 @@
 "tasklist.item_placeholder" = "Task";
 "tasklist.add_item" = "Add Task";
 "tasklist.completed" = "%d of %d completed";
+
+// MARK: - Reminder
+
+"reminder.title" = "Reminder Time";
+"reminder.time" = "Time";
+"reminder.repeat" = "Repeat";
+"reminder.remove" = "Remove Reminder";
+"reminder.repeat_never" = "Never";
+"reminder.repeat_daily" = "Daily";
+"reminder.repeat_weekly" = "Weekly";
+"reminder.repeat_biweekly" = "Every 2 Weeks";
+"reminder.repeat_monthly" = "Monthly";
+"reminder.repeat_quarterly" = "Every 3 Months";
+"reminder.repeat_semiannually" = "Every 6 Months";
+"reminder.repeat_yearly" = "Yearly";
+"reminder.send_today" = "Remind today at %@";
+"reminder.send_tomorrow" = "Remind tomorrow at %@";
+"reminder.send_on_date" = "Remind %@ at %@";
+"reminder.notification_title" = "Reminder";
+"reminder.notification_body_empty" = "You have a reminder";

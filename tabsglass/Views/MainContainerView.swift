@@ -25,6 +25,7 @@ struct MainContainerView: View {
     @State private var messageToEdit: Message?
     @State private var showTaskListSheet = false
     @State private var taskListToEdit: Message?
+    @State private var messageForReminder: Message?
     @State private var newTabTitle = ""
     @State private var renameTabTitle = ""
     @State private var renameInboxTitle = ""
@@ -83,6 +84,9 @@ struct MainContainerView: View {
                 },
                 onToggleTodoItem: { message, itemId, isCompleted in
                     toggleTodoItem(message: message, itemId: itemId, isCompleted: isCompleted)
+                },
+                onToggleReminder: { message in
+                    messageForReminder = message
                 }
             )
             .ignoresSafeArea(.keyboard)
@@ -275,6 +279,17 @@ struct MainContainerView: View {
                 }
             )
         }
+        .sheet(item: $messageForReminder) { message in
+            ReminderSheet(
+                message: message,
+                onSave: { date, repeatInterval in
+                    saveReminder(message: message, date: date, repeatInterval: repeatInterval)
+                },
+                onRemove: message.hasReminder ? {
+                    removeReminder(message: message)
+                } : nil
+            )
+        }
     }
 
     private func sendMessage() {
@@ -337,6 +352,11 @@ struct MainContainerView: View {
             }
         }
 
+        // Cancel any scheduled reminder notification
+        if let notificationId = message.notificationId {
+            NotificationService.shared.cancelReminder(notificationId: notificationId)
+        }
+
         // Store for undo (don't delete photos yet)
         DeletedMessageStore.shared.store(message)
 
@@ -372,6 +392,35 @@ struct MainContainerView: View {
               let index = items.firstIndex(where: { $0.id == itemId }) else { return }
         items[index].isCompleted = isCompleted
         message.todoItems = items
+    }
+
+    private func saveReminder(message: Message, date: Date, repeatInterval: ReminderRepeatInterval) {
+        // Cancel existing notification if any
+        if let existingId = message.notificationId {
+            NotificationService.shared.cancelReminder(notificationId: existingId)
+        }
+
+        // Schedule new notification
+        Task {
+            if let notificationId = await NotificationService.shared.scheduleReminder(
+                for: message,
+                date: date,
+                repeatInterval: repeatInterval
+            ) {
+                message.reminderDate = date
+                message.reminderRepeatInterval = repeatInterval
+                message.notificationId = notificationId
+            }
+        }
+    }
+
+    private func removeReminder(message: Message) {
+        if let notificationId = message.notificationId {
+            NotificationService.shared.cancelReminder(notificationId: notificationId)
+        }
+        message.reminderDate = nil
+        message.reminderRepeatInterval = nil
+        message.notificationId = nil
     }
 
     private func restoreDeletedMessage() {
@@ -419,6 +468,10 @@ struct MainContainerView: View {
         let tabId = tab.id
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.tabId == tabId })
         if let messages = try? modelContext.fetch(descriptor) {
+            // Collect notification IDs to cancel
+            let notificationIds = messages.compactMap { $0.notificationId }
+            NotificationService.shared.cancelReminders(notificationIds: notificationIds)
+
             for message in messages {
                 // Delete associated photos
                 for fileName in message.photoFileNames {

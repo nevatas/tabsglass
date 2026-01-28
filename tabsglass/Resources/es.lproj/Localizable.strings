@@ -45,6 +45,8 @@
 "menu.restore_title" = "¿Restaurar nota?";
 "menu.restore_message" = "La nota eliminada recientemente será restaurada";
 "menu.restore" = "Restaurar";
+"menu.remind" = "Recordar";
+"menu.remove_reminder" = "Quitar recordatorio";
 
 // MARK: - Themes
 
@@ -92,3 +94,23 @@
 "tasklist.item_placeholder" = "Tarea";
 "tasklist.add_item" = "Añadir tarea";
 "tasklist.completed" = "%d de %d completadas";
+
+// MARK: - Reminder
+
+"reminder.title" = "Hora del recordatorio";
+"reminder.time" = "Hora";
+"reminder.repeat" = "Repetir";
+"reminder.remove" = "Quitar recordatorio";
+"reminder.repeat_never" = "Nunca";
+"reminder.repeat_daily" = "Diario";
+"reminder.repeat_weekly" = "Semanal";
+"reminder.repeat_biweekly" = "Cada 2 semanas";
+"reminder.repeat_monthly" = "Mensual";
+"reminder.repeat_quarterly" = "Cada 3 meses";
+"reminder.repeat_semiannually" = "Cada 6 meses";
+"reminder.repeat_yearly" = "Anual";
+"reminder.send_today" = "Recordar hoy a las %@";
+"reminder.send_tomorrow" = "Recordar mañana a las %@";
+"reminder.send_on_date" = "Recordar el %@ a las %@";
+"reminder.notification_title" = "Recordatorio";
+"reminder.notification_body_empty" = "Tienes un recordatorio";

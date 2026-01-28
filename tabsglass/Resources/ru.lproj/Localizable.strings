@@ -45,6 +45,8 @@
 "menu.restore_title" = "Восстановить заметку?";
 "menu.restore_message" = "Недавно удалённая заметка будет восстановлена";
 "menu.restore" = "Восстановить";
+"menu.remind" = "Напомнить";
+"menu.remove_reminder" = "Убрать напоминание";
 
 // MARK: - Themes
 
@@ -92,3 +94,23 @@
 "tasklist.item_placeholder" = "Задача";
 "tasklist.add_item" = "Добавить задачу";
 "tasklist.completed" = "%d из %d выполнено";
+
+// MARK: - Reminder
+
+"reminder.title" = "Время напоминания";
+"reminder.time" = "Время";
+"reminder.repeat" = "Повторять";
+"reminder.remove" = "Убрать напоминание";
+"reminder.repeat_never" = "Никогда";
+"reminder.repeat_daily" = "Каждый день";
+"reminder.repeat_weekly" = "Каждую неделю";
+"reminder.repeat_biweekly" = "Каждые 2 недели";
+"reminder.repeat_monthly" = "Каждый месяц";
+"reminder.repeat_quarterly" = "Каждые 3 месяца";
+"reminder.repeat_semiannually" = "Каждые 6 месяцев";
+"reminder.repeat_yearly" = "Каждый год";
+"reminder.send_today" = "Напомнить сегодня в %@";
+"reminder.send_tomorrow" = "Напомнить завтра в %@";
+"reminder.send_on_date" = "Напомнить %@ в %@";
+"reminder.notification_title" = "Напоминание";
+"reminder.notification_body_empty" = "У вас есть напоминание";

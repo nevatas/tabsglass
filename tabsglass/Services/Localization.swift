@@ -57,6 +57,8 @@ enum L10n {
         static var restoreTitle: String { NSLocalizedString("menu.restore_title", comment: "Restore note alert title") }
         static var restoreMessage: String { NSLocalizedString("menu.restore_message", comment: "Restore note message") }
         static var restore: String { NSLocalizedString("menu.restore", comment: "Restore action") }
+        static var remind: String { NSLocalizedString("menu.remind", comment: "Remind action") }
+        static var removeReminder: String { NSLocalizedString("menu.remove_reminder", comment: "Remove reminder action") }
     }
 
     // MARK: - Themes
@@ -112,5 +114,32 @@ enum L10n {
         static func completed(_ completed: Int, _ total: Int) -> String {
             String(format: NSLocalizedString("tasklist.completed", comment: "Completed count"), completed, total)
         }
+    }
+
+    // MARK: - Reminder
+    enum Reminder {
+        static var title: String { NSLocalizedString("reminder.title", comment: "Reminder sheet title") }
+        static var time: String { NSLocalizedString("reminder.time", comment: "Time label") }
+        static var repeatLabel: String { NSLocalizedString("reminder.repeat", comment: "Repeat label") }
+        static var remove: String { NSLocalizedString("reminder.remove", comment: "Remove reminder button") }
+
+        // Repeat intervals
+        static var repeatNever: String { NSLocalizedString("reminder.repeat_never", comment: "Never repeat") }
+        static var repeatDaily: String { NSLocalizedString("reminder.repeat_daily", comment: "Daily repeat") }
+        static var repeatWeekly: String { NSLocalizedString("reminder.repeat_weekly", comment: "Weekly repeat") }
+        static var repeatBiweekly: String { NSLocalizedString("reminder.repeat_biweekly", comment: "Biweekly repeat") }
+        static var repeatMonthly: String { NSLocalizedString("reminder.repeat_monthly", comment: "Monthly repeat") }
+        static var repeatQuarterly: String { NSLocalizedString("reminder.repeat_quarterly", comment: "Quarterly repeat") }
+        static var repeatSemiannually: String { NSLocalizedString("reminder.repeat_semiannually", comment: "Semiannually repeat") }
+        static var repeatYearly: String { NSLocalizedString("reminder.repeat_yearly", comment: "Yearly repeat") }
+
+        // Button text
+        static var sendToday: String { NSLocalizedString("reminder.send_today", comment: "Send today button prefix") }
+        static var sendTomorrow: String { NSLocalizedString("reminder.send_tomorrow", comment: "Send tomorrow button prefix") }
+        static var sendOnDate: String { NSLocalizedString("reminder.send_on_date", comment: "Send on date button prefix") }
+
+        // Notifications
+        static var notificationTitle: String { NSLocalizedString("reminder.notification_title", comment: "Notification title") }
+        static var notificationBodyEmpty: String { NSLocalizedString("reminder.notification_body_empty", comment: "Notification body for empty message") }
     }
 }

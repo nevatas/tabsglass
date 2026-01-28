@@ -8,6 +8,19 @@ import SwiftData
 import UIKit
 import os.log
 
+// MARK: - Reminder Repeat Interval
+
+enum ReminderRepeatInterval: String, Codable, CaseIterable {
+    case never
+    case daily
+    case weekly
+    case biweekly
+    case monthly
+    case quarterly
+    case semiannually
+    case yearly
+}
+
 // MARK: - Todo Item
 
 struct TodoItem: Codable, Hashable, Identifiable {
@@ -105,6 +118,14 @@ final class Message: Identifiable {
     var photoAspectRatios: [Double] = []
     var todoItems: [TodoItem]?      // Todo list items (nil = not a todo list)
     var todoTitle: String?          // Optional title for todo list
+    var reminderDate: Date?         // When to send reminder notification
+    var reminderRepeatInterval: ReminderRepeatInterval?  // How often to repeat
+    var notificationId: String?     // ID for canceling scheduled notification
+
+    /// Whether this message has a reminder set
+    var hasReminder: Bool {
+        reminderDate != nil
+    }
 
     /// Check if this message is a todo list
     var isTodoList: Bool {
