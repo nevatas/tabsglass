@@ -26,6 +26,7 @@ struct EditMessageSheet: View {
     @State private var photos: [UIImage] = []
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showCamera = false
+    @State private var showPhotoPicker = false
     @ObservedObject private var themeManager = ThemeManager.shared
     @Environment(\.colorScheme) private var colorScheme
 
@@ -120,11 +121,9 @@ struct EditMessageSheet: View {
                         Label(L10n.Composer.camera, systemImage: "camera")
                     }
 
-                    PhotosPicker(
-                        selection: $selectedPhotoItems,
-                        maxSelectionCount: max(0, 10 - photos.count),
-                        matching: .images
-                    ) {
+                    Button {
+                        showPhotoPicker = true
+                    } label: {
                         Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
                     }
                 } label: {
@@ -155,6 +154,12 @@ struct EditMessageSheet: View {
             }
             .ignoresSafeArea()
         }
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: max(1, 10 - photos.count),
+            matching: .images
+        )
     }
 
     private var canSave: Bool {
