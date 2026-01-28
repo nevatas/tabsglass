@@ -528,6 +528,8 @@ final class MessageTableCell: UITableViewCell {
     private let mosaicView = MosaicMediaView()
     private let messageTextView = UITextView()
     private let todoView = TodoBubbleView()
+    private let reminderBadge = UIView()
+    private let reminderIcon = UIImageView()
 
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
@@ -545,24 +547,60 @@ final class MessageTableCell: UITableViewCell {
     private var mosaicBottomToBubble: NSLayoutConstraint!
     private var todoViewHeightConstraint: NSLayoutConstraint!
     private var todoViewBottomToBubble: NSLayoutConstraint!
+    private var traitChangeRegistration: UITraitChangeRegistration?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         setupCell()
+        registerTraitChanges()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    private func registerTraitChanges() {
+        traitChangeRegistration = registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (cell: MessageTableCell, _) in
+            self?.updateBubbleColor()
+            if let message = self?.cachedMessage, message.isTodoList, let items = message.todoItems {
+                let isDarkMode = cell.traitCollection.userInterfaceStyle == .dark
+                self?.todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
+            }
+        }
+    }
+
     private func setupCell() {
         backgroundColor = .clear
         selectionStyle = .none
+        clipsToBounds = false
+        contentView.clipsToBounds = false
 
         bubbleView.layer.cornerRadius = 18
         bubbleView.clipsToBounds = true
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(bubbleView)
+
+        // Reminder badge (positioned on top-right corner of bubble, slightly outside)
+        reminderBadge.backgroundColor = .systemRed
+        reminderBadge.layer.cornerRadius = 12
+        reminderBadge.translatesAutoresizingMaskIntoConstraints = false
+        reminderBadge.isHidden = true
+        contentView.addSubview(reminderBadge)
+
+        let bellConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        reminderIcon.image = UIImage(systemName: "bell.fill", withConfiguration: bellConfig)
+        reminderIcon.tintColor = .white
+        reminderIcon.translatesAutoresizingMaskIntoConstraints = false
+        reminderBadge.addSubview(reminderIcon)
+
+        NSLayoutConstraint.activate([
+            reminderBadge.widthAnchor.constraint(equalToConstant: 24),
+            reminderBadge.heightAnchor.constraint(equalToConstant: 24),
+            reminderBadge.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: -8),
+            reminderBadge.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: 8),
+            reminderIcon.centerXAnchor.constraint(equalTo: reminderBadge.centerXAnchor),
+            reminderIcon.centerYAnchor.constraint(equalTo: reminderBadge.centerYAnchor),
+        ])
 
         // Mosaic media view
         mosaicView.translatesAutoresizingMaskIntoConstraints = false
@@ -680,6 +718,7 @@ final class MessageTableCell: UITableViewCell {
         super.prepareForReuse()
         cachedMessage = nil
         lastLayoutWidth = 0
+        reminderBadge.isHidden = true
         // Reset constraints
         messageTextViewTopToMosaic.isActive = false
         messageTextViewTopToBubble.isActive = false
@@ -700,6 +739,9 @@ final class MessageTableCell: UITableViewCell {
             let isDarkMode = traitCollection.userInterfaceStyle == .dark
             todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
         }
+
+        // Show/hide reminder badge
+        reminderBadge.isHidden = !message.hasReminder
 
         updateBubbleColor()
 
