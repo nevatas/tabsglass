@@ -106,6 +106,7 @@ enum L10n {
     // MARK: - Task List
     enum TaskList {
         static var title: String { NSLocalizedString("tasklist.title", comment: "Task list sheet title") }
+        static var titlePlaceholder: String { NSLocalizedString("tasklist.title_placeholder", comment: "Task list title placeholder") }
         static var itemPlaceholder: String { NSLocalizedString("tasklist.item_placeholder", comment: "Task item placeholder") }
         static var addItem: String { NSLocalizedString("tasklist.add_item", comment: "Add task button") }
         static func completed(_ completed: Int, _ total: Int) -> String {

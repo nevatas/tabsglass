@@ -12,12 +12,14 @@ final class TodoBubbleView: UIView {
     /// Callback when a checkbox is toggled: (itemId, isCompleted)
     var onToggle: ((UUID, Bool) -> Void)?
 
+    private let titleLabel = UILabel()
     private let stackView = UIStackView()
     private let footerLabel = UILabel()
     private var checkboxRows: [TodoCheckboxRow] = []
     private var separators: [UIView] = []
     private var items: [TodoItem] = []
     private var isDarkMode: Bool = false
+    private var titleLabelHeightConstraint: NSLayoutConstraint!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -29,6 +31,12 @@ final class TodoBubbleView: UIView {
     }
 
     private func setupView() {
+        // Title label
+        titleLabel.font = .boldSystemFont(ofSize: 16)
+        titleLabel.numberOfLines = 0
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
         stackView.axis = .vertical
         stackView.spacing = 0
         stackView.alignment = .fill
@@ -41,8 +49,15 @@ final class TodoBubbleView: UIView {
         footerLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(footerLabel)
 
+        titleLabelHeightConstraint = titleLabel.heightAnchor.constraint(equalToConstant: 0)
+
         NSLayoutConstraint.activate([
-            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            titleLabelHeightConstraint,
+
+            stackView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
             stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
 
@@ -53,9 +68,30 @@ final class TodoBubbleView: UIView {
         ])
     }
 
-    func configure(with items: [TodoItem], isDarkMode: Bool) {
+    func configure(with title: String?, items: [TodoItem], isDarkMode: Bool) {
         self.items = items
         self.isDarkMode = isDarkMode
+
+        // Configure title
+        let textColor: UIColor = isDarkMode ? .white : .black
+        if let title = title, !title.isEmpty {
+            titleLabel.text = title
+            titleLabel.textColor = textColor
+            titleLabel.isHidden = false
+            // Calculate title height
+            let titleWidth = bounds.width - 28  // 14 + 14 padding
+            let titleHeight = title.boundingRect(
+                with: CGSize(width: max(titleWidth, 200), height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: UIFont.boldSystemFont(ofSize: 16)],
+                context: nil
+            ).height
+            titleLabelHeightConstraint.constant = ceil(titleHeight)
+        } else {
+            titleLabel.text = nil
+            titleLabel.isHidden = true
+            titleLabelHeightConstraint.constant = 0
+        }
 
         // Clear existing views
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -94,7 +130,7 @@ final class TodoBubbleView: UIView {
 
         NSLayoutConstraint.activate([
             container.heightAnchor.constraint(equalToConstant: 1),
-            line.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 36), // Align with text (checkbox 24 + spacing 12)
+            line.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 40), // Align with text (checkbox 30 + spacing 10)
             line.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             line.centerYAnchor.constraint(equalTo: container.centerYAnchor),
             line.heightAnchor.constraint(equalToConstant: 0.5)
@@ -120,18 +156,32 @@ final class TodoBubbleView: UIView {
     }
 
     /// Calculate height for given items and max width
-    static func calculateHeight(for items: [TodoItem], maxWidth: CGFloat) -> CGFloat {
+    static func calculateHeight(for title: String?, items: [TodoItem], maxWidth: CGFloat) -> CGFloat {
         guard !items.isEmpty else { return 0 }
 
         let horizontalPadding: CGFloat = 24  // 12 + 12
-        let topPadding: CGFloat = 4
+        let titleHorizontalPadding: CGFloat = 28  // 14 + 14
         let bottomPadding: CGFloat = 10
         let footerHeight: CGFloat = 20  // font 14 + some padding
         let footerSpacing: CGFloat = 8
         let separatorHeight: CGFloat = 1
         let availableWidth = maxWidth - horizontalPadding
 
-        var totalHeight = topPadding
+        var totalHeight: CGFloat = 0
+
+        // Title height
+        if let title = title, !title.isEmpty {
+            let titleWidth = maxWidth - titleHorizontalPadding
+            let titleHeight = title.boundingRect(
+                with: CGSize(width: titleWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: UIFont.boldSystemFont(ofSize: 16)],
+                context: nil
+            ).height
+            totalHeight += 12 + ceil(titleHeight) + 4  // top padding + title + spacing to stack
+        } else {
+            totalHeight += 4  // just top padding for stack
+        }
 
         for (index, item) in items.enumerated() {
             let rowHeight = TodoCheckboxRow.calculateHeight(for: item.text, maxWidth: availableWidth)
@@ -179,16 +229,21 @@ final class TodoCheckboxRow: UIView {
         // Text label
         textLabel.font = .systemFont(ofSize: 16)
         textLabel.numberOfLines = 0
+        textLabel.isUserInteractionEnabled = true
         textLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(textLabel)
 
+        // Tap on text also toggles checkbox
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(checkboxTapped))
+        textLabel.addGestureRecognizer(tapGesture)
+
         NSLayoutConstraint.activate([
             checkboxButton.leadingAnchor.constraint(equalTo: leadingAnchor),
-            checkboxButton.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            checkboxButton.widthAnchor.constraint(equalToConstant: 24),
-            checkboxButton.heightAnchor.constraint(equalToConstant: 24),
+            checkboxButton.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            checkboxButton.widthAnchor.constraint(equalToConstant: 30),
+            checkboxButton.heightAnchor.constraint(equalToConstant: 30),
 
-            textLabel.leadingAnchor.constraint(equalTo: checkboxButton.trailingAnchor, constant: 12),
+            textLabel.leadingAnchor.constraint(equalTo: checkboxButton.trailingAnchor, constant: 10),
             textLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
             textLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
             textLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12)
@@ -219,7 +274,7 @@ final class TodoCheckboxRow: UIView {
 
     private func updateCheckboxAppearance() {
         let imageName = isCompleted ? "checkmark.circle.fill" : "circle"
-        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+        let config = UIImage.SymbolConfiguration(pointSize: 26, weight: .regular)
         let image = UIImage(systemName: imageName, withConfiguration: config)
         checkboxButton.setImage(image, for: .normal)
         checkboxButton.tintColor = isCompleted ? .systemGreen : .secondaryLabel
@@ -228,6 +283,13 @@ final class TodoCheckboxRow: UIView {
     @objc private func checkboxTapped() {
         guard let itemId = itemId else { return }
         isCompleted.toggle()
+
+        // Haptic feedback when completing a task
+        if isCompleted {
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        }
+
         updateCheckboxAppearance()
 
         // Get current text
@@ -255,8 +317,8 @@ final class TodoCheckboxRow: UIView {
 
     /// Calculate height for a row with given text and max width
     static func calculateHeight(for text: String, maxWidth: CGFloat) -> CGFloat {
-        let checkboxWidth: CGFloat = 24
-        let spacing: CGFloat = 12
+        let checkboxWidth: CGFloat = 30
+        let spacing: CGFloat = 10
         let verticalPadding: CGFloat = 24  // 12 top + 12 bottom
         let textWidth = maxWidth - checkboxWidth - spacing
 

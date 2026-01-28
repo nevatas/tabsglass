@@ -416,9 +416,9 @@ struct EmbeddedComposerView: View {
                     HStack {
                     Menu {
                         Button {
-                            state.onShowCamera?()
+                            state.onShowTaskList?()
                         } label: {
-                            Label(L10n.Composer.camera, systemImage: "camera")
+                            Label(L10n.Composer.list, systemImage: "checklist")
                         }
 
                         Button {
@@ -428,9 +428,9 @@ struct EmbeddedComposerView: View {
                         }
 
                         Button {
-                            state.onShowTaskList?()
+                            state.onShowCamera?()
                         } label: {
-                            Label(L10n.Composer.list, systemImage: "checklist")
+                            Label(L10n.Composer.camera, systemImage: "camera")
                         }
                     } label: {
                         Image(systemName: "plus")
@@ -672,7 +672,7 @@ final class MessageTableCell: UITableViewCell {
         // Configure todo view if this is a todo list
         if message.isTodoList, let items = message.todoItems {
             let isDarkMode = traitCollection.userInterfaceStyle == .dark
-            todoView.configure(with: items, isDarkMode: isDarkMode)
+            todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
         }
 
         updateBubbleColor()
@@ -784,7 +784,7 @@ final class MessageTableCell: UITableViewCell {
 
         // Configure todo view
         if hasTodo, let items = message.todoItems {
-            let todoHeight = TodoBubbleView.calculateHeight(for: items, maxWidth: bubbleWidth)
+            let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             todoViewHeightConstraint.constant = todoHeight
             todoView.isHidden = false
             todoViewBottomToBubble.isActive = true

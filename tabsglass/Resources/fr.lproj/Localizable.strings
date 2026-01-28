@@ -88,6 +88,7 @@
 // MARK: - Task List
 
 "tasklist.title" = "Nouvelle liste";
+"tasklist.title_placeholder" = "Nom de la liste (facultatif)";
 "tasklist.item_placeholder" = "Tâche";
 "tasklist.add_item" = "Ajouter une tâche";
 "tasklist.completed" = "%d sur %d terminées";

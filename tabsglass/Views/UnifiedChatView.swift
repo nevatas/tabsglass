@@ -797,7 +797,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
         // Todo list message
         if message.isTodoList, let items = message.todoItems {
-            let todoHeight = TodoBubbleView.calculateHeight(for: items, maxWidth: bubbleWidth)
+            let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             height += todoHeight
             return max(height, 50)
         }

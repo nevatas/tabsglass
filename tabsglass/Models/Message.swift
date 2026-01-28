@@ -104,6 +104,7 @@ final class Message: Identifiable {
     var photoFileNames: [String] = []
     var photoAspectRatios: [Double] = []
     var todoItems: [TodoItem]?      // Todo list items (nil = not a todo list)
+    var todoTitle: String?          // Optional title for todo list
 
     /// Check if this message is a todo list
     var isTodoList: Bool {

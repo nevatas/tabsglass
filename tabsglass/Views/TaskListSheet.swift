@@ -9,30 +9,37 @@ import SwiftUI
 
 struct TaskListSheet: View {
     @Environment(\.colorScheme) private var colorScheme
+    @State private var listTitle: String
     @State private var items: [EditableTodoItem]
     @FocusState private var focusedItemId: UUID?
+    @FocusState private var isTitleFocused: Bool
 
+    let existingTitle: String?
     let existingItems: [TodoItem]?
-    let onSave: ([TodoItem]) -> Void
+    let onSave: (String?, [TodoItem]) -> Void
     let onCancel: () -> Void
 
     private let maxItems = 20
 
     /// Create mode
-    init(onSave: @escaping ([TodoItem]) -> Void, onCancel: @escaping () -> Void) {
+    init(onSave: @escaping (String?, [TodoItem]) -> Void, onCancel: @escaping () -> Void) {
+        self.existingTitle = nil
         self.existingItems = nil
         self.onSave = onSave
         self.onCancel = onCancel
+        _listTitle = State(initialValue: "")
         // Start with one empty item
         let initialItem = EditableTodoItem(text: "", isCompleted: false)
         _items = State(initialValue: [initialItem])
     }
 
     /// Edit mode
-    init(existingItems: [TodoItem], onSave: @escaping ([TodoItem]) -> Void, onCancel: @escaping () -> Void) {
+    init(existingTitle: String?, existingItems: [TodoItem], onSave: @escaping (String?, [TodoItem]) -> Void, onCancel: @escaping () -> Void) {
+        self.existingTitle = existingTitle
         self.existingItems = existingItems
         self.onSave = onSave
         self.onCancel = onCancel
+        _listTitle = State(initialValue: existingTitle ?? "")
         _items = State(initialValue: existingItems.map { EditableTodoItem(from: $0) })
     }
 
@@ -52,27 +59,45 @@ struct TaskListSheet: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 List {
-                    ForEach($items) { $item in
-                        TaskItemRow(
-                            item: $item,
-                            isFocused: focusedItemId == item.id,
-                            canDelete: items.count > 1,
-                            onDelete: { deleteItem(item) },
-                            onSubmit: { addNewItemAfter(item, proxy: proxy) }
-                        )
-                        .focused($focusedItemId, equals: item.id)
-                        .id(item.id)
+                    // Title section
+                    Section {
+                        TextField(L10n.TaskList.titlePlaceholder, text: $listTitle)
+                            .font(.headline)
+                            .focused($isTitleFocused)
+                            .submitLabel(.next)
+                            .onSubmit {
+                                if let first = items.first {
+                                    focusedItemId = first.id
+                                }
+                            }
                     }
 
-                    if canAddMore {
-                        Button {
-                            addNewItem(proxy: proxy)
-                        } label: {
-                            Label(L10n.TaskList.addItem, systemImage: "plus")
+                    // Tasks section
+                    Section {
+                        ForEach($items) { $item in
+                            TaskItemRow(
+                                item: $item,
+                                canDelete: items.count > 1,
+                                onDelete: { deleteItem(item) },
+                                onSubmit: { addNewItemAfter(item, proxy: proxy) }
+                            )
+                            .focused($focusedItemId, equals: item.id)
+                            .id(item.id)
+                        }
+                        .onMove(perform: moveItem)
+                        .deleteDisabled(true)
+
+                        if canAddMore {
+                            Button {
+                                addNewItem(proxy: proxy)
+                            } label: {
+                                Label(L10n.TaskList.addItem, systemImage: "plus")
+                            }
                         }
                     }
                 }
                 .listStyle(.insetGrouped)
+                .environment(\.editMode, .constant(.active))
             }
             .navigationTitle(isEditMode ? L10n.Menu.edit : L10n.TaskList.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -97,7 +122,7 @@ struct TaskListSheet: View {
                 }
             }
             .onAppear {
-                // Focus first item on appear
+                // Focus first task item on appear
                 if let first = items.first {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         focusedItemId = first.id
@@ -134,6 +159,10 @@ struct TaskListSheet: View {
         }
     }
 
+    private func moveItem(from source: IndexSet, to destination: Int) {
+        items.move(fromOffsets: source, toOffset: destination)
+    }
+
     private func deleteItem(_ item: EditableTodoItem) {
         guard items.count > 1 else { return }
         if let index = items.firstIndex(where: { $0.id == item.id }) {
@@ -147,10 +176,13 @@ struct TaskListSheet: View {
     }
 
     private func save() {
+        let trimmedTitle = listTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title: String? = trimmedTitle.isEmpty ? nil : trimmedTitle
+
         let todoItems = items
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map { TodoItem(id: $0.id, text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines), isCompleted: $0.isCompleted) }
-        onSave(todoItems)
+        onSave(title, todoItems)
     }
 }
 
@@ -178,33 +210,12 @@ private struct EditableTodoItem: Identifiable {
 
 private struct TaskItemRow: View {
     @Binding var item: EditableTodoItem
-    let isFocused: Bool
     let canDelete: Bool
     let onDelete: () -> Void
     let onSubmit: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            // Checkbox (only in edit mode for existing items)
-            Button {
-                item.isCompleted.toggle()
-            } label: {
-                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22))
-                    .foregroundStyle(item.isCompleted ? .green : .secondary)
-            }
-            .buttonStyle(.plain)
-
-            // Text field
-            TextField(L10n.TaskList.itemPlaceholder, text: $item.text)
-                .strikethrough(item.isCompleted)
-                .foregroundStyle(item.isCompleted ? .secondary : .primary)
-                .submitLabel(.next)
-                .onSubmit {
-                    onSubmit()
-                }
-
-            // Delete button
             if canDelete {
                 Button {
                     onDelete()
@@ -215,15 +226,21 @@ private struct TaskItemRow: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            TextField(L10n.TaskList.itemPlaceholder, text: $item.text, axis: .vertical)
+                .lineLimit(1...10)
+                .submitLabel(.next)
+                .onSubmit {
+                    onSubmit()
+                }
         }
-        .contentShape(Rectangle())
     }
 }
 
 #Preview {
     TaskListSheet(
-        onSave: { items in
-            print("Saved: \(items)")
+        onSave: { title, items in
+            print("Saved: \(title ?? "no title"), \(items)")
         },
         onCancel: {
             print("Cancelled")

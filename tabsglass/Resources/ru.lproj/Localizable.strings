@@ -88,6 +88,7 @@
 // MARK: - Task List
 
 "tasklist.title" = "Новый список";
+"tasklist.title_placeholder" = "Название списка (необязательно)";
 "tasklist.item_placeholder" = "Задача";
 "tasklist.add_item" = "Добавить задачу";
 "tasklist.completed" = "%d из %d выполнено";

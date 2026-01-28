@@ -88,6 +88,7 @@
 // MARK: - Task List
 
 "tasklist.title" = "New List";
+"tasklist.title_placeholder" = "List name (optional)";
 "tasklist.item_placeholder" = "Task";
 "tasklist.add_item" = "Add Task";
 "tasklist.completed" = "%d of %d completed";

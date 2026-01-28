@@ -253,8 +253,8 @@ struct MainContainerView: View {
         }
         .sheet(isPresented: $showTaskListSheet) {
             TaskListSheet(
-                onSave: { items in
-                    sendTaskListMessage(items: items)
+                onSave: { title, items in
+                    sendTaskListMessage(title: title, items: items)
                     showTaskListSheet = false
                 },
                 onCancel: {
@@ -264,9 +264,10 @@ struct MainContainerView: View {
         }
         .sheet(item: $taskListToEdit) { message in
             TaskListSheet(
+                existingTitle: message.todoTitle,
                 existingItems: message.todoItems ?? [],
-                onSave: { items in
-                    updateTaskList(message: message, newItems: items)
+                onSave: { title, items in
+                    updateTaskList(message: message, newTitle: title, newItems: items)
                     taskListToEdit = nil
                 },
                 onCancel: {
@@ -347,19 +348,21 @@ struct MainContainerView: View {
         message.tabId = targetTabId
     }
 
-    private func sendTaskListMessage(items: [TodoItem]) {
+    private func sendTaskListMessage(title: String?, items: [TodoItem]) {
         guard !items.isEmpty else { return }
 
         let message = Message(content: "", tabId: currentTabId)
+        message.todoTitle = title
         message.todoItems = items
         modelContext.insert(message)
     }
 
-    private func updateTaskList(message: Message, newItems: [TodoItem]) {
+    private func updateTaskList(message: Message, newTitle: String?, newItems: [TodoItem]) {
         if newItems.isEmpty {
             // Delete message if all items removed
             modelContext.delete(message)
         } else {
+            message.todoTitle = newTitle
             message.todoItems = newItems
         }
     }
