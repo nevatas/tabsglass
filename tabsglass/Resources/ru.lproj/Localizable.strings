@@ -32,6 +32,7 @@
 "tab.title_placeholder" = "Название";
 "tab.create" = "Создать";
 "tab.save" = "Сохранить";
+"tab.move" = "Переместить";
 "tab.delete" = "Удалить";
 "tab.cancel" = "Отмена";
 

@@ -19,6 +19,7 @@ struct MainContainerView: View {
     @State private var showRenameInboxAlert = false
     @State private var showDeleteAlert = false
     @State private var showSettings = false
+    @State private var showReorderTabs = false
     @State private var tabToRename: Tab?
     @State private var tabToDelete: Tab?
     @State private var messageToEdit: Message?
@@ -93,6 +94,9 @@ struct MainContainerView: View {
                 onRenameInbox: {
                     renameInboxTitle = AppSettings.shared.inboxTitle
                     showRenameInboxAlert = true
+                },
+                onReorderTabs: {
+                    showReorderTabs = true
                 },
                 onDeleteTab: { tab in
                     tabToDelete = tab
@@ -169,9 +173,33 @@ struct MainContainerView: View {
             EditMessageSheet(
                 originalText: message.content,
                 originalEntities: message.entities,
-                onSave: { newText, newEntities in
+                originalPhotoFileNames: message.photoFileNames,
+                onSave: { newText, newEntities, newPhotoFileNames in
+                    let originalFileNames = message.photoFileNames
+                    let originalAspectRatios = message.photoAspectRatios
+
+                    // Delete removed photos from disk
+                    let removedPhotos = originalFileNames.filter { !newPhotoFileNames.contains($0) }
+                    for fileName in removedPhotos {
+                        let url = Message.photosDirectory.appendingPathComponent(fileName)
+                        try? FileManager.default.removeItem(at: url)
+                    }
+
+                    // Update aspect ratios to match remaining photos
+                    let newAspectRatios: [Double] = newPhotoFileNames.compactMap { fileName in
+                        if let index = originalFileNames.firstIndex(of: fileName),
+                           index < originalAspectRatios.count {
+                            return originalAspectRatios[index]
+                        }
+                        return nil
+                    }
+
+                    // Update message
                     message.content = newText
                     message.entities = newEntities
+                    message.photoFileNames = newPhotoFileNames
+                    message.photoAspectRatios = newAspectRatios
+
                     messageToEdit = nil
                 },
                 onCancel: {
@@ -183,6 +211,11 @@ struct MainContainerView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .sheet(isPresented: $showReorderTabs) {
+            NavigationStack {
+                ReorderTabsView()
+            }
         }
     }
 

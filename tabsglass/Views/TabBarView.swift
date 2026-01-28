@@ -53,6 +53,7 @@ struct TabBarView: View {
     let onMenuTap: () -> Void
     let onRenameTab: (Tab) -> Void
     let onRenameInbox: () -> Void
+    let onReorderTabs: () -> Void
     let onDeleteTab: (Tab) -> Void
 
     @ObservedObject private var themeManager = ThemeManager.shared
@@ -102,6 +103,7 @@ struct TabBarView: View {
                 switchFraction: $switchFraction,
                 onRenameTab: onRenameTab,
                 onRenameInbox: onRenameInbox,
+                onReorderTabs: onReorderTabs,
                 onDeleteTab: onDeleteTab
             )
             .padding(.horizontal, 12)
@@ -150,6 +152,7 @@ struct TelegramTabBar: View {
     @Binding var switchFraction: CGFloat
     let onRenameTab: (Tab) -> Void
     let onRenameInbox: () -> Void
+    let onReorderTabs: () -> Void
     let onDeleteTab: (Tab) -> Void
 
     // Track frames of each tab for selection indicator positioning
@@ -177,6 +180,7 @@ struct TelegramTabBar: View {
                             TabLabelView(
                                 item: item,
                                 selectionProgress: selectionProgress(for: index),
+                                showReorder: tabs.count > 1,
                                 onTap: {
                                     withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
                                         selectedIndex = index
@@ -189,6 +193,7 @@ struct TelegramTabBar: View {
                                         onRenameTab(tab)
                                     }
                                 },
+                                onReorder: onReorderTabs,
                                 onDelete: {
                                     if let tab = item.tab {
                                         onDeleteTab(tab)
@@ -310,8 +315,10 @@ struct TabLabelView: View {
     @Environment(\.colorScheme) private var colorScheme
     let item: TabDisplayItem
     let selectionProgress: CGFloat
+    let showReorder: Bool
     let onTap: () -> Void
     let onRename: () -> Void
+    let onReorder: () -> Void
     let onDelete: () -> Void
 
     // Text color interpolation: gray → white/black
@@ -342,8 +349,16 @@ struct TabLabelView: View {
                 Label(L10n.Tab.rename, systemImage: "pencil")
             }
 
-            // Delete only for real tabs (not Inbox)
+            // Reorder and Delete only for real tabs (not Inbox)
             if !item.isInbox {
+                if showReorder {
+                    Button {
+                        onReorder()
+                    } label: {
+                        Label(L10n.Tab.move, systemImage: "arrow.up.arrow.down")
+                    }
+                }
+
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
@@ -385,6 +400,7 @@ struct TabPressStyle: ButtonStyle {
             onMenuTap: {},
             onRenameTab: { _ in },
             onRenameInbox: {},
+            onReorderTabs: {},
             onDeleteTab: { _ in }
         )
         Spacer()

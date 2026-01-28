@@ -43,6 +43,7 @@ enum L10n {
         static var titlePlaceholder: String { NSLocalizedString("tab.title_placeholder", comment: "Tab title placeholder") }
         static var create: String { NSLocalizedString("tab.create", comment: "Create button") }
         static var save: String { NSLocalizedString("tab.save", comment: "Save button") }
+        static var move: String { NSLocalizedString("tab.move", comment: "Move tab action") }
         static var delete: String { NSLocalizedString("tab.delete", comment: "Delete button") }
         static var cancel: String { NSLocalizedString("tab.cancel", comment: "Cancel button") }
     }

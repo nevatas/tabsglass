@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import WebKit
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -52,11 +53,19 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Link(destination: URL(string: "https://nevatas.github.io/taby-legal/PRIVACY_POLICY")!) {
+                    NavigationLink {
+                        WebView(url: URL(string: "https://nevatas.github.io/taby-legal/PRIVACY_POLICY")!)
+                            .navigationTitle(L10n.Settings.privacyPolicy)
+                            .navigationBarTitleDisplayMode(.inline)
+                    } label: {
                         Label(L10n.Settings.privacyPolicy, systemImage: "hand.raised")
                     }
 
-                    Link(destination: URL(string: "https://nevatas.github.io/taby-legal/TERMS_OF_USE")!) {
+                    NavigationLink {
+                        WebView(url: URL(string: "https://nevatas.github.io/taby-legal/TERMS_OF_USE")!)
+                            .navigationTitle(L10n.Settings.terms)
+                            .navigationBarTitleDisplayMode(.inline)
+                    } label: {
                         Label(L10n.Settings.terms, systemImage: "doc.text")
                     }
 
@@ -234,6 +243,20 @@ struct ThemeRowView: View {
             return Color(red: 0x29/255, green: 0x8D/255, blue: 0xF5/255)
         }
     }
+}
+
+// MARK: - Web View
+
+struct WebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView()
+        webView.load(URLRequest(url: url))
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
 
 #Preview {

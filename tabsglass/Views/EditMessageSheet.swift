@@ -15,11 +15,14 @@ final class EditTextViewHolder {
 struct EditMessageSheet: View {
     let originalText: String
     let originalEntities: [TextEntity]?
-    let onSave: (String, [TextEntity]?) -> Void
+    let originalPhotoFileNames: [String]
+    let onSave: (String, [TextEntity]?, [String]) -> Void
     let onCancel: () -> Void
 
     @State private var text: String = ""
     @State private var holder = EditTextViewHolder()
+    @State private var photoFileNames: [String] = []
+    @State private var photos: [UIImage] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,7 +60,10 @@ struct EditMessageSheet: View {
 
                         // Also detect URLs
                         adjustedEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))
-                        onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities)
+                        onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames)
+                    } else if !photoFileNames.isEmpty {
+                        // Allow saving with only photos (no text)
+                        onSave("", nil, photoFileNames)
                     }
                 } label: {
                     Image(systemName: "checkmark")
@@ -73,6 +79,22 @@ struct EditMessageSheet: View {
             .padding(.top, 20)
             .padding(.bottom, 16)
 
+            // Attached photos (if any)
+            if !photos.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(photos.enumerated()), id: \.offset) { index, image in
+                            EditAttachedImageView(image: image) {
+                                removePhoto(at: index)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+                .frame(height: 92)
+                .padding(.bottom, 12)
+            }
+
             // Formatting text editor
             EditFormattingTextView(
                 text: $text,
@@ -84,11 +106,56 @@ struct EditMessageSheet: View {
 
             Spacer()
         }
+        .onAppear {
+            text = originalText
+            photoFileNames = originalPhotoFileNames
+            loadPhotos()
+        }
     }
 
     private var canSave: Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty
+        return !trimmed.isEmpty || !photoFileNames.isEmpty
+    }
+
+    private func loadPhotos() {
+        photos = photoFileNames.compactMap { fileName in
+            let url = Message.photosDirectory.appendingPathComponent(fileName)
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return UIImage(data: data)
+        }
+    }
+
+    private func removePhoto(at index: Int) {
+        guard index < photoFileNames.count && index < photos.count else { return }
+        photoFileNames.remove(at: index)
+        photos.remove(at: index)
+    }
+}
+
+// MARK: - Edit Attached Image View
+
+struct EditAttachedImageView: View {
+    let image: UIImage
+    let onRemove: () -> Void
+
+    var body: some View {
+        Image(uiImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: 80, height: 80)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(alignment: .topTrailing) {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 20, height: 20)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Circle())
+                }
+                .padding(4)
+            }
     }
 }
 
@@ -192,7 +259,8 @@ struct EditFormattingTextView: UIViewRepresentable {
     EditMessageSheet(
         originalText: text,
         originalEntities: nil,
-        onSave: { _, _ in },
+        originalPhotoFileNames: [],
+        onSave: { _, _, _ in },
         onCancel: { }
     )
 }
