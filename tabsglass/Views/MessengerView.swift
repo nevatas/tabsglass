@@ -8,6 +8,13 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Identifiable Image Wrapper
+
+struct IdentifiableImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
 // MARK: - Composer State (Observable)
 
 @Observable
@@ -15,7 +22,7 @@ final class ComposerState {
     var text: String = ""
     var attributedText: NSAttributedString = NSAttributedString()
     var shouldFocus: Bool = false
-    var attachedImages: [UIImage] = []
+    var attachedImages: [IdentifiableImage] = []
     var textViewHeight: CGFloat = 24
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)?
@@ -41,20 +48,25 @@ final class ComposerState {
         let isLastImage = attachedImages.count == 1
 
         if isLastImage {
-            // For last image: remove immediately without animation
+            // Last image: remove without animation
             imagesSectionHeight = 0
             attachedImages.removeAll()
-            onAttachmentChange?()
         } else {
-            // For non-last: just remove
-            attachedImages.remove(at: index)
-            onAttachmentChange?()
+            withAnimation(.easeOut(duration: 0.2)) {
+                attachedImages.remove(at: index)
+            }
         }
+        onAttachmentChange?()
+    }
+
+    func removeImage(id: UUID) {
+        guard let index = attachedImages.firstIndex(where: { $0.id == id }) else { return }
+        removeImage(at: index)
     }
 
     func addImages(_ images: [UIImage]) {
         let available = 10 - attachedImages.count
-        let toAdd = Array(images.prefix(available))
+        let toAdd = images.prefix(available).map { IdentifiableImage(image: $0) }
         attachedImages.append(contentsOf: toAdd)
         // Set height when adding first images (80 images + 12 spacing = 92)
         if imagesSectionHeight == 0 && !attachedImages.isEmpty {
@@ -153,7 +165,7 @@ final class SwiftUIComposerContainer: UIView {
         composerState.onAttachmentChange = { [weak self] in
             guard let self = self else { return }
             // Notify about images change
-            self.onImagesChange?(self.composerState.attachedImages)
+            self.onImagesChange?(self.composerState.attachedImages.map { $0.image })
             // Update height with small delays to catch SwiftUI layout changes
             DispatchQueue.main.async {
                 self.updateHeight()
@@ -169,7 +181,7 @@ final class SwiftUIComposerContainer: UIView {
 
     /// Get currently attached images
     var attachedImages: [UIImage] {
-        composerState.attachedImages
+        composerState.attachedImages.map { $0.image }
     }
 
     /// Add images from picker
@@ -391,15 +403,18 @@ struct EmbeddedComposerView: View {
                     // Attached images row - height includes spacing (80 + 12 = 92, or 0)
                     if !state.attachedImages.isEmpty {
                         VStack(spacing: 0) {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(Array(state.attachedImages.enumerated()), id: \.offset) { index, image in
-                                        AttachedImageView(image: image) {
-                                            state.removeImage(at: index)
+                            ScrollView(.horizontal) {
+                                LazyHStack(spacing: 8) {
+                                    ForEach(state.attachedImages) { item in
+                                        AttachedImageView(image: item.image) {
+                                            state.removeImage(id: item.id)
                                         }
+                                        .transition(.scale.combined(with: .opacity))
                                     }
                                 }
+                                .padding(.horizontal, 8)
                             }
+                            .scrollIndicators(.hidden)
                             .frame(height: 80)
 
                             Spacer().frame(height: 12) // spacing below images
@@ -409,56 +424,61 @@ struct EmbeddedComposerView: View {
                         .opacity(state.imagesSectionHeight > 0 ? 1 : 0)
                     }
 
-                    FormattingTextViewWrapper(state: state, colorScheme: colorScheme)
+                    // Bottom section with text field and buttons
+                    VStack(spacing: 0) {
+                        FormattingTextViewWrapper(state: state, colorScheme: colorScheme)
 
-                    Spacer().frame(height: 8) // Tighter spacing between textfield and buttons
+                        Spacer().frame(height: 8) // Tighter spacing between textfield and buttons
 
-                    HStack {
-                    Menu {
-                        Button {
-                            state.onShowTaskList?()
-                        } label: {
-                            Label(L10n.Composer.list, systemImage: "checklist")
+                        HStack {
+                            Menu {
+                                Button {
+                                    state.onShowTaskList?()
+                                } label: {
+                                    Label(L10n.Composer.list, systemImage: "checklist")
+                                }
+
+                                Button {
+                                    state.onShowPhotoPicker?()
+                                } label: {
+                                    Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
+                                }
+
+                                Button {
+                                    state.onShowCamera?()
+                                } label: {
+                                    Label(L10n.Composer.camera, systemImage: "camera")
+                                }
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 20, weight: .medium))
+                                    .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
+                            }
+
+                            Spacer()
+
+                            Button(action: {
+                                if canSend {
+                                    state.onSend?()
+                                }
+                            }) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 32, height: 32)
+                                    .background(canSend ? (themeManager.currentTheme.accentColor ?? Color.accentColor) : Color.gray.opacity(0.4))
+                                    .clipShape(Circle())
+                            }
+                            .disabled(!canSend)
+                            .buttonStyle(.plain)
                         }
-
-                        Button {
-                            state.onShowPhotoPicker?()
-                        } label: {
-                            Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
-                        }
-
-                        Button {
-                            state.onShowCamera?()
-                        } label: {
-                            Label(L10n.Composer.camera, systemImage: "camera")
-                        }
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
                     }
-
-                    Spacer()
-
-                    Button(action: {
-                        if canSend {
-                            state.onSend?()
-                        }
-                    }) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(canSend ? (themeManager.currentTheme.accentColor ?? Color.accentColor) : Color.gray.opacity(0.4))
-                            .clipShape(Circle())
-                    }
-                    .disabled(!canSend)
-                    .buttonStyle(.plain)
-                }
+                    .padding(.horizontal, 16)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.top, state.attachedImages.isEmpty ? 14 : 8)
+            .padding(.bottom, 14)
+            .clipShape(.rect(cornerRadius: 24))
             .glassEffect(
                 .regular.tint(composerTint),
                 in: .rect(cornerRadius: 24)
@@ -476,22 +496,28 @@ struct AttachedImageView: View {
     let onRemove: () -> Void
 
     var body: some View {
-        Image(uiImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(width: 80, height: 80)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(alignment: .topTrailing) {
-                Button(action: onRemove) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 20, height: 20)
-                        .background(Color.black.opacity(0.6))
-                        .clipShape(Circle())
-                }
-                .padding(4)
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .allowsHitTesting(false)
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(Circle())
             }
+            .buttonStyle(.plain)
+            .contentShape(Circle())
+            .zIndex(1)
+            .padding(6)
+        }
+        .frame(width: 80, height: 80)
     }
 }
 
