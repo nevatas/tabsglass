@@ -169,6 +169,21 @@ struct MainContainerView: View {
                 }
             }
         }
+        .onChange(of: newTabTitle) { _, newValue in
+            if newValue.count > 20 {
+                newTabTitle = String(newValue.prefix(20))
+            }
+        }
+        .onChange(of: renameTabTitle) { _, newValue in
+            if newValue.count > 20 {
+                renameTabTitle = String(newValue.prefix(20))
+            }
+        }
+        .onChange(of: renameInboxTitle) { _, newValue in
+            if newValue.count > 20 {
+                renameInboxTitle = String(newValue.prefix(20))
+            }
+        }
         .sheet(item: $messageToEdit) { message in
             EditMessageSheet(
                 originalText: message.content,
