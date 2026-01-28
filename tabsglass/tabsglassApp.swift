@@ -22,6 +22,7 @@ struct tabsglassApp: App {
         do {
             let container = try ModelContainer(for: Tab.self, Message.self)
             self.modelContainer = container
+            Self.seedWelcomeMessagesIfNeeded(in: container)
         } catch {
             fatalError("Failed to initialize model container: \(error)")
         }
@@ -32,6 +33,35 @@ struct tabsglassApp: App {
             ContentView()
         }
         .modelContainer(modelContainer)
+    }
+}
+
+// MARK: - Welcome Messages Seeding
+
+private extension tabsglassApp {
+    static func seedWelcomeMessagesIfNeeded(in container: ModelContainer) {
+        let key = "hasSeededWelcomeMessages"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        let texts = [
+            L10n.Welcome.message1,
+            L10n.Welcome.message2,
+            L10n.Welcome.message3,
+            L10n.Welcome.message4,
+        ]
+
+        let context = container.mainContext
+        let now = Date()
+
+        for (index, text) in texts.enumerated() {
+            let message = Message(content: text)
+            // Stagger timestamps so messages appear in correct order (oldest first at top)
+            message.createdAt = now.addingTimeInterval(Double(index))
+            context.insert(message)
+        }
+
+        try? context.save()
+        UserDefaults.standard.set(true, forKey: key)
     }
 }
 

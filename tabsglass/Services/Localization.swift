@@ -87,6 +87,14 @@ enum L10n {
         static var addLink: String { NSLocalizedString("format.add_link", comment: "Add link title") }
     }
 
+    // MARK: - Welcome
+    enum Welcome {
+        static var message1: String { NSLocalizedString("welcome.message1", comment: "Welcome message 1") }
+        static var message2: String { NSLocalizedString("welcome.message2", comment: "Welcome message 2") }
+        static var message3: String { NSLocalizedString("welcome.message3", comment: "Welcome message 3") }
+        static var message4: String { NSLocalizedString("welcome.message4", comment: "Welcome message 4") }
+    }
+
     // MARK: - Composer
     enum Composer {
         static var placeholder: String { NSLocalizedString("composer.placeholder", comment: "Composer placeholder") }

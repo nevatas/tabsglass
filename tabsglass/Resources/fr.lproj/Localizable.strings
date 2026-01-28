@@ -71,6 +71,13 @@
 "format.link" = "Lien";
 "format.add_link" = "Ajouter un lien";
 
+// MARK: - Welcome
+
+"welcome.message1" = "Salut ! Bienvenue dans Taby 👋";
+"welcome.message2" = "Ça fonctionne comme une messagerie — écris, ajoute des photos, et tout est sauvegardé.";
+"welcome.message3" = "Crée des onglets par thème : travail, idées, listes — bouton + en haut. Glisse pour changer.";
+"welcome.message4" = "Ceci est l'onglet Inbox, il est là pour toujours. Note tout ici, puis déplace dans d'autres onglets. Appui long sur un message pour le modifier, déplacer ou supprimer. Bonne utilisation !";
+
 // MARK: - Composer
 
 "composer.placeholder" = "Note...";

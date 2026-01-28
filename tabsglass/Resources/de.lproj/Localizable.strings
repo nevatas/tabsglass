@@ -71,6 +71,13 @@
 "format.link" = "Link";
 "format.add_link" = "Link hinzufügen";
 
+// MARK: - Welcome
+
+"welcome.message1" = "Hallo! Willkommen bei Taby 👋";
+"welcome.message2" = "Es funktioniert wie ein Messenger — schreib einfach, häng Fotos an, und alles wird gespeichert.";
+"welcome.message3" = "Erstelle Tabs für verschiedene Themen: Arbeit, Ideen, Listen — Taste + oben. Wische zum Wechseln.";
+"welcome.message4" = "Das ist der Inbox-Tab, er bleibt für immer. Schreib hier alles rein und verschieb es später in andere Tabs. Halte eine Nachricht gedrückt, um sie zu bearbeiten, verschieben oder löschen. Viel Spaß!";
+
 // MARK: - Composer
 
 "composer.placeholder" = "Notiz...";

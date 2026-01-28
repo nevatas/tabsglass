@@ -71,6 +71,13 @@
 "format.link" = "Link";
 "format.add_link" = "Add Link";
 
+// MARK: - Welcome
+
+"welcome.message1" = "Hi! Welcome to Taby 👋";
+"welcome.message2" = "It works like a messenger — just type, attach photos, and everything is saved.";
+"welcome.message3" = "Create tabs for different topics: work, ideas, lists — tap + at the top. Swipe to switch.";
+"welcome.message4" = "This is the Inbox tab, it's here forever. Use it to jot down anything, then move it to other tabs later. Long-press any message to edit, move, or delete it. Enjoy!";
+
 // MARK: - Composer
 
 "composer.placeholder" = "Note...";

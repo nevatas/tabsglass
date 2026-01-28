@@ -71,6 +71,13 @@
 "format.link" = "Enlace";
 "format.add_link" = "Añadir enlace";
 
+// MARK: - Welcome
+
+"welcome.message1" = "¡Hola! Bienvenido a Taby 👋";
+"welcome.message2" = "Funciona como un mensajero — escribe, adjunta fotos, y todo se guarda.";
+"welcome.message3" = "Crea pestañas para diferentes temas: trabajo, ideas, listas — botón + arriba. Desliza para cambiar.";
+"welcome.message4" = "Esta es la pestaña Inbox, está aquí para siempre. Escribe lo que sea aquí y luego muévelo a otras pestañas. Mantén pulsado cualquier mensaje para editarlo, moverlo o eliminarlo. ¡Disfruta!";
+
 // MARK: - Composer
 
 "composer.placeholder" = "Nota...";
