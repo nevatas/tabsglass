@@ -108,7 +108,7 @@ struct MainContainerView: View {
             TextField(L10n.Tab.titlePlaceholder, text: $newTabTitle)
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.create) {
-                let trimmed = String(newTabTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
+                let trimmed = String(newTabTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
                 if !trimmed.isEmpty {
                     createTab(title: trimmed)
                 }
@@ -120,7 +120,7 @@ struct MainContainerView: View {
             TextField(L10n.Tab.titlePlaceholder, text: $renameTabTitle)
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.save) {
-                let trimmed = String(renameTabTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
+                let trimmed = String(renameTabTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
                 if !trimmed.isEmpty, let tab = tabToRename {
                     renameTab(tab, to: trimmed)
                 }
@@ -130,7 +130,7 @@ struct MainContainerView: View {
             TextField(L10n.Tab.titlePlaceholder, text: $renameInboxTitle)
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.save) {
-                let trimmed = String(renameInboxTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
+                let trimmed = String(renameInboxTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
                 if !trimmed.isEmpty {
                     AppSettings.shared.inboxTitle = trimmed
                 }
@@ -170,18 +170,18 @@ struct MainContainerView: View {
             }
         }
         .onChange(of: newTabTitle) { _, newValue in
-            if newValue.count > 20 {
-                newTabTitle = String(newValue.prefix(20))
+            if newValue.count > 24 {
+                newTabTitle = String(newValue.prefix(24))
             }
         }
         .onChange(of: renameTabTitle) { _, newValue in
-            if newValue.count > 20 {
-                renameTabTitle = String(newValue.prefix(20))
+            if newValue.count > 24 {
+                renameTabTitle = String(newValue.prefix(24))
             }
         }
         .onChange(of: renameInboxTitle) { _, newValue in
-            if newValue.count > 20 {
-                renameInboxTitle = String(newValue.prefix(20))
+            if newValue.count > 24 {
+                renameInboxTitle = String(newValue.prefix(24))
             }
         }
         .sheet(item: $messageToEdit) { message in
