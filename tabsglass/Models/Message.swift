@@ -8,6 +8,20 @@ import SwiftData
 import UIKit
 import os.log
 
+// MARK: - Todo Item
+
+struct TodoItem: Codable, Hashable, Identifiable {
+    let id: UUID
+    var text: String
+    var isCompleted: Bool
+
+    init(id: UUID = UUID(), text: String, isCompleted: Bool = false) {
+        self.id = id
+        self.text = text
+        self.isCompleted = isCompleted
+    }
+}
+
 // MARK: - Text Entity (Telegram-style formatting)
 
 struct TextEntity: Codable, Hashable {
@@ -89,6 +103,12 @@ final class Message: Identifiable {
     var mediaGroupId: String?       // Groups multiple media in same message
     var photoFileNames: [String] = []
     var photoAspectRatios: [Double] = []
+    var todoItems: [TodoItem]?      // Todo list items (nil = not a todo list)
+
+    /// Check if this message is a todo list
+    var isTodoList: Bool {
+        todoItems != nil && !(todoItems?.isEmpty ?? true)
+    }
 
     /// Create a message in a specific tab (or Inbox if tabId is nil)
     init(
@@ -130,10 +150,13 @@ final class Message: Identifiable {
         }
     }
 
-    /// Check if message has no content (no text and no valid photos)
+    /// Check if message has no content (no text, no valid photos, no todo items)
     var isEmpty: Bool {
         let hasText = !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if hasText { return false }
+
+        // Check if has todo items
+        if isTodoList { return false }
 
         // Check if any photo files exist (without loading them)
         let hasValidPhotos = photoFileNames.contains { fileName in

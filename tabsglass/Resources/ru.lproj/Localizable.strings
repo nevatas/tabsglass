@@ -54,7 +54,6 @@
 "theme.pink" = "Розовая";
 "theme.beige" = "Бежевая";
 "theme.green" = "Зелёная";
-"theme.brown" = "Коричневая";
 "theme.blue" = "Голубая";
 
 // MARK: - Empty State
@@ -84,3 +83,11 @@
 "composer.placeholder" = "Заметка...";
 "composer.camera" = "Камера";
 "composer.photo" = "Фото";
+"composer.list" = "Список";
+
+// MARK: - Task List
+
+"tasklist.title" = "Новый список";
+"tasklist.item_placeholder" = "Задача";
+"tasklist.add_item" = "Добавить задачу";
+"tasklist.completed" = "%d из %d выполнено";

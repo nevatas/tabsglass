@@ -23,6 +23,8 @@ struct MainContainerView: View {
     @State private var tabToRename: Tab?
     @State private var tabToDelete: Tab?
     @State private var messageToEdit: Message?
+    @State private var showTaskListSheet = false
+    @State private var taskListToEdit: Message?
     @State private var newTabTitle = ""
     @State private var renameTabTitle = ""
     @State private var renameInboxTitle = ""
@@ -67,10 +69,20 @@ struct MainContainerView: View {
                     moveMessage(message, toTabId: targetTabId)
                 },
                 onEditMessage: { message in
-                    messageToEdit = message
+                    if message.isTodoList {
+                        taskListToEdit = message
+                    } else {
+                        messageToEdit = message
+                    }
                 },
                 onRestoreMessage: {
                     restoreDeletedMessage()
+                },
+                onShowTaskList: {
+                    showTaskListSheet = true
+                },
+                onToggleTodoItem: { message, itemId, isCompleted in
+                    toggleTodoItem(message: message, itemId: itemId, isCompleted: isCompleted)
                 }
             )
             .ignoresSafeArea(.keyboard)
@@ -239,6 +251,29 @@ struct MainContainerView: View {
                 ReorderTabsView()
             }
         }
+        .sheet(isPresented: $showTaskListSheet) {
+            TaskListSheet(
+                onSave: { items in
+                    sendTaskListMessage(items: items)
+                    showTaskListSheet = false
+                },
+                onCancel: {
+                    showTaskListSheet = false
+                }
+            )
+        }
+        .sheet(item: $taskListToEdit) { message in
+            TaskListSheet(
+                existingItems: message.todoItems ?? [],
+                onSave: { items in
+                    updateTaskList(message: message, newItems: items)
+                    taskListToEdit = nil
+                },
+                onCancel: {
+                    taskListToEdit = nil
+                }
+            )
+        }
     }
 
     private func sendMessage() {
@@ -310,6 +345,30 @@ struct MainContainerView: View {
 
     private func moveMessage(_ message: Message, toTabId targetTabId: UUID?) {
         message.tabId = targetTabId
+    }
+
+    private func sendTaskListMessage(items: [TodoItem]) {
+        guard !items.isEmpty else { return }
+
+        let message = Message(content: "", tabId: currentTabId)
+        message.todoItems = items
+        modelContext.insert(message)
+    }
+
+    private func updateTaskList(message: Message, newItems: [TodoItem]) {
+        if newItems.isEmpty {
+            // Delete message if all items removed
+            modelContext.delete(message)
+        } else {
+            message.todoItems = newItems
+        }
+    }
+
+    private func toggleTodoItem(message: Message, itemId: UUID, isCompleted: Bool) {
+        guard var items = message.todoItems,
+              let index = items.firstIndex(where: { $0.id == itemId }) else { return }
+        items[index].isCompleted = isCompleted
+        message.todoItems = items
     }
 
     private func restoreDeletedMessage() {

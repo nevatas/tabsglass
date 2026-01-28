@@ -23,6 +23,8 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
     var onEditMessage: ((Message) -> Void)?
     var onRestoreMessage: (() -> Void)?
+    var onShowTaskList: (() -> Void)?
+    var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
 
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
@@ -34,6 +36,8 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onMoveMessage = onMoveMessage
         vc.onEditMessage = onEditMessage
         vc.onRestoreMessage = onRestoreMessage
+        vc.onShowTaskList = onShowTaskList
+        vc.onToggleTodoItem = onToggleTodoItem
         vc.onIndexChange = { newIndex in
             selectedIndex = newIndex
         }
@@ -59,6 +63,8 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onMoveMessage = onMoveMessage
         uiViewController.onEditMessage = onEditMessage
         uiViewController.onRestoreMessage = onRestoreMessage
+        uiViewController.onShowTaskList = onShowTaskList
+        uiViewController.onToggleTodoItem = onToggleTodoItem
         if uiViewController.selectedIndex != selectedIndex {
             uiViewController.selectedIndex = selectedIndex
             uiViewController.updatePageSelection(animated: true)
@@ -86,6 +92,8 @@ final class UnifiedChatViewController: UIViewController {
     var onEditMessage: ((Message) -> Void)?
     var onImagesChange: (([UIImage]) -> Void)?
     var onRestoreMessage: (() -> Void)?
+    var onShowTaskList: (() -> Void)?
+    var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
 
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
@@ -178,6 +186,10 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onShowCamera = { [weak self] in
             self?.showCamera()
+        }
+
+        inputContainer.onShowTaskList = { [weak self] in
+            self?.onShowTaskList?()
         }
 
         inputContainer.onImagesChange = { [weak self] images in
@@ -305,6 +317,9 @@ final class UnifiedChatViewController: UIViewController {
         }
         vc.onOpenGallery = { [weak self] startIndex, fileNames, sourceFrame in
             self?.presentGallery(startIndex: startIndex, fileNames: fileNames, sourceFrame: sourceFrame)
+        }
+        vc.onToggleTodoItem = { [weak self] message, itemId, isCompleted in
+            self?.onToggleTodoItem?(message, itemId, isCompleted)
         }
         messageControllers[index] = vc
         return vc
@@ -565,6 +580,8 @@ final class MessageListViewController: UIViewController {
     var onEditMessage: ((Message) -> Void)?
     /// Callback when a gallery should be opened: (startIndex, fileNames, sourceFrame)
     var onOpenGallery: ((Int, [String], CGRect) -> Void)?
+    /// Callback when a todo item is toggled: (message, itemId, isCompleted)
+    var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
 
     private let tableView = UITableView()
     private var sortedMessages: [Message] = []
@@ -754,9 +771,13 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
 
         let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
-        cell.configure(with: sortedMessages[indexPath.row])
+        let message = sortedMessages[indexPath.row]
+        cell.configure(with: message)
         cell.onPhotoTapped = { [weak self] index, sourceFrame, _, fileNames in
             self?.onOpenGallery?(index, fileNames, sourceFrame)
+        }
+        cell.onTodoToggle = { [weak self] itemId, isCompleted in
+            self?.onToggleTodoItem?(message, itemId, isCompleted)
         }
         cell.transform = CGAffineTransform(scaleX: 1, y: -1)
         return cell
@@ -773,6 +794,13 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         let bubbleWidth = cellWidth - 32  // 16px margins on each side
 
         var height: CGFloat = 8  // Cell padding (4 top + 4 bottom)
+
+        // Todo list message
+        if message.isTodoList, let items = message.todoItems {
+            let todoHeight = TodoBubbleView.calculateHeight(for: items, maxWidth: bubbleWidth)
+            height += todoHeight
+            return max(height, 50)
+        }
 
         let hasPhotos = !message.photoFileNames.isEmpty && !message.aspectRatios.isEmpty
         let hasText = !message.content.isEmpty

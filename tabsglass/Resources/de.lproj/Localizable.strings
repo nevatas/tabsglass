@@ -54,7 +54,6 @@
 "theme.pink" = "Rosa";
 "theme.beige" = "Beige";
 "theme.green" = "Grün";
-"theme.brown" = "Braun";
 "theme.blue" = "Blau";
 
 // MARK: - Empty State
@@ -84,3 +83,11 @@
 "composer.placeholder" = "Notiz...";
 "composer.camera" = "Kamera";
 "composer.photo" = "Foto";
+"composer.list" = "Liste";
+
+// MARK: - Task List
+
+"tasklist.title" = "Neue Liste";
+"tasklist.item_placeholder" = "Aufgabe";
+"tasklist.add_item" = "Aufgabe hinzufügen";
+"tasklist.completed" = "%d von %d erledigt";

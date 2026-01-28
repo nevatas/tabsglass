@@ -67,7 +67,6 @@ enum L10n {
         static var pink: String { NSLocalizedString("theme.pink", comment: "Pink theme") }
         static var beige: String { NSLocalizedString("theme.beige", comment: "Beige theme") }
         static var green: String { NSLocalizedString("theme.green", comment: "Green theme") }
-        static var brown: String { NSLocalizedString("theme.brown", comment: "Brown theme") }
         static var blue: String { NSLocalizedString("theme.blue", comment: "Blue theme") }
     }
 
@@ -101,5 +100,16 @@ enum L10n {
         static var placeholder: String { NSLocalizedString("composer.placeholder", comment: "Composer placeholder") }
         static var camera: String { NSLocalizedString("composer.camera", comment: "Camera option") }
         static var photo: String { NSLocalizedString("composer.photo", comment: "Photo option") }
+        static var list: String { NSLocalizedString("composer.list", comment: "List option") }
+    }
+
+    // MARK: - Task List
+    enum TaskList {
+        static var title: String { NSLocalizedString("tasklist.title", comment: "Task list sheet title") }
+        static var itemPlaceholder: String { NSLocalizedString("tasklist.item_placeholder", comment: "Task item placeholder") }
+        static var addItem: String { NSLocalizedString("tasklist.add_item", comment: "Add task button") }
+        static func completed(_ completed: Int, _ total: Int) -> String {
+            String(format: NSLocalizedString("tasklist.completed", comment: "Completed count"), completed, total)
+        }
     }
 }

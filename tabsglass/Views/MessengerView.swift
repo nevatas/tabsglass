@@ -23,6 +23,7 @@ final class ComposerState {
     var onAttachmentChange: (() -> Void)?
     var onShowPhotoPicker: (() -> Void)?
     var onShowCamera: (() -> Void)?
+    var onShowTaskList: (() -> Void)?
 
     /// Reference to the formatting text view for extracting entities
     weak var formattingTextView: FormattingTextView?
@@ -95,6 +96,9 @@ final class SwiftUIComposerContainer: UIView {
     }
     var onShowCamera: (() -> Void)? {
         didSet { composerState.onShowCamera = onShowCamera }
+    }
+    var onShowTaskList: (() -> Void)? {
+        didSet { composerState.onShowTaskList = onShowTaskList }
     }
 
     /// Callback для уведомления о изменении высоты
@@ -365,7 +369,7 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
 
 struct EmbeddedComposerView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @ObservedObject private var themeManager = ThemeManager.shared
+    private var themeManager: ThemeManager { ThemeManager.shared }
     @Bindable var state: ComposerState
 
     private var canSend: Bool {
@@ -421,6 +425,12 @@ struct EmbeddedComposerView: View {
                             state.onShowPhotoPicker?()
                         } label: {
                             Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
+                        }
+
+                        Button {
+                            state.onShowTaskList?()
+                        } label: {
+                            Label(L10n.Composer.list, systemImage: "checklist")
                         }
                     } label: {
                         Image(systemName: "plus")
@@ -491,6 +501,7 @@ final class MessageTableCell: UITableViewCell {
     private let bubbleView = UIView()
     private let mosaicView = MosaicMediaView()
     private let messageTextView = UITextView()
+    private let todoView = TodoBubbleView()
 
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
@@ -498,11 +509,16 @@ final class MessageTableCell: UITableViewCell {
     /// Callback when a photo is tapped: (index, sourceFrame in window, image, fileNames)
     var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
 
+    /// Callback when a todo item is toggled: (itemId, isCompleted)
+    var onTodoToggle: ((UUID, Bool) -> Void)?
+
     private var messageTextViewTopToMosaic: NSLayoutConstraint!
     private var messageTextViewTopToBubble: NSLayoutConstraint!
     private var messageTextViewBottomToBubble: NSLayoutConstraint!
     private var mosaicHeightConstraint: NSLayoutConstraint!
     private var mosaicBottomToBubble: NSLayoutConstraint!
+    private var todoViewHeightConstraint: NSLayoutConstraint!
+    private var todoViewBottomToBubble: NSLayoutConstraint!
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -546,7 +562,16 @@ final class MessageTableCell: UITableViewCell {
         messageTextView.translatesAutoresizingMaskIntoConstraints = false
         bubbleView.addSubview(messageTextView)
 
+        // Todo view for task lists
+        todoView.translatesAutoresizingMaskIntoConstraints = false
+        todoView.onToggle = { [weak self] itemId, isCompleted in
+            self?.onTodoToggle?(itemId, isCompleted)
+        }
+        bubbleView.addSubview(todoView)
+
         mosaicHeightConstraint = mosaicView.heightAnchor.constraint(equalToConstant: 0)
+        todoViewHeightConstraint = todoView.heightAnchor.constraint(equalToConstant: 0)
+        todoViewBottomToBubble = todoView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
         messageTextViewTopToMosaic = messageTextView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 10)
         messageTextViewTopToBubble = messageTextView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
         messageTextViewBottomToBubble = messageTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
@@ -567,6 +592,12 @@ final class MessageTableCell: UITableViewCell {
             // Message text view - horizontal constraints always active
             messageTextView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
             messageTextView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
+
+            // Todo view constraints
+            todoView.topAnchor.constraint(equalTo: bubbleView.topAnchor),
+            todoView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
+            todoView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
+            todoViewHeightConstraint,
         ])
 
         updateBubbleColor()
@@ -628,6 +659,7 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewTopToBubble.isActive = false
         messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
+        todoViewBottomToBubble.isActive = false
     }
 
     func configure(with message: Message) {
@@ -636,6 +668,12 @@ final class MessageTableCell: UITableViewCell {
         // Create attributed string with entities (links, formatting)
         let attributedText = createAttributedString(for: message)
         messageTextView.attributedText = attributedText
+
+        // Configure todo view if this is a todo list
+        if message.isTodoList, let items = message.todoItems {
+            let isDarkMode = traitCollection.userInterfaceStyle == .dark
+            todoView.configure(with: items, isDarkMode: isDarkMode)
+        }
 
         updateBubbleColor()
 
@@ -720,12 +758,14 @@ final class MessageTableCell: UITableViewCell {
         let aspectRatios = message.aspectRatios
         let hasPhotos = !fileNames.isEmpty && !aspectRatios.isEmpty
         let hasText = !message.content.isEmpty
+        let hasTodo = message.isTodoList
 
         // Reset constraints first
         messageTextViewTopToMosaic.isActive = false
         messageTextViewTopToBubble.isActive = false
         messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
+        todoViewBottomToBubble.isActive = false
 
         // Calculate bubble width (cell width - 32 for margins)
         let bubbleWidth = max(width - 32, 0)
@@ -735,28 +775,43 @@ final class MessageTableCell: UITableViewCell {
             let mosaicHeight = MosaicMediaView.calculateHeight(for: aspectRatios, maxWidth: bubbleWidth)
             mosaicHeightConstraint.constant = mosaicHeight
             // isAtBottom: true only when there's no text below (photos-only message)
-            mosaicView.configure(with: fileNames, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText)
+            mosaicView.configure(with: fileNames, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText && !hasTodo)
             mosaicView.isHidden = false
         } else {
             mosaicHeightConstraint.constant = 0
             mosaicView.isHidden = true
         }
 
-        // Configure layout based on content
-        if hasPhotos && hasText {
-            // Both photos and text
-            messageTextViewTopToMosaic.isActive = true
-            messageTextViewBottomToBubble.isActive = true
-            messageTextView.isHidden = false
-        } else if hasPhotos && !hasText {
-            // Photos only - mosaic fills to bottom
-            mosaicBottomToBubble.isActive = true
+        // Configure todo view
+        if hasTodo, let items = message.todoItems {
+            let todoHeight = TodoBubbleView.calculateHeight(for: items, maxWidth: bubbleWidth)
+            todoViewHeightConstraint.constant = todoHeight
+            todoView.isHidden = false
+            todoViewBottomToBubble.isActive = true
+            // Hide text and mosaic for todo lists
             messageTextView.isHidden = true
+            mosaicView.isHidden = true
+            mosaicHeightConstraint.constant = 0
         } else {
-            // Text only (or empty)
-            messageTextViewTopToBubble.isActive = true
-            messageTextViewBottomToBubble.isActive = true
-            messageTextView.isHidden = false
+            todoViewHeightConstraint.constant = 0
+            todoView.isHidden = true
+
+            // Configure layout based on content
+            if hasPhotos && hasText {
+                // Both photos and text
+                messageTextViewTopToMosaic.isActive = true
+                messageTextViewBottomToBubble.isActive = true
+                messageTextView.isHidden = false
+            } else if hasPhotos && !hasText {
+                // Photos only - mosaic fills to bottom
+                mosaicBottomToBubble.isActive = true
+                messageTextView.isHidden = true
+            } else {
+                // Text only (or empty)
+                messageTextViewTopToBubble.isActive = true
+                messageTextViewBottomToBubble.isActive = true
+                messageTextView.isHidden = false
+            }
         }
     }
 }
