@@ -185,13 +185,20 @@ struct MainContainerView: View {
                         try? FileManager.default.removeItem(at: url)
                     }
 
-                    // Update aspect ratios to match remaining photos
-                    let newAspectRatios: [Double] = newPhotoFileNames.compactMap { fileName in
+                    // Update aspect ratios - keep existing for old photos, calculate for new ones
+                    let newAspectRatios: [Double] = newPhotoFileNames.map { fileName in
+                        // Check if it's an existing photo
                         if let index = originalFileNames.firstIndex(of: fileName),
                            index < originalAspectRatios.count {
                             return originalAspectRatios[index]
                         }
-                        return nil
+                        // New photo - calculate aspect ratio from file
+                        let url = Message.photosDirectory.appendingPathComponent(fileName)
+                        if let data = try? Data(contentsOf: url),
+                           let image = UIImage(data: data) {
+                            return Double(image.size.width / image.size.height)
+                        }
+                        return 1.0 // fallback
                     }
 
                     // Update message

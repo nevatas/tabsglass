@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UIKit
+import PhotosUI
 
 /// Class to hold textView reference (survives SwiftUI view updates)
 @Observable
@@ -23,6 +24,10 @@ struct EditMessageSheet: View {
     @State private var holder = EditTextViewHolder()
     @State private var photoFileNames: [String] = []
     @State private var photos: [UIImage] = []
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var showCamera = false
+    @ObservedObject private var themeManager = ThemeManager.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -105,11 +110,50 @@ struct EditMessageSheet: View {
             .padding(.horizontal, 16)
 
             Spacer()
+
+            // Bottom toolbar with plus button
+            HStack {
+                Menu {
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label(L10n.Composer.camera, systemImage: "camera")
+                    }
+
+                    PhotosPicker(
+                        selection: $selectedPhotoItems,
+                        maxSelectionCount: max(0, 10 - photos.count),
+                        matching: .images
+                    ) {
+                        Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
         .onAppear {
             text = originalText
             photoFileNames = originalPhotoFileNames
             loadPhotos()
+        }
+        .onChange(of: selectedPhotoItems) { _, newItems in
+            Task {
+                await loadSelectedPhotos(newItems)
+                selectedPhotoItems = []
+            }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraView { image in
+                addPhoto(image)
+            }
+            .ignoresSafeArea()
         }
     }
 
@@ -130,6 +174,64 @@ struct EditMessageSheet: View {
         guard index < photoFileNames.count && index < photos.count else { return }
         photoFileNames.remove(at: index)
         photos.remove(at: index)
+    }
+
+    private func addPhoto(_ image: UIImage) {
+        guard photos.count < 10 else { return }
+        if let result = Message.savePhoto(image) {
+            photoFileNames.append(result.fileName)
+            photos.append(image)
+        }
+    }
+
+    @MainActor
+    private func loadSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            guard photos.count < 10 else { break }
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                addPhoto(image)
+            }
+        }
+    }
+}
+
+// MARK: - Camera View
+
+struct CameraView: UIViewControllerRepresentable {
+    let onImageCaptured: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraView
+
+        init(_ parent: CameraView) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImageCaptured(image)
+            }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
     }
 }
 
