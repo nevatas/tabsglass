@@ -11,7 +11,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
     @AppStorage("spaceName") private var spaceName = "Taby"
-    @ObservedObject private var themeManager = ThemeManager.shared
+    private var themeManager: ThemeManager { ThemeManager.shared }
 
     var body: some View {
         NavigationStack {
@@ -153,7 +153,7 @@ struct ReorderTabsView: View {
 // MARK: - Appearance Settings View
 
 struct AppearanceSettingsView: View {
-    @ObservedObject private var themeManager = ThemeManager.shared
+    private var themeManager: ThemeManager { ThemeManager.shared }
 
     var body: some View {
         List {
@@ -237,8 +237,6 @@ struct ThemeRowView: View {
             return Color(red: 0xC4/255, green: 0x9A/255, blue: 0x6C/255)
         case .green:
             return Color(red: 0x2E/255, green: 0xA0/255, blue: 0x4A/255)
-        case .brown:
-            return Color(red: 0x7D/255, green: 0x5A/255, blue: 0x4F/255)
         case .blue:
             return Color(red: 0x29/255, green: 0x8D/255, blue: 0xF5/255)
         }

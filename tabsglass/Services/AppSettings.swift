@@ -19,7 +19,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
     case pink = "pink"
     case beige = "beige"
     case green = "green"
-    case brown = "brown"
     case blue = "blue"
 
     var id: String { rawValue }
@@ -32,7 +31,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .pink: return L10n.Theme.pink
         case .beige: return L10n.Theme.beige
         case .green: return L10n.Theme.green
-        case .brown: return L10n.Theme.brown
         case .blue: return L10n.Theme.blue
         }
     }
@@ -45,7 +43,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .pink: return "heart.fill"
         case .beige: return "leaf.fill"
         case .green: return "leaf.fill"
-        case .brown: return "cup.and.saucer.fill"
         case .blue: return "drop.fill"
         }
     }
@@ -55,9 +52,9 @@ enum AppTheme: String, CaseIterable, Identifiable {
         [.system, .light, .dark]
     }
 
-    /// Color themes (pink, beige, green, brown, blue)
+    /// Color themes (pink, beige, green, blue)
     static var colorThemes: [AppTheme] {
-        [.pink, .beige, .green, .brown, .blue]
+        [.pink, .beige, .green, .blue]
     }
 
     /// Background color for the theme
@@ -73,8 +70,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return Color(red: 0xF0/255, green: 0xDC/255, blue: 0xC0/255)
         case .green:
             return Color(red: 0xC8/255, green: 0xE8/255, blue: 0xC8/255)
-        case .brown:
-            return Color(red: 0xE8/255, green: 0xD8/255, blue: 0xC8/255)
         case .blue:
             return Color(red: 0xC8/255, green: 0xE0/255, blue: 0xF8/255)
         }
@@ -91,8 +86,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return Color(red: 0x38/255, green: 0x2C/255, blue: 0x1C/255)
         case .green:
             return Color(red: 0x18/255, green: 0x30/255, blue: 0x18/255)
-        case .brown:
-            return Color(red: 0x32/255, green: 0x24/255, blue: 0x18/255)
         case .blue:
             return Color(red: 0x18/255, green: 0x28/255, blue: 0x3C/255)
         }
@@ -111,8 +104,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return UIColor(red: 0xFA/255, green: 0xF4/255, blue: 0xE8/255, alpha: 1)
         case .green:
             return UIColor(red: 0xE8/255, green: 0xF8/255, blue: 0xE8/255, alpha: 1)
-        case .brown:
-            return UIColor(red: 0xF8/255, green: 0xF2/255, blue: 0xE8/255, alpha: 1)
         case .blue:
             return UIColor(red: 0xE8/255, green: 0xF4/255, blue: 0xFF/255, alpha: 1)
         }
@@ -129,8 +120,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return UIColor(red: 0x4C/255, green: 0x3C/255, blue: 0x28/255, alpha: 1)
         case .green:
             return UIColor(red: 0x28/255, green: 0x48/255, blue: 0x28/255, alpha: 1)
-        case .brown:
-            return UIColor(red: 0x48/255, green: 0x38/255, blue: 0x28/255, alpha: 1)
         case .blue:
             return UIColor(red: 0x28/255, green: 0x3C/255, blue: 0x54/255, alpha: 1)
         }
@@ -140,7 +129,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var colorSchemeOverride: ColorScheme? {
         switch self {
         case .system: return nil
-        case .light, .pink, .beige, .green, .brown, .blue: return .light
+        case .light, .pink, .beige, .green, .blue: return .light
         case .dark: return .dark
         }
     }
@@ -156,8 +145,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return Color(red: 0xA6/255, green: 0x7C/255, blue: 0x52/255)
         case .green:
             return Color(red: 0x2E/255, green: 0x7D/255, blue: 0x32/255)
-        case .brown:
-            return Color(red: 0x6D/255, green: 0x4C/255, blue: 0x41/255)
         case .blue:
             return Color(red: 0x1E/255, green: 0x88/255, blue: 0xE5/255)
         }
@@ -174,8 +161,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return UIColor(red: 0xA6/255, green: 0x7C/255, blue: 0x52/255, alpha: 1)
         case .green:
             return UIColor(red: 0x2E/255, green: 0x7D/255, blue: 0x32/255, alpha: 1)
-        case .brown:
-            return UIColor(red: 0x6D/255, green: 0x4C/255, blue: 0x41/255, alpha: 1)
         case .blue:
             return UIColor(red: 0x1E/255, green: 0x88/255, blue: 0xE5/255, alpha: 1)
         }
@@ -194,8 +179,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return Color(red: 0xF4/255, green: 0xE8/255, blue: 0xD8/255).opacity(0.95)
         case .green:
             return Color(red: 0xE0/255, green: 0xF0/255, blue: 0xE0/255).opacity(0.95)
-        case .brown:
-            return Color(red: 0xF0/255, green: 0xE4/255, blue: 0xD8/255).opacity(0.95)
         case .blue:
             return Color(red: 0xE0/255, green: 0xEC/255, blue: 0xFA/255).opacity(0.95)
         }
@@ -212,8 +195,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return Color(red: 0x3C/255, green: 0x30/255, blue: 0x20/255).opacity(0.95)
         case .green:
             return Color(red: 0x1C/255, green: 0x34/255, blue: 0x1C/255).opacity(0.95)
-        case .brown:
-            return Color(red: 0x38/255, green: 0x2C/255, blue: 0x1C/255).opacity(0.95)
         case .blue:
             return Color(red: 0x1C/255, green: 0x2C/255, blue: 0x40/255).opacity(0.95)
         }
@@ -226,10 +207,12 @@ extension Notification.Name {
     static let themeDidChange = Notification.Name("themeDidChange")
 }
 
-final class ThemeManager: ObservableObject {
+@Observable
+@MainActor
+final class ThemeManager {
     static let shared = ThemeManager()
 
-    @Published var currentTheme: AppTheme {
+    var currentTheme: AppTheme {
         didSet {
             AppSettings.shared.theme = currentTheme
             // Notify UIKit components about theme change

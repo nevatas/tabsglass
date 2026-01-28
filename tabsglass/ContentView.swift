@@ -10,7 +10,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @ObservedObject private var themeManager = ThemeManager.shared
+    private var themeManager: ThemeManager { ThemeManager.shared }
 
     private var backgroundColor: Color {
         let theme = themeManager.currentTheme

@@ -56,7 +56,7 @@ struct TabBarView: View {
     let onReorderTabs: () -> Void
     let onDeleteTab: (Tab) -> Void
 
-    @ObservedObject private var themeManager = ThemeManager.shared
+    private var themeManager: ThemeManager { ThemeManager.shared }
     @AppStorage("spaceName") private var spaceName = "Taby"
 
     var body: some View {

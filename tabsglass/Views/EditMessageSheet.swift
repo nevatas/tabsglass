@@ -27,7 +27,7 @@ struct EditMessageSheet: View {
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showCamera = false
     @State private var showPhotoPicker = false
-    @ObservedObject private var themeManager = ThemeManager.shared
+    private var themeManager: ThemeManager { ThemeManager.shared }
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
