@@ -938,8 +938,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             }
 
             // Reminder action
-            let reminderTitle = message.hasReminder ? L10n.Menu.removeReminder : L10n.Menu.remind
-            let reminderIcon = message.hasReminder ? "bell.slash" : "bell"
+            let reminderTitle = message.hasReminder ? L10n.Menu.editReminder : L10n.Menu.remind
+            let reminderIcon = "bell"
             let reminderAction = UIAction(
                 title: reminderTitle,
                 image: UIImage(systemName: reminderIcon)
@@ -983,11 +983,10 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         let screenHeight = view.window?.windowScene?.screen.bounds.height ?? UIScreen.main.bounds.height
         let maxPreviewHeight = screenHeight * 0.4
 
-        // For short cells, use standard preview
+        // For short cells, use standard preview (container includes bubble + reminder badge)
         if bubbleFrame.height <= maxPreviewHeight {
             let parameters = UIPreviewParameters()
             parameters.backgroundColor = .clear
-            parameters.visiblePath = UIBezierPath(roundedRect: bubbleView.bounds, cornerRadius: 18)
             return UITargetedPreview(view: bubbleView, parameters: parameters)
         }
 

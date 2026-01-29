@@ -46,6 +46,7 @@
 "menu.restore_message" = "Die kürzlich gelöschte Notiz wird wiederhergestellt";
 "menu.restore" = "Wiederherstellen";
 "menu.remind" = "Erinnern";
+"menu.edit_reminder" = "Erinnerung ändern";
 "menu.remove_reminder" = "Erinnerung entfernen";
 
 // MARK: - Themes

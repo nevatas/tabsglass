@@ -46,6 +46,7 @@
 "menu.restore_message" = "La nota eliminada recientemente será restaurada";
 "menu.restore" = "Restaurar";
 "menu.remind" = "Recordar";
+"menu.edit_reminder" = "Editar recordatorio";
 "menu.remove_reminder" = "Quitar recordatorio";
 
 // MARK: - Themes

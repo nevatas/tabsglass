@@ -13,14 +13,11 @@ struct ReminderSheet: View {
     @State private var selectedDate: Date
     @State private var selectedTime: Date
     @State private var repeatInterval: ReminderRepeatInterval
+    @State private var isReminderActive: Bool
 
     let message: Message
     let onSave: (Date, ReminderRepeatInterval) -> Void
     let onRemove: (() -> Void)?
-
-    private var hasExistingReminder: Bool {
-        message.reminderDate != nil
-    }
 
     init(
         message: Message,
@@ -38,6 +35,7 @@ struct ReminderSheet: View {
         _selectedDate = State(initialValue: initialDate)
         _selectedTime = State(initialValue: initialDate)
         _repeatInterval = State(initialValue: message.reminderRepeatInterval ?? .never)
+        _isReminderActive = State(initialValue: message.reminderDate != nil)
     }
 
     private var combinedDateTime: Date {
@@ -134,10 +132,10 @@ struct ReminderSheet: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Text(localizedInterval(repeatInterval))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.primary)
                                 Image(systemName: "chevron.up.chevron.down")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.primary)
                             }
                         }
                     }
@@ -147,29 +145,35 @@ struct ReminderSheet: View {
 
                 Spacer()
 
-                // Bottom buttons
+                // Bottom button
                 VStack(spacing: 12) {
-                    Button {
-                        onSave(combinedDateTime, repeatInterval)
-                        dismiss()
-                    } label: {
-                        Text(buttonText)
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding(.horizontal)
-
-                    if hasExistingReminder, let onRemove {
-                        Button(role: .destructive) {
-                            onRemove()
-                            dismiss()
+                    if isReminderActive {
+                        // Red button to remove reminder
+                        Button {
+                            onRemove?()
+                            isReminderActive = false
                         } label: {
                             Text(L10n.Reminder.remove)
-                                .font(.subheadline)
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
                         }
-                        .padding(.bottom, 8)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
+                        .padding(.horizontal)
+                    } else {
+                        // Blue button to set reminder
+                        Button {
+                            onSave(combinedDateTime, repeatInterval)
+                            dismiss()
+                        } label: {
+                            Text(buttonText)
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.horizontal)
                     }
                 }
                 .padding(.bottom)

@@ -46,6 +46,7 @@
 "menu.restore_message" = "The recently deleted note will be restored";
 "menu.restore" = "Restore";
 "menu.remind" = "Remind";
+"menu.edit_reminder" = "Edit Reminder";
 "menu.remove_reminder" = "Remove Reminder";
 
 // MARK: - Themes

@@ -58,6 +58,7 @@ enum L10n {
         static var restoreMessage: String { NSLocalizedString("menu.restore_message", comment: "Restore note message") }
         static var restore: String { NSLocalizedString("menu.restore", comment: "Restore action") }
         static var remind: String { NSLocalizedString("menu.remind", comment: "Remind action") }
+        static var editReminder: String { NSLocalizedString("menu.edit_reminder", comment: "Edit reminder action") }
         static var removeReminder: String { NSLocalizedString("menu.remove_reminder", comment: "Remove reminder action") }
     }
 

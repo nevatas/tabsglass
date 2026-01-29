@@ -524,10 +524,11 @@ struct AttachedImageView: View {
 // MARK: - Message Cell
 
 final class MessageTableCell: UITableViewCell {
+    private let bubbleContainer = UIView()
     private let bubbleView = UIView()
 
-    /// Public access to bubble view for context menu
-    var bubbleViewForContextMenu: UIView { bubbleView }
+    /// Public access to bubble container (includes reminder badge) for context menu
+    var bubbleViewForContextMenu: UIView { bubbleContainer }
     private let mosaicView = MosaicMediaView()
     private let messageTextView = UITextView()
     private let todoView = TodoBubbleView()
@@ -578,17 +579,22 @@ final class MessageTableCell: UITableViewCell {
         clipsToBounds = false
         contentView.clipsToBounds = false
 
+        // Container for bubble + reminder badge (used for context menu preview)
+        bubbleContainer.translatesAutoresizingMaskIntoConstraints = false
+        bubbleContainer.clipsToBounds = false
+        contentView.addSubview(bubbleContainer)
+
         bubbleView.layer.cornerRadius = 18
         bubbleView.clipsToBounds = true
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(bubbleView)
+        bubbleContainer.addSubview(bubbleView)
 
         // Reminder badge (positioned on top-right corner of bubble, slightly outside)
         reminderBadge.backgroundColor = .systemRed
         reminderBadge.layer.cornerRadius = 12
         reminderBadge.translatesAutoresizingMaskIntoConstraints = false
         reminderBadge.isHidden = true
-        contentView.addSubview(reminderBadge)
+        bubbleContainer.addSubview(reminderBadge)
 
         let bellConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
         reminderIcon.image = UIImage(systemName: "bell.fill", withConfiguration: bellConfig)
@@ -597,10 +603,16 @@ final class MessageTableCell: UITableViewCell {
         reminderBadge.addSubview(reminderIcon)
 
         NSLayoutConstraint.activate([
+            // Bubble fills container with symmetric padding (for context menu preview)
+            bubbleView.topAnchor.constraint(equalTo: bubbleContainer.topAnchor, constant: 8),
+            bubbleView.bottomAnchor.constraint(equalTo: bubbleContainer.bottomAnchor, constant: -8),
+            bubbleView.leadingAnchor.constraint(equalTo: bubbleContainer.leadingAnchor, constant: 8),
+            bubbleView.trailingAnchor.constraint(equalTo: bubbleContainer.trailingAnchor, constant: -8),
+
             reminderBadge.widthAnchor.constraint(equalToConstant: 24),
             reminderBadge.heightAnchor.constraint(equalToConstant: 24),
-            reminderBadge.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: -8),
-            reminderBadge.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: 8),
+            reminderBadge.topAnchor.constraint(equalTo: bubbleContainer.topAnchor),
+            reminderBadge.trailingAnchor.constraint(equalTo: bubbleContainer.trailingAnchor),
             reminderIcon.centerXAnchor.constraint(equalTo: reminderBadge.centerXAnchor),
             reminderIcon.centerYAnchor.constraint(equalTo: reminderBadge.centerYAnchor),
         ])
@@ -645,10 +657,15 @@ final class MessageTableCell: UITableViewCell {
         mosaicBottomToBubble = mosaicView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
 
         NSLayoutConstraint.activate([
-            bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
-            bubbleView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
-            bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            bubbleView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            // Container positioned to keep bubble in same place as before (with symmetric 8pt padding)
+            // bubble.top = container.top + 8, so container.top = contentView.top + 4 - 8 = -4
+            bubbleContainer.topAnchor.constraint(equalTo: contentView.topAnchor, constant: -4),
+            // bubble.bottom = container.bottom - 8, so container.bottom = contentView.bottom - 4 + 8 = +4
+            bubbleContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: 4),
+            // bubble.trailing = container.trailing - 8, so container.trailing = contentView.trailing - 16 + 8 = -8
+            bubbleContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            // bubble.leading = container.leading + 8, so container.leading = contentView.leading + 16 - 8 = +8
+            bubbleContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
 
             // Mosaic view
             mosaicView.topAnchor.constraint(equalTo: bubbleView.topAnchor),

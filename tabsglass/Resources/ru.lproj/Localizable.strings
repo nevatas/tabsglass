@@ -46,6 +46,7 @@
 "menu.restore_message" = "Недавно удалённая заметка будет восстановлена";
 "menu.restore" = "Восстановить";
 "menu.remind" = "Напомнить";
+"menu.edit_reminder" = "Изм. напоминание";
 "menu.remove_reminder" = "Убрать напоминание";
 
 // MARK: - Themes
