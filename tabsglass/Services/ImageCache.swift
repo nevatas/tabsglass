@@ -165,3 +165,66 @@ extension ImageCache {
         }
     }
 }
+
+// MARK: - Video Thumbnail Support
+
+extension ImageCache {
+    /// Load video thumbnail (uses pre-saved thumbnail file)
+    /// - Parameters:
+    ///   - videoFileName: The video file name (used for cache key)
+    ///   - thumbnailFileName: The pre-generated thumbnail file name
+    ///   - targetSize: Target size for downsampling
+    ///   - completion: Completion handler with the loaded image
+    func loadVideoThumbnail(
+        videoFileName: String,
+        thumbnailFileName: String,
+        targetSize: CGSize,
+        completion: @escaping (UIImage?) -> Void
+    ) {
+        let cacheKey = "video_\(videoFileName)_thumb_\(Int(targetSize.width))x\(Int(targetSize.height))" as NSString
+
+        // Check cache first
+        if let cached = thumbnailCache.object(forKey: cacheKey) {
+            completion(cached)
+            return
+        }
+
+        // Load thumbnail file (stored in photos directory)
+        loadingQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            let url = Message.photosDirectory.appendingPathComponent(thumbnailFileName)
+            let image = self.downsample(imageAt: url, to: targetSize)
+
+            if let image = image {
+                self.thumbnailCache.setObject(image, forKey: cacheKey)
+            }
+
+            DispatchQueue.main.async {
+                completion(image)
+            }
+        }
+    }
+
+    /// Synchronous video thumbnail load
+    func videoThumbnailSync(
+        videoFileName: String,
+        thumbnailFileName: String,
+        targetSize: CGSize
+    ) -> UIImage? {
+        let cacheKey = "video_\(videoFileName)_thumb_\(Int(targetSize.width))x\(Int(targetSize.height))" as NSString
+
+        if let cached = thumbnailCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let url = Message.photosDirectory.appendingPathComponent(thumbnailFileName)
+        let image = downsample(imageAt: url, to: targetSize)
+
+        if let image = image {
+            thumbnailCache.setObject(image, forKey: cacheKey)
+        }
+
+        return image
+    }
+}

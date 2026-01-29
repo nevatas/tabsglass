@@ -15,6 +15,15 @@ struct IdentifiableImage: Identifiable {
     let image: UIImage
 }
 
+// MARK: - Attached Video Wrapper
+
+struct AttachedVideo: Identifiable {
+    let id = UUID()
+    let url: URL
+    let thumbnail: UIImage
+    let duration: Double
+}
+
 // MARK: - Composer State (Observable)
 
 @Observable
@@ -23,6 +32,7 @@ final class ComposerState {
     var attributedText: NSAttributedString = NSAttributedString()
     var shouldFocus: Bool = false
     var attachedImages: [IdentifiableImage] = []
+    var attachedVideos: [AttachedVideo] = []
     var textViewHeight: CGFloat = 24
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)?
@@ -35,8 +45,18 @@ final class ComposerState {
     /// Reference to the formatting text view for extracting entities
     weak var formattingTextView: FormattingTextView?
 
-    /// Height of images section (80 when visible, 0 when hidden)
-    var imagesSectionHeight: CGFloat = 0
+    /// Height of media section (80 when visible, 0 when hidden)
+    var mediaSectionHeight: CGFloat = 0
+
+    /// Total count of attached media (photos + videos)
+    var totalMediaCount: Int {
+        attachedImages.count + attachedVideos.count
+    }
+
+    /// Whether more media can be added
+    var canAddMedia: Bool {
+        totalMediaCount < 10
+    }
 
     /// Extract formatting entities from current text
     func extractEntities() -> [TextEntity] {
@@ -45,11 +65,11 @@ final class ComposerState {
 
     func removeImage(at index: Int) {
         guard index < attachedImages.count else { return }
-        let isLastImage = attachedImages.count == 1
+        let isLastMedia = totalMediaCount == 1
 
-        if isLastImage {
-            // Last image: remove without animation
-            imagesSectionHeight = 0
+        if isLastMedia {
+            // Last media: remove without animation
+            mediaSectionHeight = 0
             attachedImages.removeAll()
         } else {
             _ = withAnimation(.easeOut(duration: 0.2)) {
@@ -64,14 +84,47 @@ final class ComposerState {
         removeImage(at: index)
     }
 
+    func removeVideo(at index: Int) {
+        guard index < attachedVideos.count else { return }
+        let isLastMedia = totalMediaCount == 1
+
+        if isLastMedia {
+            // Last media: remove without animation
+            mediaSectionHeight = 0
+            attachedVideos.removeAll()
+        } else {
+            _ = withAnimation(.easeOut(duration: 0.2)) {
+                attachedVideos.remove(at: index)
+            }
+        }
+        onAttachmentChange?()
+    }
+
+    func removeVideo(id: UUID) {
+        guard let index = attachedVideos.firstIndex(where: { $0.id == id }) else { return }
+        removeVideo(at: index)
+    }
+
     func addImages(_ images: [UIImage]) {
-        let available = 10 - attachedImages.count
+        let available = 10 - totalMediaCount
         let toAdd = images.prefix(available).map { IdentifiableImage(image: $0) }
         attachedImages.append(contentsOf: toAdd)
-        // Set height when adding first images (80 images + 12 spacing = 92)
-        if imagesSectionHeight == 0 && !attachedImages.isEmpty {
+        // Set height when adding first media (80 + 12 spacing = 92)
+        if mediaSectionHeight == 0 && totalMediaCount > 0 {
             withAnimation(.easeOut(duration: 0.25)) {
-                imagesSectionHeight = 92
+                mediaSectionHeight = 92
+            }
+        }
+        onAttachmentChange?()
+    }
+
+    func addVideo(_ video: AttachedVideo) {
+        guard canAddMedia else { return }
+        attachedVideos.append(video)
+        // Set height when adding first media
+        if mediaSectionHeight == 0 && totalMediaCount > 0 {
+            withAnimation(.easeOut(duration: 0.25)) {
+                mediaSectionHeight = 92
             }
         }
         onAttachmentChange?()
@@ -79,7 +132,8 @@ final class ComposerState {
 
     func clearAttachments() {
         attachedImages.removeAll()
-        imagesSectionHeight = 0
+        attachedVideos.removeAll()
+        mediaSectionHeight = 0
     }
 
     func clearAll() {
@@ -97,6 +151,7 @@ final class ComposerState {
 final class SwiftUIComposerContainer: UIView {
     var onTextChange: ((String) -> Void)?
     var onImagesChange: (([UIImage]) -> Void)?
+    var onVideosChange: (([AttachedVideo]) -> Void)?
     var onSend: (() -> Void)? {
         didSet { composerState.onSend = onSend }
     }
@@ -113,7 +168,7 @@ final class SwiftUIComposerContainer: UIView {
         didSet { composerState.onShowTaskList = onShowTaskList }
     }
 
-    /// Callback для уведомления о изменении высоты
+    /// Callback for height changes
     var onHeightChange: ((CGFloat) -> Void)?
 
     private let composerState = ComposerState()
@@ -164,8 +219,9 @@ final class SwiftUIComposerContainer: UIView {
 
         composerState.onAttachmentChange = { [weak self] in
             guard let self = self else { return }
-            // Notify about images change
+            // Notify about images and videos change
             self.onImagesChange?(self.composerState.attachedImages.map { $0.image })
+            self.onVideosChange?(self.composerState.attachedVideos)
             // Update height with small delays to catch SwiftUI layout changes
             DispatchQueue.main.async {
                 self.updateHeight()
@@ -184,9 +240,24 @@ final class SwiftUIComposerContainer: UIView {
         composerState.attachedImages.map { $0.image }
     }
 
+    /// Get currently attached videos
+    var attachedVideos: [AttachedVideo] {
+        composerState.attachedVideos
+    }
+
+    /// Total media count (images + videos)
+    var totalMediaCount: Int {
+        composerState.totalMediaCount
+    }
+
     /// Add images from picker
     func addImages(_ images: [UIImage]) {
         composerState.addImages(images)
+    }
+
+    /// Add video from picker
+    func addVideo(_ video: AttachedVideo) {
+        composerState.addVideo(video)
     }
 
     private func setupHostingController() {
@@ -385,7 +456,11 @@ struct EmbeddedComposerView: View {
     @Bindable var state: ComposerState
 
     private var canSend: Bool {
-        !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.attachedImages.isEmpty
+        !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || state.totalMediaCount > 0
+    }
+
+    private var hasMedia: Bool {
+        state.totalMediaCount > 0
     }
 
     private var composerTint: Color {
@@ -400,14 +475,22 @@ struct EmbeddedComposerView: View {
                 Spacer(minLength: 0)
 
                 VStack(spacing: 0) {
-                    // Attached images row - height includes spacing (80 + 12 = 92, or 0)
-                    if !state.attachedImages.isEmpty {
+                    // Attached media row - height includes spacing (80 + 12 = 92, or 0)
+                    if hasMedia {
                         VStack(spacing: 0) {
                             ScrollView(.horizontal) {
                                 LazyHStack(spacing: 8) {
+                                    // Images first
                                     ForEach(state.attachedImages) { item in
                                         AttachedImageView(image: item.image) {
                                             state.removeImage(id: item.id)
+                                        }
+                                        .transition(.scale.combined(with: .opacity))
+                                    }
+                                    // Videos after
+                                    ForEach(state.attachedVideos) { video in
+                                        AttachedVideoView(video: video) {
+                                            state.removeVideo(id: video.id)
                                         }
                                         .transition(.scale.combined(with: .opacity))
                                     }
@@ -417,11 +500,11 @@ struct EmbeddedComposerView: View {
                             .scrollIndicators(.hidden)
                             .frame(height: 80)
 
-                            Spacer().frame(height: 12) // spacing below images
+                            Spacer().frame(height: 12) // spacing below media
                         }
-                        .frame(height: state.imagesSectionHeight > 0 ? 92 : 0)
+                        .frame(height: state.mediaSectionHeight > 0 ? 92 : 0)
                         .clipped()
-                        .opacity(state.imagesSectionHeight > 0 ? 1 : 0)
+                        .opacity(state.mediaSectionHeight > 0 ? 1 : 0)
                     }
 
                     // Bottom section with text field and buttons
@@ -476,7 +559,7 @@ struct EmbeddedComposerView: View {
                     .padding(.horizontal, 16)
                 }
             }
-            .padding(.top, state.attachedImages.isEmpty ? 14 : 8)
+            .padding(.top, hasMedia ? 8 : 14)
             .padding(.bottom, 14)
             .clipShape(.rect(cornerRadius: 24))
             .glassEffect(
@@ -521,6 +604,72 @@ struct AttachedImageView: View {
     }
 }
 
+// MARK: - Attached Video View
+
+struct AttachedVideoView: View {
+    let video: AttachedVideo
+    let onRemove: () -> Void
+
+    private var formattedDuration: String {
+        let totalSeconds = Int(video.duration)
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            // Thumbnail
+            Image(uiImage: video.thumbnail)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .allowsHitTesting(false)
+
+            // Play icon overlay (center)
+            ZStack {
+                Circle()
+                    .fill(Color.black.opacity(0.5))
+                    .frame(width: 28, height: 28)
+                Image(systemName: "play.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white)
+                    .offset(x: 1) // Visual balance
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+
+            // Duration badge (bottom right)
+            Text(formattedDuration)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(Color.black.opacity(0.6))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(6)
+                .allowsHitTesting(false)
+
+            // Remove button (top right)
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .contentShape(Circle())
+            .zIndex(1)
+            .padding(6)
+        }
+        .frame(width: 80, height: 80)
+    }
+}
+
 // MARK: - Message Cell
 
 final class MessageTableCell: UITableViewCell {
@@ -540,6 +689,9 @@ final class MessageTableCell: UITableViewCell {
 
     /// Callback when a photo is tapped: (index, sourceFrame in window, image, fileNames)
     var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
+
+    /// Callback when media is tapped (supports both photos and videos)
+    var onMediaTapped: ((Int, CGRect, UIImage, [String], Bool) -> Void)?
 
     /// Callback when a todo item is toggled: (itemId, isCompleted)
     var onTodoToggle: ((UUID, Bool) -> Void)?
@@ -619,8 +771,12 @@ final class MessageTableCell: UITableViewCell {
 
         // Mosaic media view
         mosaicView.translatesAutoresizingMaskIntoConstraints = false
-        mosaicView.onPhotoTapped = { [weak self] index, sourceFrame, image, fileNames in
-            self?.onPhotoTapped?(index, sourceFrame, image, fileNames)
+        mosaicView.onMediaTapped = { [weak self] index, sourceFrame, image, fileNames, isVideo in
+            self?.onMediaTapped?(index, sourceFrame, image, fileNames, isVideo)
+            // Backward compatibility
+            if !isVideo {
+                self?.onPhotoTapped?(index, sourceFrame, image, fileNames)
+            }
         }
         bubbleView.addSubview(mosaicView)
 
@@ -842,9 +998,8 @@ final class MessageTableCell: UITableViewCell {
     }
 
     private func applyLayout(for message: Message, width: CGFloat) {
-        let fileNames = message.photoFileNames
         let aspectRatios = message.aspectRatios
-        let hasPhotos = !fileNames.isEmpty && !aspectRatios.isEmpty
+        let hasMedia = message.hasMedia && !aspectRatios.isEmpty
         let hasText = !message.content.isEmpty
         let hasTodo = message.isTodoList
 
@@ -858,12 +1013,28 @@ final class MessageTableCell: UITableViewCell {
         // Calculate bubble width (cell width - 32 for margins)
         let bubbleWidth = max(width - 32, 0)
 
-        // Configure photos with mosaic layout (async loading)
-        if hasPhotos {
+        // Configure media with mosaic layout (async loading)
+        if hasMedia {
             let mosaicHeight = MosaicMediaView.calculateHeight(for: aspectRatios, maxWidth: bubbleWidth)
             mosaicHeightConstraint.constant = mosaicHeight
-            // isAtBottom: true only when there's no text below (photos-only message)
-            mosaicView.configure(with: fileNames, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText && !hasTodo)
+
+            // Build MediaItems array (photos first, then videos)
+            var mediaItems: [MediaItem] = []
+            for fileName in message.photoFileNames {
+                mediaItems.append(.photo(fileName))
+            }
+            for (index, fileName) in message.videoFileNames.enumerated() {
+                let thumbnailFileName = index < message.videoThumbnailFileNames.count
+                    ? message.videoThumbnailFileNames[index]
+                    : ""
+                let duration = index < message.videoDurations.count
+                    ? message.videoDurations[index]
+                    : 0
+                mediaItems.append(.video(fileName, thumbnailFileName: thumbnailFileName, duration: duration))
+            }
+
+            // isAtBottom: true only when there's no text below (media-only message)
+            mosaicView.configure(with: mediaItems, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText && !hasTodo)
             mosaicView.isHidden = false
         } else {
             mosaicHeightConstraint.constant = 0
@@ -885,13 +1056,13 @@ final class MessageTableCell: UITableViewCell {
             todoView.isHidden = true
 
             // Configure layout based on content
-            if hasPhotos && hasText {
-                // Both photos and text
+            if hasMedia && hasText {
+                // Both media and text
                 messageTextViewTopToMosaic.isActive = true
                 messageTextViewBottomToBubble.isActive = true
                 messageTextView.isHidden = false
-            } else if hasPhotos && !hasText {
-                // Photos only - mosaic fills to bottom
+            } else if hasMedia && !hasText {
+                // Media only - mosaic fills to bottom
                 mosaicBottomToBubble.isActive = true
                 messageTextView.isHidden = true
             } else {

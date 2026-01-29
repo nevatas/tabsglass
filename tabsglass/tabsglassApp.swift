@@ -17,12 +17,17 @@ struct tabsglassApp: App {
         // Warm up keyboard on app launch to avoid delay on first use
         KeyboardWarmer.shared.warmUp()
 
-        // Initialize model container
+        // Migrate photos to shared container (for Share Extension support)
+        // Note: Database migration happens automatically in SharedModelContainer.create()
+        SharedModelContainer.migratePhotosIfNeeded()
+
+        // Initialize model container with shared store for extension support
         // Note: Inbox is virtual (messages with tabId = nil), not a real tab
         do {
-            let container = try ModelContainer(for: Tab.self, Message.self)
+            let container = try SharedModelContainer.create()
             self.modelContainer = container
             Self.seedWelcomeMessagesIfNeeded(in: container)
+            Self.processPendingShareItems(in: container)
         } catch {
             fatalError("Failed to initialize model container: \(error)")
         }
@@ -31,14 +36,48 @@ struct tabsglassApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                    // Process any pending share items when app returns to foreground
+                    Self.processPendingShareItems(in: modelContainer)
+                }
         }
         .modelContainer(modelContainer)
     }
 }
 
-// MARK: - Welcome Messages Seeding
+// MARK: - Pending Share Items Processing
 
 private extension tabsglassApp {
+    static func processPendingShareItems(in container: ModelContainer) {
+        let pendingItems = PendingShareStorage.loadAll()
+        guard !pendingItems.isEmpty else { return }
+
+        let context = container.mainContext
+
+        for item in pendingItems {
+            // Detect URLs in text
+            let entities = TextEntity.detectURLs(in: item.text)
+
+            let message = Message(
+                content: item.text,
+                tabId: item.tabId,
+                entities: entities.isEmpty ? nil : entities,
+                photoFileNames: item.photoFileNames,
+                photoAspectRatios: item.photoAspectRatios,
+                videoFileNames: item.videoFileNames,
+                videoAspectRatios: item.videoAspectRatios,
+                videoDurations: item.videoDurations,
+                videoThumbnailFileNames: item.videoThumbnailFileNames
+            )
+            message.createdAt = item.createdAt
+
+            context.insert(message)
+        }
+
+        try? context.save()
+        PendingShareStorage.clearAll()
+    }
+
     static func seedWelcomeMessagesIfNeeded(in container: ModelContainer) {
         let key = "hasSeededWelcomeMessages"
         guard !UserDefaults.standard.bool(forKey: key) else { return }

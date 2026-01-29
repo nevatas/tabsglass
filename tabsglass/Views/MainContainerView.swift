@@ -32,6 +32,7 @@ struct MainContainerView: View {
     @State private var messageText = ""
     @State private var switchFraction: CGFloat = 0  // -1.0 to 1.0 swipe progress
     @State private var attachedImages: [UIImage] = []
+    @State private var attachedVideos: [AttachedVideo] = []
     @State private var formattingEntities: [TextEntity] = []
 
     /// Total number of tabs including virtual Inbox
@@ -61,6 +62,7 @@ struct MainContainerView: View {
                 messageText: $messageText,
                 switchFraction: $switchFraction,
                 attachedImages: $attachedImages,
+                attachedVideos: $attachedVideos,
                 formattingEntities: $formattingEntities,
                 onSend: { sendMessage() },
                 onDeleteMessage: { message in
@@ -205,38 +207,66 @@ struct MainContainerView: View {
                 originalText: message.content,
                 originalEntities: message.entities,
                 originalPhotoFileNames: message.photoFileNames,
-                onSave: { newText, newEntities, newPhotoFileNames in
-                    let originalFileNames = message.photoFileNames
-                    let originalAspectRatios = message.photoAspectRatios
+                originalVideoFileNames: message.videoFileNames,
+                originalVideoThumbnailFileNames: message.videoThumbnailFileNames,
+                originalVideoDurations: message.videoDurations,
+                onSave: { newText, newEntities, newPhotoFileNames, newVideoFileNames, newVideoThumbnailFileNames, newVideoDurations in
+                    let originalPhotoFileNames = message.photoFileNames
+                    let originalPhotoAspectRatios = message.photoAspectRatios
+                    let originalVideoFileNames = message.videoFileNames
+                    let originalVideoAspectRatios = message.videoAspectRatios
+                    let originalVideoThumbnailFileNames = message.videoThumbnailFileNames
 
                     // Delete removed photos from disk
-                    let removedPhotos = originalFileNames.filter { !newPhotoFileNames.contains($0) }
+                    let removedPhotos = originalPhotoFileNames.filter { !newPhotoFileNames.contains($0) }
                     for fileName in removedPhotos {
                         let url = Message.photosDirectory.appendingPathComponent(fileName)
                         try? FileManager.default.removeItem(at: url)
                     }
 
+                    // Delete removed videos from disk
+                    let removedVideos = originalVideoFileNames.filter { !newVideoFileNames.contains($0) }
+                    for fileName in removedVideos {
+                        SharedVideoStorage.deleteVideo(fileName)
+                    }
+                    // Delete removed video thumbnails
+                    let removedThumbnails = originalVideoThumbnailFileNames.filter { !newVideoThumbnailFileNames.contains($0) }
+                    for fileName in removedThumbnails {
+                        SharedPhotoStorage.deletePhoto(fileName)
+                    }
+
                     // Update aspect ratios - keep existing for old photos, calculate for new ones
-                    let newAspectRatios: [Double] = newPhotoFileNames.map { fileName in
-                        // Check if it's an existing photo
-                        if let index = originalFileNames.firstIndex(of: fileName),
-                           index < originalAspectRatios.count {
-                            return originalAspectRatios[index]
+                    let newPhotoAspectRatios: [Double] = newPhotoFileNames.map { fileName in
+                        if let index = originalPhotoFileNames.firstIndex(of: fileName),
+                           index < originalPhotoAspectRatios.count {
+                            return originalPhotoAspectRatios[index]
                         }
-                        // New photo - calculate aspect ratio from file
                         let url = Message.photosDirectory.appendingPathComponent(fileName)
                         if let data = try? Data(contentsOf: url),
                            let image = UIImage(data: data) {
                             return Double(image.size.width / image.size.height)
                         }
-                        return 1.0 // fallback
+                        return 1.0
+                    }
+
+                    // Keep existing video aspect ratios
+                    let newVideoAspectRatios: [Double] = newVideoFileNames.map { fileName in
+                        if let index = originalVideoFileNames.firstIndex(of: fileName),
+                           index < originalVideoAspectRatios.count {
+                            return originalVideoAspectRatios[index]
+                        }
+                        return 1.0
                     }
 
                     // Update message
                     message.content = newText
                     message.entities = newEntities
                     message.photoFileNames = newPhotoFileNames
-                    message.photoAspectRatios = newAspectRatios
+                    message.photoAspectRatios = newPhotoAspectRatios
+                    message.videoFileNames = newVideoFileNames
+                    message.videoAspectRatios = newVideoAspectRatios
+                    message.videoDurations = newVideoDurations
+                    message.videoThumbnailFileNames = newVideoThumbnailFileNames
 
                     messageToEdit = nil
                 },
@@ -290,65 +320,113 @@ struct MainContainerView: View {
                 } : nil
             )
         }
+        .task {
+            // Sync tabs to extension on app launch
+            TabsSync.saveTabs(Array(tabs))
+        }
     }
 
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Allow sending if there's text OR images
-        guard !trimmedText.isEmpty || !attachedImages.isEmpty else { return }
+        let hasMedia = !attachedImages.isEmpty || !attachedVideos.isEmpty
+        // Allow sending if there's text OR media
+        guard !trimmedText.isEmpty || hasMedia else { return }
 
-        // Save attached images and get file names with aspect ratios
+        // Capture all data BEFORE clearing (for async Task)
+        let imagesToSave = attachedImages
+        let videosToSave = attachedVideos
+        let entitiesToSave = formattingEntities
+        let originalText = messageText
+        let tabId = currentTabId
+
+        // Clear UI immediately for responsiveness
+        messageText = ""
+        attachedImages = []
+        attachedVideos = []
+        formattingEntities = []
+
+        // Save photos synchronously (they're already in memory)
         var photoFileNames: [String] = []
         var photoAspectRatios: [Double] = []
-        for image in attachedImages {
+        for image in imagesToSave {
             if let result = Message.savePhoto(image) {
                 photoFileNames.append(result.fileName)
                 photoAspectRatios.append(result.aspectRatio)
             }
         }
 
-        // Calculate leading whitespace offset for entity adjustment
-        let leadingWhitespace = messageText.prefix(while: { $0.isWhitespace || $0.isNewline }).count
+        // Save videos asynchronously (file I/O)
+        Task {
+            var videoFileNames: [String] = []
+            var videoAspectRatios: [Double] = []
+            var videoDurations: [Double] = []
+            var videoThumbnailFileNames: [String] = []
 
-        // Adjust formatting entity offsets for trimmed text
-        var allEntities: [TextEntity] = []
-        for entity in formattingEntities {
-            let newOffset = entity.offset - leadingWhitespace
-            // Only include entities that are within the trimmed text bounds
-            if newOffset >= 0 && newOffset + entity.length <= trimmedText.count {
-                allEntities.append(TextEntity(
-                    type: entity.type,
-                    offset: newOffset,
-                    length: entity.length,
-                    url: entity.url
-                ))
+            for video in videosToSave {
+                if let result = await SharedVideoStorage.saveVideo(from: video.url) {
+                    videoFileNames.append(result.fileName)
+                    videoAspectRatios.append(result.aspectRatio)
+                    videoDurations.append(result.duration)
+                    videoThumbnailFileNames.append(result.thumbnailFileName)
+                }
+                // Clean up temp file
+                try? FileManager.default.removeItem(at: video.url)
+            }
+
+            await MainActor.run {
+                // Calculate leading whitespace offset for entity adjustment
+                let leadingWhitespace = originalText.prefix(while: { $0.isWhitespace || $0.isNewline }).count
+
+                // Adjust formatting entity offsets for trimmed text
+                var allEntities: [TextEntity] = []
+                for entity in entitiesToSave {
+                    let newOffset = entity.offset - leadingWhitespace
+                    // Only include entities that are within the trimmed text bounds
+                    if newOffset >= 0 && newOffset + entity.length <= trimmedText.count {
+                        allEntities.append(TextEntity(
+                            type: entity.type,
+                            offset: newOffset,
+                            length: entity.length,
+                            url: entity.url
+                        ))
+                    }
+                }
+
+                // Add URL entities (already relative to trimmed text)
+                let urlEntities = TextEntity.detectURLs(in: trimmedText)
+                allEntities.append(contentsOf: urlEntities)
+
+                // tabId = nil for Inbox, or actual tab ID
+                let message = Message(
+                    content: trimmedText,
+                    tabId: tabId,
+                    entities: allEntities.isEmpty ? nil : allEntities,
+                    photoFileNames: photoFileNames,
+                    photoAspectRatios: photoAspectRatios,
+                    videoFileNames: videoFileNames,
+                    videoAspectRatios: videoAspectRatios,
+                    videoDurations: videoDurations,
+                    videoThumbnailFileNames: videoThumbnailFileNames
+                )
+                modelContext.insert(message)
             }
         }
-
-        // Add URL entities (already relative to trimmed text)
-        let urlEntities = TextEntity.detectURLs(in: trimmedText)
-        allEntities.append(contentsOf: urlEntities)
-
-        // tabId = nil for Inbox, or actual tab ID
-        let message = Message(
-            content: trimmedText,
-            tabId: currentTabId,
-            entities: allEntities.isEmpty ? nil : allEntities,
-            photoFileNames: photoFileNames,
-            photoAspectRatios: photoAspectRatios
-        )
-        modelContext.insert(message)
-        messageText = ""
-        attachedImages = []
-        formattingEntities = []
     }
 
     private func deleteMessage(_ message: Message) {
-        // Clean up previous deleted message's photos (if any)
+        // Clean up previous deleted message's media (if any)
         if let previousDeleted = DeletedMessageStore.shared.lastDeleted {
+            // Delete photos
             for fileName in previousDeleted.photoFileNames {
                 let url = Message.photosDirectory.appendingPathComponent(fileName)
                 try? FileManager.default.removeItem(at: url)
+            }
+            // Delete videos and their thumbnails
+            for fileName in previousDeleted.videoFileNames {
+                SharedVideoStorage.deleteVideo(fileName)
+            }
+            for fileName in previousDeleted.videoThumbnailFileNames {
+                SharedPhotoStorage.deletePhoto(fileName)
             }
         }
 
@@ -357,10 +435,10 @@ struct MainContainerView: View {
             NotificationService.shared.cancelReminder(notificationId: notificationId)
         }
 
-        // Store for undo (don't delete photos yet)
+        // Store for undo (don't delete media yet)
         DeletedMessageStore.shared.store(message)
 
-        // Delete from database (photos kept for potential restore)
+        // Delete from database (media kept for potential restore)
         modelContext.delete(message)
     }
 
@@ -434,6 +512,10 @@ struct MainContainerView: View {
             entities: snapshot.entities,
             photoFileNames: snapshot.photoFileNames,
             photoAspectRatios: snapshot.photoAspectRatios,
+            videoFileNames: snapshot.videoFileNames,
+            videoAspectRatios: snapshot.videoAspectRatios,
+            videoDurations: snapshot.videoDurations,
+            videoThumbnailFileNames: snapshot.videoThumbnailFileNames,
             position: snapshot.position,
             sourceUrl: snapshot.sourceUrl,
             linkPreview: snapshot.linkPreview,
@@ -449,6 +531,7 @@ struct MainContainerView: View {
         let maxPosition = tabs.map(\.position).max() ?? -1
         let newTab = Tab(title: title, position: maxPosition + 1)
         modelContext.insert(newTab)
+        syncTabsToExtension()
 
         let key = "hasRequestedReviewAfterTabCreate"
         if !UserDefaults.standard.bool(forKey: key) {
@@ -461,6 +544,7 @@ struct MainContainerView: View {
 
     private func renameTab(_ tab: Tab, to newTitle: String) {
         tab.title = newTitle
+        syncTabsToExtension()
     }
 
     private func deleteTab(_ tab: Tab) {
@@ -473,11 +557,8 @@ struct MainContainerView: View {
             NotificationService.shared.cancelReminders(notificationIds: notificationIds)
 
             for message in messages {
-                // Delete associated photos
-                for fileName in message.photoFileNames {
-                    let url = Message.photosDirectory.appendingPathComponent(fileName)
-                    try? FileManager.default.removeItem(at: url)
-                }
+                // Delete associated media
+                message.deleteMediaFiles()
                 modelContext.delete(message)
             }
         }
@@ -491,6 +572,15 @@ struct MainContainerView: View {
         }
 
         modelContext.delete(tab)
+        syncTabsToExtension()
+    }
+
+    /// Sync tabs list to App Group for Share Extension
+    private func syncTabsToExtension() {
+        // Delay slightly to ensure SwiftData has updated
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
+            TabsSync.saveTabs(Array(tabs))
+        }
     }
 }
 

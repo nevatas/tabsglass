@@ -116,6 +116,10 @@ final class Message: Identifiable {
     var mediaGroupId: String?       // Groups multiple media in same message
     var photoFileNames: [String] = []
     var photoAspectRatios: [Double] = []
+    var videoFileNames: [String] = []
+    var videoAspectRatios: [Double] = []
+    var videoDurations: [Double] = []
+    var videoThumbnailFileNames: [String] = []
     var todoItems: [TodoItem]?      // Todo list items (nil = not a todo list)
     var todoTitle: String?          // Optional title for todo list
     var reminderDate: Date?         // When to send reminder notification
@@ -125,6 +129,26 @@ final class Message: Identifiable {
     /// Whether this message has a reminder set
     var hasReminder: Bool {
         reminderDate != nil
+    }
+
+    /// Whether this message has any media (photos or videos)
+    var hasMedia: Bool {
+        !photoFileNames.isEmpty || !videoFileNames.isEmpty
+    }
+
+    /// Total count of all media items (photos + videos)
+    var totalMediaCount: Int {
+        photoFileNames.count + videoFileNames.count
+    }
+
+    /// Check if media at given index is a video (photos come first, then videos)
+    func isVideo(at index: Int) -> Bool {
+        index >= photoFileNames.count
+    }
+
+    /// Get video index from combined media index
+    func videoIndex(from mediaIndex: Int) -> Int {
+        mediaIndex - photoFileNames.count
     }
 
     /// Check if this message is a todo list
@@ -139,6 +163,10 @@ final class Message: Identifiable {
         entities: [TextEntity]? = nil,
         photoFileNames: [String] = [],
         photoAspectRatios: [Double] = [],
+        videoFileNames: [String] = [],
+        videoAspectRatios: [Double] = [],
+        videoDurations: [Double] = [],
+        videoThumbnailFileNames: [String] = [],
         position: Int = 0,
         sourceUrl: String? = nil,
         linkPreview: LinkPreview? = nil,
@@ -156,10 +184,19 @@ final class Message: Identifiable {
         self.mediaGroupId = mediaGroupId
         self.photoFileNames = photoFileNames
         self.photoAspectRatios = photoAspectRatios
+        self.videoFileNames = videoFileNames
+        self.videoAspectRatios = videoAspectRatios
+        self.videoDurations = videoDurations
+        self.videoThumbnailFileNames = videoThumbnailFileNames
     }
 
-    /// Get aspect ratios as CGFloat array
+    /// Get aspect ratios as CGFloat array (photos + videos combined)
     var aspectRatios: [CGFloat] {
+        (photoAspectRatios + videoAspectRatios).map { CGFloat($0) }
+    }
+
+    /// Get photo-only aspect ratios as CGFloat array
+    var photoOnlyAspectRatios: [CGFloat] {
         photoAspectRatios.map { CGFloat($0) }
     }
 
@@ -172,7 +209,7 @@ final class Message: Identifiable {
         }
     }
 
-    /// Check if message has no content (no text, no valid photos, no todo items)
+    /// Check if message has no content (no text, no valid media, no todo items)
     var isEmpty: Bool {
         let hasText = !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if hasText { return false }
@@ -185,19 +222,24 @@ final class Message: Identifiable {
             let url = Message.photosDirectory.appendingPathComponent(fileName)
             return FileManager.default.fileExists(atPath: url.path)
         }
-        return !hasValidPhotos
+        if hasValidPhotos { return false }
+
+        // Check if any video files exist (without loading them)
+        let hasValidVideos = videoFileNames.contains { fileName in
+            let url = Message.videosDirectory.appendingPathComponent(fileName)
+            return FileManager.default.fileExists(atPath: url.path)
+        }
+        return !hasValidVideos
     }
 
-    /// Directory for storing message photos
+    /// Directory for storing message photos (uses shared container for extension support)
     static var photosDirectory: URL {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let photosPath = documentsPath.appendingPathComponent("MessagePhotos", isDirectory: true)
+        SharedPhotoStorage.photosDirectory
+    }
 
-        if !FileManager.default.fileExists(atPath: photosPath.path) {
-            try? FileManager.default.createDirectory(at: photosPath, withIntermediateDirectories: true)
-        }
-
-        return photosPath
+    /// Directory for storing message videos (uses shared container for extension support)
+    static var videosDirectory: URL {
+        SharedVideoStorage.videosDirectory
     }
 
     /// Save image and return file name and aspect ratio
@@ -220,8 +262,23 @@ final class Message: Identifiable {
     /// Delete photo files when message is deleted
     func deletePhotoFiles() {
         for fileName in photoFileNames {
-            let url = Message.photosDirectory.appendingPathComponent(fileName)
-            try? FileManager.default.removeItem(at: url)
+            SharedPhotoStorage.deletePhoto(fileName)
         }
+    }
+
+    /// Delete video files and their thumbnails when message is deleted
+    func deleteVideoFiles() {
+        for fileName in videoFileNames {
+            SharedVideoStorage.deleteVideo(fileName)
+        }
+        for fileName in videoThumbnailFileNames {
+            SharedPhotoStorage.deletePhoto(fileName)
+        }
+    }
+
+    /// Delete all media files (photos and videos)
+    func deleteMediaFiles() {
+        deletePhotoFiles()
+        deleteVideoFiles()
     }
 }

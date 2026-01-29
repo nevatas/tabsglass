@@ -1,4 +1,4 @@
-//  СмотUnifiedChatView.swift
+//  UnifiedChatView.swift
 //  tabsglass
 //
 //  Single input bar with swipeable message tabs
@@ -7,6 +7,8 @@
 import SwiftUI
 import UIKit
 import PhotosUI
+import AVFoundation
+import UniformTypeIdentifiers
 
 // MARK: - SwiftUI Bridge
 
@@ -17,6 +19,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var messageText: String
     @Binding var switchFraction: CGFloat  // -1.0 to 1.0 swipe progress
     @Binding var attachedImages: [UIImage]
+    @Binding var attachedVideos: [AttachedVideo]
     @Binding var formattingEntities: [TextEntity]  // Entities from formatting
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
@@ -51,6 +54,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         }
         vc.onImagesChange = { images in
             attachedImages = images
+        }
+        vc.onVideosChange = { videos in
+            attachedVideos = videos
         }
         vc.onEntitiesExtracted = { entities in
             formattingEntities = entities
@@ -94,6 +100,7 @@ final class UnifiedChatViewController: UIViewController {
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
     var onEditMessage: ((Message) -> Void)?
     var onImagesChange: (([UIImage]) -> Void)?
+    var onVideosChange: (([AttachedVideo]) -> Void)?
     var onRestoreMessage: (() -> Void)?
     var onShowTaskList: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
@@ -198,6 +205,10 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onImagesChange = { [weak self] images in
             self?.onImagesChange?(images)
+        }
+
+        inputContainer.onVideosChange = { [weak self] videos in
+            self?.onVideosChange?(videos)
         }
 
         // Bottom fade gradient (behind inputContainer, at screen/keyboard bottom)
@@ -319,8 +330,8 @@ final class UnifiedChatViewController: UIViewController {
         vc.onEditMessage = { [weak self] message in
             self?.onEditMessage?(message)
         }
-        vc.onOpenGallery = { [weak self] startIndex, fileNames, sourceFrame in
-            self?.presentGallery(startIndex: startIndex, fileNames: fileNames, sourceFrame: sourceFrame)
+        vc.onOpenGallery = { [weak self] message, startIndex, sourceFrame in
+            self?.presentGallery(message: message, startIndex: startIndex, sourceFrame: sourceFrame)
         }
         vc.onToggleTodoItem = { [weak self] message, itemId, isCompleted in
             self?.onToggleTodoItem?(message, itemId, isCompleted)
@@ -402,12 +413,13 @@ final class UnifiedChatViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    // MARK: - Photo Picker
+    // MARK: - Media Picker
 
     private func showPhotoPicker() {
         var config = PHPickerConfiguration()
-        config.selectionLimit = 10 - inputContainer.attachedImages.count
-        config.filter = .images
+        config.selectionLimit = 10 - inputContainer.totalMediaCount
+        config.filter = .any(of: [.images, .videos])  // Support both photos and videos
+        config.preferredAssetRepresentationMode = .current  // Avoid unnecessary conversion
 
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = self
@@ -427,33 +439,57 @@ final class UnifiedChatViewController: UIViewController {
 
     // MARK: - Gallery
 
-    private func presentGallery(startIndex: Int, fileNames: [String], sourceFrame: CGRect) {
-        guard !fileNames.isEmpty, startIndex < fileNames.count else { return }
+    private func presentGallery(message: Message, startIndex: Int, sourceFrame: CGRect) {
+        let totalMedia = message.totalMediaCount
+        guard totalMedia > 0, startIndex < totalMedia else { return }
 
-        // Load full images asynchronously
+        // Load all media asynchronously
         let group = DispatchGroup()
-        var loadedImages: [Int: UIImage] = [:]
+        var loadedMedia: [Int: GalleryMediaItem] = [:]
 
-        for (index, fileName) in fileNames.enumerated() {
+        // Load photos
+        for (index, fileName) in message.photoFileNames.enumerated() {
             group.enter()
             ImageCache.shared.loadFullImage(for: fileName) { image in
                 if let image = image {
-                    loadedImages[index] = image
+                    loadedMedia[index] = .photo(image: image)
                 }
                 group.leave()
             }
         }
 
+        // Load video thumbnails and prepare video items
+        let photoCount = message.photoFileNames.count
+        for (videoIndex, videoFileName) in message.videoFileNames.enumerated() {
+            let mediaIndex = photoCount + videoIndex
+            let videoURL = SharedVideoStorage.videoURL(for: videoFileName)
+
+            // Load thumbnail if available
+            if videoIndex < message.videoThumbnailFileNames.count {
+                let thumbFileName = message.videoThumbnailFileNames[videoIndex]
+                group.enter()
+                ImageCache.shared.loadFullImage(for: thumbFileName) { thumbnail in
+                    loadedMedia[mediaIndex] = .video(url: videoURL, thumbnail: thumbnail)
+                    group.leave()
+                }
+            } else {
+                loadedMedia[mediaIndex] = .video(url: videoURL, thumbnail: nil)
+            }
+        }
+
         group.notify(queue: .main) { [weak self] in
             // Convert to ordered array
-            let photos = (0..<fileNames.count).compactMap { loadedImages[$0] }
-            guard !photos.isEmpty, startIndex < photos.count else { return }
+            let mediaItems = (0..<totalMedia).compactMap { loadedMedia[$0] }
+            guard !mediaItems.isEmpty, startIndex < mediaItems.count else { return }
+
+            // Get source image for transition
+            let sourceImage = mediaItems[startIndex].thumbnail
 
             let galleryVC = GalleryViewController(
-                photos: photos,
+                mediaItems: mediaItems,
                 startIndex: startIndex,
                 sourceFrame: sourceFrame,
-                sourceImage: photos[startIndex]
+                sourceImage: sourceImage
             )
             self?.present(galleryVC, animated: true)
         }
@@ -469,23 +505,87 @@ extension UnifiedChatViewController: PHPickerViewControllerDelegate {
 
         guard !results.isEmpty else { return }
 
-        let group = DispatchGroup()
-        var loadedImages: [UIImage] = []
+        Task { @MainActor in
+            for result in results {
+                let provider = result.itemProvider
 
-        for result in results {
-            group.enter()
-            result.itemProvider.loadObject(ofClass: UIImage.self) { object, _ in
-                if let image = object as? UIImage {
-                    loadedImages.append(image)
+                // Check for video first
+                if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+                    await loadVideo(from: provider)
                 }
-                group.leave()
+                // Then check for images
+                else if provider.canLoadObject(ofClass: UIImage.self) {
+                    await loadImage(from: provider)
+                }
             }
         }
+    }
 
-        group.notify(queue: .main) { [weak self] in
-            guard let self = self else { return }
-            self.inputContainer.addImages(loadedImages)
-            self.onImagesChange?(self.inputContainer.attachedImages)
+    @MainActor
+    private func loadImage(from provider: NSItemProvider) async {
+        await withCheckedContinuation { continuation in
+            provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+                if let image = object as? UIImage {
+                    DispatchQueue.main.async {
+                        self?.inputContainer.addImages([image])
+                        self?.onImagesChange?(self?.inputContainer.attachedImages ?? [])
+                    }
+                }
+                continuation.resume()
+            }
+        }
+    }
+
+    @MainActor
+    private func loadVideo(from provider: NSItemProvider) async {
+        // Use loadFileRepresentation to avoid loading video into memory
+        await withCheckedContinuation { continuation in
+            provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { [weak self] url, error in
+                guard let url = url else {
+                    continuation.resume()
+                    return
+                }
+
+                // Copy to temporary directory (url will be deleted after callback)
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString + ".mp4")
+                do {
+                    try FileManager.default.copyItem(at: url, to: tempURL)
+                } catch {
+                    continuation.resume()
+                    return
+                }
+
+                Task { @MainActor in
+                    // Generate thumbnail and get metadata
+                    let asset = AVURLAsset(url: tempURL)
+
+                    // Check duration limit
+                    let duration = await SharedVideoStorage.loadDuration(asset)
+                    guard duration > 0 && duration <= SharedVideoStorage.maxVideoDuration else {
+                        try? FileManager.default.removeItem(at: tempURL)
+                        continuation.resume()
+                        return
+                    }
+
+                    // Generate thumbnail
+                    guard let thumbnail = await SharedVideoStorage.generateThumbnail(asset) else {
+                        try? FileManager.default.removeItem(at: tempURL)
+                        continuation.resume()
+                        return
+                    }
+
+                    let video = AttachedVideo(
+                        url: tempURL,
+                        thumbnail: thumbnail,
+                        duration: duration
+                    )
+
+                    self?.inputContainer.addVideo(video)
+                    self?.onVideosChange?(self?.inputContainer.attachedVideos ?? [])
+                    continuation.resume()
+                }
+            }
         }
     }
 }
@@ -585,8 +685,8 @@ final class MessageListViewController: UIViewController {
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
     var onEditMessage: ((Message) -> Void)?
-    /// Callback when a gallery should be opened: (startIndex, fileNames, sourceFrame)
-    var onOpenGallery: ((Int, [String], CGRect) -> Void)?
+    /// Callback when gallery should be opened: (message, startIndex, sourceFrame)
+    var onOpenGallery: ((Message, Int, CGRect) -> Void)?
     /// Callback when a todo item is toggled: (message, itemId, isCompleted)
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     /// Callback when reminder is toggled on a message
@@ -810,8 +910,9 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
         let message = sortedMessages[indexPath.row]
         cell.configure(with: message)
-        cell.onPhotoTapped = { [weak self] index, sourceFrame, _, fileNames in
-            self?.onOpenGallery?(index, fileNames, sourceFrame)
+        cell.onMediaTapped = { [weak self] index, sourceFrame, _, _, _ in
+            // Open unified gallery with all media (photos + videos)
+            self?.onOpenGallery?(message, index, sourceFrame)
         }
         cell.onTodoToggle = { [weak self] itemId, isCompleted in
             self?.onToggleTodoItem?(message, itemId, isCompleted)
@@ -839,11 +940,11 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             return max(height, 50)
         }
 
-        let hasPhotos = !message.photoFileNames.isEmpty && !message.aspectRatios.isEmpty
+        let hasMedia = message.hasMedia && !message.aspectRatios.isEmpty
         let hasText = !message.content.isEmpty
 
-        // Calculate mosaic height if has photos
-        if hasPhotos {
+        // Calculate mosaic height if has media
+        if hasMedia {
             let mosaicHeight = MosaicMediaView.calculateHeight(for: message.aspectRatios, maxWidth: bubbleWidth)
             height += mosaicHeight
         }
@@ -866,8 +967,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 context: nil
             ).height
 
-            if hasPhotos {
-                // Photos + text: spacing (10) + text + bottom padding (10)
+            if hasMedia {
+                // Media + text: spacing (10) + text + bottom padding (10)
                 height += 10 + ceil(textHeight) + 10
             } else {
                 // Text only: top padding (10) + text + bottom padding (10)

@@ -13,6 +13,10 @@ struct DeletedMessageSnapshot {
     let entities: [TextEntity]?
     let photoFileNames: [String]
     let photoAspectRatios: [Double]
+    let videoFileNames: [String]
+    let videoAspectRatios: [Double]
+    let videoDurations: [Double]
+    let videoThumbnailFileNames: [String]
     let tabId: UUID?  // nil = Inbox
     let createdAt: Date
     let deletedAt: Date
@@ -26,6 +30,10 @@ struct DeletedMessageSnapshot {
         self.entities = message.entities
         self.photoFileNames = message.photoFileNames
         self.photoAspectRatios = message.photoAspectRatios
+        self.videoFileNames = message.videoFileNames
+        self.videoAspectRatios = message.videoAspectRatios
+        self.videoDurations = message.videoDurations
+        self.videoThumbnailFileNames = message.videoThumbnailFileNames
         self.tabId = message.tabId
         self.createdAt = message.createdAt
         self.deletedAt = Date()

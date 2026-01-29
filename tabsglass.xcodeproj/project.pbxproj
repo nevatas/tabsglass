@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D6C2B1552F2B909B000F3043 /* share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D6C2B14B2F2B909B000F3043 /* share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D63BFDF82F217BAD00B28B56 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,17 +25,60 @@
 			remoteGlobalIDString = D63BFDE92F217BAC00B28B56;
 			remoteInfo = tabsglass;
 		};
+		D6C2B1532F2B909B000F3043 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D63BFDE22F217BAC00B28B56 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D6C2B14A2F2B909B000F3043;
+			remoteInfo = share;
+		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		D6C2B15A2F2B909B000F3043 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D6C2B1552F2B909B000F3043 /* share.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		D63BFDEA2F217BAC00B28B56 /* tabsglass.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = tabsglass.app; path = Taby.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D63BFDEA2F217BAC00B28B56 /* Taby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Taby.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D63BFDF72F217BAD00B28B56 /* tabsglassTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = tabsglassTests.xctest; path = Taby.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D63BFE012F217BAD00B28B56 /* tabsglassUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = tabsglassUITests.xctest; path = Taby.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D6C2B14B2F2B909B000F3043 /* share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = share.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D6C2B1562F2B909B000F3043 /* Exceptions for "share" folder in "share" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D6C2B14A2F2B909B000F3043 /* share */;
+		};
+		D6C2B15E2F2B91CB000F3043 /* Exceptions for "tabsglass" folder in "share" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"/Localized: Resources/Localizable.strings",
+				Services/Localization.swift,
+			);
+			target = D6C2B14A2F2B909B000F3043 /* share */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D63BFDEC2F217BAC00B28B56 /* tabsglass */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D6C2B15E2F2B91CB000F3043 /* Exceptions for "tabsglass" folder in "share" target */,
+			);
 			path = tabsglass;
 			sourceTree = "<group>";
 		};
@@ -43,6 +90,14 @@
 		D63BFE042F217BAD00B28B56 /* tabsglassUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = tabsglassUITests;
+			sourceTree = "<group>";
+		};
+		D6C2B14C2F2B909B000F3043 /* share */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D6C2B1562F2B909B000F3043 /* Exceptions for "share" folder in "share" target */,
+			);
+			path = share;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +124,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D6C2B1482F2B909B000F3043 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +140,7 @@
 				D63BFDEC2F217BAC00B28B56 /* tabsglass */,
 				D63BFDFA2F217BAD00B28B56 /* tabsglassTests */,
 				D63BFE042F217BAD00B28B56 /* tabsglassUITests */,
+				D6C2B14C2F2B909B000F3043 /* share */,
 				D63BFDEB2F217BAC00B28B56 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -85,9 +148,10 @@
 		D63BFDEB2F217BAC00B28B56 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				D63BFDEA2F217BAC00B28B56 /* tabsglass.app */,
+				D63BFDEA2F217BAC00B28B56 /* Taby.app */,
 				D63BFDF72F217BAD00B28B56 /* tabsglassTests.xctest */,
 				D63BFE012F217BAD00B28B56 /* tabsglassUITests.xctest */,
+				D6C2B14B2F2B909B000F3043 /* share.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,10 +166,12 @@
 				D63BFDE62F217BAC00B28B56 /* Sources */,
 				D63BFDE72F217BAC00B28B56 /* Frameworks */,
 				D63BFDE82F217BAC00B28B56 /* Resources */,
+				D6C2B15A2F2B909B000F3043 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D6C2B1542F2B909B000F3043 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D63BFDEC2F217BAC00B28B56 /* tabsglass */,
@@ -114,7 +180,7 @@
 			packageProductDependencies = (
 			);
 			productName = tabsglass;
-			productReference = D63BFDEA2F217BAC00B28B56 /* tabsglass.app */;
+			productReference = D63BFDEA2F217BAC00B28B56 /* Taby.app */;
 			productType = "com.apple.product-type.application";
 		};
 		D63BFDF62F217BAD00B28B56 /* tabsglassTests */ = {
@@ -163,6 +229,28 @@
 			productReference = D63BFE012F217BAD00B28B56 /* tabsglassUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		D6C2B14A2F2B909B000F3043 /* share */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D6C2B1572F2B909B000F3043 /* Build configuration list for PBXNativeTarget "share" */;
+			buildPhases = (
+				D6C2B1472F2B909B000F3043 /* Sources */,
+				D6C2B1482F2B909B000F3043 /* Frameworks */,
+				D6C2B1492F2B909B000F3043 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D6C2B14C2F2B909B000F3043 /* share */,
+			);
+			name = share;
+			packageProductDependencies = (
+			);
+			productName = share;
+			productReference = D6C2B14B2F2B909B000F3043 /* share.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -183,6 +271,9 @@
 					D63BFE002F217BAD00B28B56 = {
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = D63BFDE92F217BAC00B28B56;
+					};
+					D6C2B14A2F2B909B000F3043 = {
+						CreatedOnToolsVersion = 26.2;
 					};
 				};
 			};
@@ -207,6 +298,7 @@
 				D63BFDE92F217BAC00B28B56 /* tabsglass */,
 				D63BFDF62F217BAD00B28B56 /* tabsglassTests */,
 				D63BFE002F217BAD00B28B56 /* tabsglassUITests */,
+				D6C2B14A2F2B909B000F3043 /* share */,
 			);
 		};
 /* End PBXProject section */
@@ -227,6 +319,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D63BFDFF2F217BAD00B28B56 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D6C2B1492F2B909B000F3043 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -257,6 +356,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D6C2B1472F2B909B000F3043 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -269,6 +375,11 @@
 			isa = PBXTargetDependency;
 			target = D63BFDE92F217BAC00B28B56 /* tabsglass */;
 			targetProxy = D63BFE022F217BAD00B28B56 /* PBXContainerItemProxy */;
+		};
+		D6C2B1542F2B909B000F3043 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D6C2B14A2F2B909B000F3043 /* share */;
+			targetProxy = D6C2B1532F2B909B000F3043 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -399,6 +510,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = tabsglass/tabsglass.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y33Y2LGZBR;
@@ -435,6 +547,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = tabsglass/tabsglass.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y33Y2LGZBR;
@@ -550,6 +663,64 @@
 			};
 			name = Release;
 		};
+		D6C2B1582F2B909B000F3043 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = share/share.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y33Y2LGZBR;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = share/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = share;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = company.thecool.taby.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D6C2B1592F2B909B000F3043 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = share/share.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y33Y2LGZBR;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = share/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = share;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = company.thecool.taby.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -585,6 +756,15 @@
 			buildConfigurations = (
 				D63BFE122F217BAD00B28B56 /* Debug */,
 				D63BFE132F217BAD00B28B56 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D6C2B1572F2B909B000F3043 /* Build configuration list for PBXNativeTarget "share" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D6C2B1582F2B909B000F3043 /* Debug */,
+				D6C2B1592F2B909B000F3043 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

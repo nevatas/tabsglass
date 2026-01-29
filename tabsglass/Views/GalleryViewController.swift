@@ -2,10 +2,33 @@
 //  GalleryViewController.swift
 //  tabsglass
 //
-//  Telegram-style fullscreen gallery viewer for photos
+//  Telegram-style fullscreen gallery viewer for photos and videos
 //
 
 import UIKit
+import AVKit
+
+// MARK: - Gallery Media Item
+
+/// Represents a media item in the gallery (photo or video)
+enum GalleryMediaItem {
+    case photo(image: UIImage)
+    case video(url: URL, thumbnail: UIImage?)
+
+    var isVideo: Bool {
+        if case .video = self { return true }
+        return false
+    }
+
+    var thumbnail: UIImage? {
+        switch self {
+        case .photo(let image):
+            return image
+        case .video(_, let thumbnail):
+            return thumbnail
+        }
+    }
+}
 
 // MARK: - Gallery View Controller
 
@@ -13,7 +36,7 @@ final class GalleryViewController: UIViewController {
 
     // MARK: - Properties
 
-    private let photos: [UIImage]
+    private let mediaItems: [GalleryMediaItem]
     private var currentIndex: Int
     private let sourceFrame: CGRect?
     private let sourceImage: UIImage?
@@ -36,8 +59,9 @@ final class GalleryViewController: UIViewController {
 
     // MARK: - Init
 
-    init(photos: [UIImage], startIndex: Int, sourceFrame: CGRect?, sourceImage: UIImage?) {
-        self.photos = photos
+    /// Initialize with media items (photos and/or videos)
+    init(mediaItems: [GalleryMediaItem], startIndex: Int, sourceFrame: CGRect?, sourceImage: UIImage?) {
+        self.mediaItems = mediaItems
         self.currentIndex = startIndex
         self.sourceFrame = sourceFrame
         self.sourceImage = sourceImage
@@ -45,6 +69,12 @@ final class GalleryViewController: UIViewController {
 
         modalPresentationStyle = .custom
         transitioningDelegate = self
+    }
+
+    /// Convenience initializer for photo-only galleries (backwards compatibility)
+    convenience init(photos: [UIImage], startIndex: Int, sourceFrame: CGRect?, sourceImage: UIImage?) {
+        let items = photos.map { GalleryMediaItem.photo(image: $0) }
+        self.init(mediaItems: items, startIndex: startIndex, sourceFrame: sourceFrame, sourceImage: sourceImage)
     }
 
     required init?(coder: NSCoder) {
@@ -148,9 +178,9 @@ final class GalleryViewController: UIViewController {
     }
 
     private func setupPageControl() {
-        guard photos.count > 1 else { return }
+        guard mediaItems.count > 1 else { return }
 
-        pageControl.numberOfPages = photos.count
+        pageControl.numberOfPages = mediaItems.count
         pageControl.currentPage = currentIndex
         pageControl.currentPageIndicatorTintColor = .white
         pageControl.pageIndicatorTintColor = UIColor.white.withAlphaComponent(0.3)
@@ -177,15 +207,27 @@ final class GalleryViewController: UIViewController {
 
     // MARK: - Page Controller Factory
 
-    private func makePageController(for index: Int) -> GalleryPageViewController {
-        let vc = GalleryPageViewController(image: photos[index], index: index)
-        vc.onZoomChange = { [weak self] isZoomed in
-            self?.handleZoomChange(isZoomed)
+    private func makePageController(for index: Int) -> UIViewController & GalleryPageProtocol {
+        let item = mediaItems[index]
+
+        switch item {
+        case .photo(let image):
+            let vc = GalleryPageViewController(image: image, index: index)
+            vc.onZoomChange = { [weak self] isZoomed in
+                self?.handleZoomChange(isZoomed)
+            }
+            vc.onSingleTap = { [weak self] in
+                self?.toggleUI()
+            }
+            return vc
+
+        case .video(let url, _):
+            let vc = GalleryVideoPageViewController(videoURL: url, index: index)
+            vc.onSingleTap = { [weak self] in
+                self?.toggleUI()
+            }
+            return vc
         }
-        vc.onSingleTap = { [weak self] in
-            self?.toggleUI()
-        }
-        return vc
     }
 
     private func handleZoomChange(_ zoomed: Bool) {
@@ -266,16 +308,16 @@ extension GalleryViewController: UIScrollViewDelegate {
 
 extension GalleryViewController: UIPageViewControllerDataSource {
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
-        guard let vc = viewController as? GalleryPageViewController else { return nil }
+        guard let vc = viewController as? GalleryPageProtocol else { return nil }
         let index = vc.index - 1
         guard index >= 0 else { return nil }
         return makePageController(for: index)
     }
 
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
-        guard let vc = viewController as? GalleryPageViewController else { return nil }
+        guard let vc = viewController as? GalleryPageProtocol else { return nil }
         let index = vc.index + 1
-        guard index < photos.count else { return nil }
+        guard index < mediaItems.count else { return nil }
         return makePageController(for: index)
     }
 }
@@ -284,9 +326,16 @@ extension GalleryViewController: UIPageViewControllerDataSource {
 
 extension GalleryViewController: UIPageViewControllerDelegate {
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
-        guard completed, let currentVC = pageViewController.viewControllers?.first as? GalleryPageViewController else { return }
+        guard completed, let currentVC = pageViewController.viewControllers?.first as? GalleryPageProtocol else { return }
         currentIndex = currentVC.index
         pageControl.currentPage = currentIndex
+
+        // Pause video on previous page if it was a video
+        for vc in previousViewControllers {
+            if let videoVC = vc as? GalleryVideoPageViewController {
+                videoVC.pause()
+            }
+        }
     }
 }
 
@@ -302,9 +351,16 @@ extension GalleryViewController: UIViewControllerTransitioningDelegate {
     }
 }
 
-// MARK: - Gallery Page View Controller
+// MARK: - Gallery Page Protocol
 
-final class GalleryPageViewController: UIViewController {
+protocol GalleryPageProtocol: AnyObject {
+    var index: Int { get }
+    var onSingleTap: (() -> Void)? { get set }
+}
+
+// MARK: - Gallery Page View Controller (Photo)
+
+final class GalleryPageViewController: UIViewController, GalleryPageProtocol {
 
     let index: Int
     private let image: UIImage
@@ -470,6 +526,387 @@ extension GalleryPageViewController: UIScrollViewDelegate {
         if scale < scrollView.minimumZoomScale + 0.01 && scale != scrollView.minimumZoomScale {
             scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
         }
+    }
+}
+
+// MARK: - Gallery Video Page View Controller
+
+final class GalleryVideoPageViewController: UIViewController, GalleryPageProtocol {
+
+    let index: Int
+    private let videoURL: URL
+
+    // Player
+    private var player: AVPlayer?
+    private var playerLayer: AVPlayerLayer?
+    private var timeObserver: Any?
+    private var isPlaying = false
+    private var isSeeking = false
+
+    // Controls
+    private let controlsContainer = UIView()
+    private let playPauseButton = UIButton(type: .system)
+    private let scrubber = UISlider()
+    private let currentTimeLabel = UILabel()
+    private let remainingTimeLabel = UILabel()
+    private let scrubberContainer = UIView()
+
+    // State
+    private var controlsVisible = true
+    private var autoHideTimer: Timer?
+    private var duration: Double = 0
+
+    var onSingleTap: (() -> Void)?
+
+    // MARK: - Init
+
+    init(videoURL: URL, index: Int) {
+        self.videoURL = videoURL
+        self.index = index
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    // MARK: - Lifecycle
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+        setupPlayer()
+        setupControls()
+        setupGestures()
+        setupNotifications()
+        setupTimeObserver()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        playerLayer?.frame = view.bounds
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        play()
+        scheduleAutoHide()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        pause()
+        autoHideTimer?.invalidate()
+    }
+
+    deinit {
+        if let observer = timeObserver {
+            player?.removeTimeObserver(observer)
+        }
+        autoHideTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    // MARK: - Setup
+
+    private func setupPlayer() {
+        let player = AVPlayer(url: videoURL)
+        self.player = player
+
+        let playerLayer = AVPlayerLayer(player: player)
+        playerLayer.videoGravity = .resizeAspect
+        playerLayer.frame = view.bounds
+        view.layer.addSublayer(playerLayer)
+        self.playerLayer = playerLayer
+
+        // Load duration
+        Task {
+            if let item = player.currentItem {
+                let duration = try? await item.asset.load(.duration)
+                if let duration = duration {
+                    await MainActor.run {
+                        self.duration = CMTimeGetSeconds(duration)
+                        self.updateTimeLabels(currentTime: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    private func setupControls() {
+        // Controls container (for fade animation)
+        controlsContainer.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(controlsContainer)
+
+        NSLayoutConstraint.activate([
+            controlsContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controlsContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            controlsContainer.topAnchor.constraint(equalTo: view.topAnchor),
+            controlsContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+
+        // Center play/pause button
+        let config = UIImage.SymbolConfiguration(pointSize: 54, weight: .medium)
+        playPauseButton.setImage(UIImage(systemName: "pause.circle.fill", withConfiguration: config), for: .normal)
+        playPauseButton.tintColor = .white
+        playPauseButton.translatesAutoresizingMaskIntoConstraints = false
+        playPauseButton.addTarget(self, action: #selector(playPauseButtonTapped), for: .touchUpInside)
+
+        // Add shadow to button
+        playPauseButton.layer.shadowColor = UIColor.black.cgColor
+        playPauseButton.layer.shadowOffset = .zero
+        playPauseButton.layer.shadowRadius = 8
+        playPauseButton.layer.shadowOpacity = 0.5
+
+        controlsContainer.addSubview(playPauseButton)
+
+        NSLayoutConstraint.activate([
+            playPauseButton.centerXAnchor.constraint(equalTo: controlsContainer.centerXAnchor),
+            playPauseButton.centerYAnchor.constraint(equalTo: controlsContainer.centerYAnchor),
+            playPauseButton.widthAnchor.constraint(equalToConstant: 70),
+            playPauseButton.heightAnchor.constraint(equalToConstant: 70)
+        ])
+
+        // Scrubber container (above page indicator, no background)
+        scrubberContainer.translatesAutoresizingMaskIntoConstraints = false
+        controlsContainer.addSubview(scrubberContainer)
+
+        NSLayoutConstraint.activate([
+            scrubberContainer.leadingAnchor.constraint(equalTo: controlsContainer.leadingAnchor),
+            scrubberContainer.trailingAnchor.constraint(equalTo: controlsContainer.trailingAnchor),
+            scrubberContainer.bottomAnchor.constraint(equalTo: controlsContainer.safeAreaLayoutGuide.bottomAnchor, constant: -50),
+            scrubberContainer.heightAnchor.constraint(equalToConstant: 44)
+        ])
+
+        // Time labels with shadow for visibility
+        currentTimeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        currentTimeLabel.textColor = .white
+        currentTimeLabel.text = "0:00"
+        currentTimeLabel.translatesAutoresizingMaskIntoConstraints = false
+        currentTimeLabel.layer.shadowColor = UIColor.black.cgColor
+        currentTimeLabel.layer.shadowOffset = .zero
+        currentTimeLabel.layer.shadowRadius = 4
+        currentTimeLabel.layer.shadowOpacity = 0.8
+
+        remainingTimeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        remainingTimeLabel.textColor = .white
+        remainingTimeLabel.text = "-0:00"
+        remainingTimeLabel.translatesAutoresizingMaskIntoConstraints = false
+        remainingTimeLabel.layer.shadowColor = UIColor.black.cgColor
+        remainingTimeLabel.layer.shadowOffset = .zero
+        remainingTimeLabel.layer.shadowRadius = 4
+        remainingTimeLabel.layer.shadowOpacity = 0.8
+
+        scrubberContainer.addSubview(currentTimeLabel)
+        scrubberContainer.addSubview(remainingTimeLabel)
+
+        // Scrubber slider
+        scrubber.minimumValue = 0
+        scrubber.maximumValue = 1
+        scrubber.value = 0
+        scrubber.minimumTrackTintColor = .white
+        scrubber.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.3)
+        scrubber.translatesAutoresizingMaskIntoConstraints = false
+        scrubber.addTarget(self, action: #selector(scrubberValueChanged), for: .valueChanged)
+        scrubber.addTarget(self, action: #selector(scrubberTouchDown), for: .touchDown)
+        scrubber.addTarget(self, action: #selector(scrubberTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+
+        // Custom thumb (smaller, like Telegram)
+        let thumbSize: CGFloat = 12
+        let thumbImage = createThumbImage(size: thumbSize, color: .white)
+        scrubber.setThumbImage(thumbImage, for: .normal)
+        scrubber.setThumbImage(thumbImage, for: .highlighted)
+
+        scrubberContainer.addSubview(scrubber)
+
+        NSLayoutConstraint.activate([
+            currentTimeLabel.leadingAnchor.constraint(equalTo: scrubberContainer.leadingAnchor, constant: 16),
+            currentTimeLabel.centerYAnchor.constraint(equalTo: scrubberContainer.centerYAnchor),
+            currentTimeLabel.widthAnchor.constraint(equalToConstant: 45),
+
+            remainingTimeLabel.trailingAnchor.constraint(equalTo: scrubberContainer.trailingAnchor, constant: -16),
+            remainingTimeLabel.centerYAnchor.constraint(equalTo: scrubberContainer.centerYAnchor),
+            remainingTimeLabel.widthAnchor.constraint(equalToConstant: 50),
+
+            scrubber.leadingAnchor.constraint(equalTo: currentTimeLabel.trailingAnchor, constant: 8),
+            scrubber.trailingAnchor.constraint(equalTo: remainingTimeLabel.leadingAnchor, constant: -8),
+            scrubber.centerYAnchor.constraint(equalTo: scrubberContainer.centerYAnchor)
+        ])
+    }
+
+    private func createThumbImage(size: CGFloat, color: UIColor) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        return renderer.image { context in
+            color.setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: size, height: size))
+        }
+    }
+
+    private func setupGestures() {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        tap.numberOfTapsRequired = 1
+        view.addGestureRecognizer(tap)
+    }
+
+    private func setupNotifications() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerDidFinish),
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: player?.currentItem
+        )
+    }
+
+    private func setupTimeObserver() {
+        let interval = CMTime(seconds: 0.1, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            guard let self = self, !self.isSeeking else { return }
+
+            let currentTime = CMTimeGetSeconds(time)
+            self.updateTimeLabels(currentTime: currentTime)
+
+            if self.duration > 0 {
+                self.scrubber.value = Float(currentTime / self.duration)
+            }
+        }
+    }
+
+    // MARK: - Time Formatting
+
+    private func updateTimeLabels(currentTime: Double) {
+        currentTimeLabel.text = formatTime(currentTime)
+
+        let remaining = max(0, duration - currentTime)
+        remainingTimeLabel.text = "-" + formatTime(remaining)
+    }
+
+    private func formatTime(_ time: Double) -> String {
+        guard time.isFinite && !time.isNaN else { return "0:00" }
+
+        let totalSeconds = Int(time)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%d:%02d", minutes, seconds)
+        }
+    }
+
+    // MARK: - Controls Visibility
+
+    private func toggleControls() {
+        setControlsVisible(!controlsVisible)
+    }
+
+    private func setControlsVisible(_ visible: Bool, animated: Bool = true) {
+        controlsVisible = visible
+
+        if visible {
+            scheduleAutoHide()
+        } else {
+            autoHideTimer?.invalidate()
+        }
+
+        let alpha: CGFloat = visible ? 1.0 : 0.0
+
+        if animated {
+            UIView.animate(withDuration: 0.25) {
+                self.controlsContainer.alpha = alpha
+            }
+        } else {
+            controlsContainer.alpha = alpha
+        }
+    }
+
+    private func scheduleAutoHide() {
+        autoHideTimer?.invalidate()
+
+        // Auto-hide after 4 seconds (like Telegram)
+        autoHideTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
+            guard let self = self, self.isPlaying else { return }
+            self.setControlsVisible(false)
+        }
+    }
+
+    // MARK: - Actions
+
+    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: view)
+
+        // Ignore taps on scrubber area
+        let scrubberFrame = scrubberContainer.convert(scrubberContainer.bounds, to: view)
+        if scrubberFrame.contains(location) {
+            return
+        }
+
+        toggleControls()
+        onSingleTap?()
+    }
+
+    @objc private func playPauseButtonTapped() {
+        if isPlaying {
+            pause()
+        } else {
+            play()
+        }
+        scheduleAutoHide()
+    }
+
+    @objc private func scrubberValueChanged() {
+        let targetTime = Double(scrubber.value) * duration
+        updateTimeLabels(currentTime: targetTime)
+    }
+
+    @objc private func scrubberTouchDown() {
+        isSeeking = true
+        autoHideTimer?.invalidate()
+    }
+
+    @objc private func scrubberTouchUp() {
+        let targetTime = Double(scrubber.value) * duration
+        let cmTime = CMTime(seconds: targetTime, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+
+        player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            self?.isSeeking = false
+        }
+
+        scheduleAutoHide()
+    }
+
+    @objc private func playerDidFinish() {
+        // Reset to beginning
+        player?.seek(to: .zero)
+        scrubber.value = 0
+        updateTimeLabels(currentTime: 0)
+
+        // Show controls and pause
+        pause()
+        setControlsVisible(true)
+    }
+
+    // MARK: - Playback Control
+
+    func play() {
+        player?.play()
+        isPlaying = true
+        updatePlayPauseButton()
+        scheduleAutoHide()
+    }
+
+    func pause() {
+        player?.pause()
+        isPlaying = false
+        updatePlayPauseButton()
+        autoHideTimer?.invalidate()
+    }
+
+    private func updatePlayPauseButton() {
+        let config = UIImage.SymbolConfiguration(pointSize: 54, weight: .medium)
+        let imageName = isPlaying ? "pause.circle.fill" : "play.circle.fill"
+        playPauseButton.setImage(UIImage(systemName: imageName, withConfiguration: config), for: .normal)
     }
 }
 

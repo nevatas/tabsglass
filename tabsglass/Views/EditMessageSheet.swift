@@ -17,18 +17,49 @@ struct EditMessageSheet: View {
     let originalText: String
     let originalEntities: [TextEntity]?
     let originalPhotoFileNames: [String]
-    let onSave: (String, [TextEntity]?, [String]) -> Void
+    let originalVideoFileNames: [String]
+    let originalVideoThumbnailFileNames: [String]
+    let originalVideoDurations: [Double]
+    let onSave: (String, [TextEntity]?, [String], [String], [String], [Double]) -> Void
     let onCancel: () -> Void
+
+    init(
+        originalText: String,
+        originalEntities: [TextEntity]?,
+        originalPhotoFileNames: [String],
+        originalVideoFileNames: [String] = [],
+        originalVideoThumbnailFileNames: [String] = [],
+        originalVideoDurations: [Double] = [],
+        onSave: @escaping (String, [TextEntity]?, [String], [String], [String], [Double]) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.originalText = originalText
+        self.originalEntities = originalEntities
+        self.originalPhotoFileNames = originalPhotoFileNames
+        self.originalVideoFileNames = originalVideoFileNames
+        self.originalVideoThumbnailFileNames = originalVideoThumbnailFileNames
+        self.originalVideoDurations = originalVideoDurations
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
 
     @State private var text: String = ""
     @State private var holder = EditTextViewHolder()
     @State private var photoFileNames: [String] = []
     @State private var photos: [UIImage] = []
+    @State private var videoFileNames: [String] = []
+    @State private var videoThumbnailFileNames: [String] = []
+    @State private var videoDurations: [Double] = []
+    @State private var videoThumbnails: [UIImage] = []
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showCamera = false
     @State private var showPhotoPicker = false
     private var themeManager: ThemeManager { ThemeManager.shared }
     @Environment(\.colorScheme) private var colorScheme
+
+    private var totalMediaCount: Int {
+        photos.count + videoThumbnails.count
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,10 +97,10 @@ struct EditMessageSheet: View {
 
                         // Also detect URLs
                         adjustedEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))
-                        onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames)
-                    } else if !photoFileNames.isEmpty {
-                        // Allow saving with only photos (no text)
-                        onSave("", nil, photoFileNames)
+                        onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations)
+                    } else if totalMediaCount > 0 {
+                        // Allow saving with only media (no text)
+                        onSave("", nil, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations)
                     }
                 } label: {
                     Image(systemName: "checkmark")
@@ -85,13 +116,23 @@ struct EditMessageSheet: View {
             .padding(.top, 20)
             .padding(.bottom, 16)
 
-            // Attached photos (if any)
-            if !photos.isEmpty {
+            // Attached media (photos and videos)
+            if totalMediaCount > 0 {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
+                        // Photos
                         ForEach(Array(photos.enumerated()), id: \.offset) { index, image in
                             EditAttachedImageView(image: image) {
                                 removePhoto(at: index)
+                            }
+                        }
+                        // Videos
+                        ForEach(Array(videoThumbnails.enumerated()), id: \.offset) { index, thumbnail in
+                            EditAttachedVideoView(
+                                thumbnail: thumbnail,
+                                duration: index < videoDurations.count ? videoDurations[index] : 0
+                            ) {
+                                removeVideo(at: index)
                             }
                         }
                     }
@@ -140,7 +181,11 @@ struct EditMessageSheet: View {
         .onAppear {
             text = originalText
             photoFileNames = originalPhotoFileNames
+            videoFileNames = originalVideoFileNames
+            videoThumbnailFileNames = originalVideoThumbnailFileNames
+            videoDurations = originalVideoDurations
             loadPhotos()
+            loadVideoThumbnails()
         }
         .onChange(of: selectedPhotoItems) { _, newItems in
             Task {
@@ -157,18 +202,26 @@ struct EditMessageSheet: View {
         .photosPicker(
             isPresented: $showPhotoPicker,
             selection: $selectedPhotoItems,
-            maxSelectionCount: max(1, 10 - photos.count),
+            maxSelectionCount: max(1, 10 - totalMediaCount),
             matching: .images
         )
     }
 
     private var canSave: Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty || !photoFileNames.isEmpty
+        return !trimmed.isEmpty || totalMediaCount > 0
     }
 
     private func loadPhotos() {
         photos = photoFileNames.compactMap { fileName in
+            let url = Message.photosDirectory.appendingPathComponent(fileName)
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return UIImage(data: data)
+        }
+    }
+
+    private func loadVideoThumbnails() {
+        videoThumbnails = videoThumbnailFileNames.compactMap { fileName in
             let url = Message.photosDirectory.appendingPathComponent(fileName)
             guard let data = try? Data(contentsOf: url) else { return nil }
             return UIImage(data: data)
@@ -181,8 +234,22 @@ struct EditMessageSheet: View {
         photos.remove(at: index)
     }
 
+    private func removeVideo(at index: Int) {
+        guard index < videoFileNames.count else { return }
+        videoFileNames.remove(at: index)
+        if index < videoThumbnailFileNames.count {
+            videoThumbnailFileNames.remove(at: index)
+        }
+        if index < videoDurations.count {
+            videoDurations.remove(at: index)
+        }
+        if index < videoThumbnails.count {
+            videoThumbnails.remove(at: index)
+        }
+    }
+
     private func addPhoto(_ image: UIImage) {
-        guard photos.count < 10 else { return }
+        guard totalMediaCount < 10 else { return }
         if let result = Message.savePhoto(image) {
             photoFileNames.append(result.fileName)
             photos.append(image)
@@ -192,7 +259,7 @@ struct EditMessageSheet: View {
     @MainActor
     private func loadSelectedPhotos(_ items: [PhotosPickerItem]) async {
         for item in items {
-            guard photos.count < 10 else { break }
+            guard totalMediaCount < 10 else { break }
             if let data = try? await item.loadTransferable(type: Data.self),
                let image = UIImage(data: data) {
                 addPhoto(image)
@@ -263,6 +330,70 @@ struct EditAttachedImageView: View {
                 }
                 .padding(4)
             }
+    }
+}
+
+// MARK: - Edit Attached Video View
+
+struct EditAttachedVideoView: View {
+    let thumbnail: UIImage
+    let duration: Double
+    let onRemove: () -> Void
+
+    private var formattedDuration: String {
+        let totalSeconds = Int(duration)
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    var body: some View {
+        ZStack {
+            Image(uiImage: thumbnail)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            // Play icon overlay
+            ZStack {
+                Circle()
+                    .fill(Color.black.opacity(0.5))
+                    .frame(width: 28, height: 28)
+                Image(systemName: "play.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white)
+                    .offset(x: 1)
+            }
+
+            // Duration badge
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Text(formattedDuration)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .padding(4)
+                }
+            }
+        }
+        .frame(width: 80, height: 80)
+        .overlay(alignment: .topTrailing) {
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(Circle())
+            }
+            .padding(4)
+        }
     }
 }
 
@@ -367,7 +498,7 @@ struct EditFormattingTextView: UIViewRepresentable {
         originalText: text,
         originalEntities: nil,
         originalPhotoFileNames: [],
-        onSave: { _, _, _ in },
+        onSave: { _, _, _, _, _, _ in },
         onCancel: { }
     )
 }

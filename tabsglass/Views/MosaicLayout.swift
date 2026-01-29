@@ -7,6 +7,25 @@
 
 import UIKit
 
+// MARK: - Media Item (unified photo/video representation)
+
+struct MediaItem {
+    let fileName: String
+    let isVideo: Bool
+    let thumbnailFileName: String?  // For videos, the pre-generated thumbnail
+    let duration: Double?           // For videos, duration in seconds
+
+    /// Create a photo media item
+    static func photo(_ fileName: String) -> MediaItem {
+        MediaItem(fileName: fileName, isVideo: false, thumbnailFileName: nil, duration: nil)
+    }
+
+    /// Create a video media item
+    static func video(_ fileName: String, thumbnailFileName: String, duration: Double) -> MediaItem {
+        MediaItem(fileName: fileName, isVideo: true, thumbnailFileName: thumbnailFileName, duration: duration)
+    }
+}
+
 // MARK: - Position Flags
 
 struct MosaicItemPosition: OptionSet {
@@ -460,12 +479,18 @@ struct MosaicLayoutCalculator {
 
 final class MosaicMediaView: UIView {
     private var imageViews: [UIImageView] = []
+    private var playOverlays: [UIView] = []      // Play button overlays for videos
+    private var durationLabels: [UILabel] = []   // Duration badges for videos
     private var layoutItems: [MosaicLayoutItem] = []
     private var currentFileNames: [String] = []
+    private var currentMediaItems: [MediaItem] = []
     /// Corner radius for outer corners (should match bubble corner radius)
     var cornerRadius: CGFloat = 18
 
-    /// Callback when a photo is tapped: (index, sourceFrame in window coordinates, image, allFileNames)
+    /// Callback when media is tapped: (index, sourceFrame in window coordinates, image, allFileNames, isVideo)
+    var onMediaTapped: ((Int, CGRect, UIImage, [String], Bool) -> Void)?
+
+    /// Legacy callback for photos only (backward compatibility)
     var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
 
     override init(frame: CGRect) {
@@ -483,19 +508,19 @@ final class MosaicMediaView: UIView {
         return imageViews[index]
     }
 
-    /// Configure with file names (async loading with cache)
+    /// Configure with MediaItems (supports both photos and videos)
     /// - Parameters:
-    ///   - fileNames: Array of photo file names
+    ///   - mediaItems: Array of MediaItem (photos and videos)
     ///   - aspectRatios: Pre-calculated aspect ratios for layout
     ///   - maxWidth: Maximum width for the mosaic
-    ///   - isAtBottom: If true, bottom corners will be rounded (for photos-only messages)
-    func configure(with fileNames: [String], aspectRatios: [CGFloat], maxWidth: CGFloat, isAtBottom: Bool = true) {
+    ///   - isAtBottom: If true, bottom corners will be rounded
+    func configure(with mediaItems: [MediaItem], aspectRatios: [CGFloat], maxWidth: CGFloat, isAtBottom: Bool = true) {
         // Clear old views
-        imageViews.forEach { $0.removeFromSuperview() }
-        imageViews.removeAll()
-        currentFileNames = fileNames
+        clearViews()
+        currentMediaItems = mediaItems
+        currentFileNames = mediaItems.map { $0.fileName }
 
-        guard !fileNames.isEmpty, !aspectRatios.isEmpty else { return }
+        guard !mediaItems.isEmpty, !aspectRatios.isEmpty else { return }
 
         // Calculate layout
         let calculator = MosaicLayoutCalculator(maxWidth: maxWidth, maxHeight: 300, spacing: 2)
@@ -503,6 +528,9 @@ final class MosaicMediaView: UIView {
 
         // Create image views with placeholder
         for (index, item) in layoutItems.enumerated() {
+            guard index < mediaItems.count else { continue }
+            let mediaItem = mediaItems[index]
+
             let imageView = UIImageView()
             imageView.contentMode = .scaleAspectFill
             imageView.clipsToBounds = true
@@ -520,17 +548,38 @@ final class MosaicMediaView: UIView {
             // Enable tap gesture
             imageView.isUserInteractionEnabled = true
             imageView.tag = index
-            let tap = UITapGestureRecognizer(target: self, action: #selector(imageTapped(_:)))
+            let tap = UITapGestureRecognizer(target: self, action: #selector(mediaTapped(_:)))
             imageView.addGestureRecognizer(tap)
 
             addSubview(imageView)
             imageViews.append(imageView)
 
-            // Load thumbnail async
-            if index < fileNames.count {
-                let fileName = fileNames[index]
-                let targetSize = item.frame.size
-                ImageCache.shared.loadThumbnail(for: fileName, targetSize: targetSize) { [weak imageView] image in
+            // Load thumbnail
+            let targetSize = item.frame.size
+            if mediaItem.isVideo, let thumbnailFileName = mediaItem.thumbnailFileName {
+                // Load video thumbnail
+                ImageCache.shared.loadVideoThumbnail(
+                    videoFileName: mediaItem.fileName,
+                    thumbnailFileName: thumbnailFileName,
+                    targetSize: targetSize
+                ) { [weak imageView] image in
+                    imageView?.image = image
+                }
+
+                // Add play overlay
+                let playOverlay = createPlayOverlay(frame: item.frame)
+                addSubview(playOverlay)
+                playOverlays.append(playOverlay)
+
+                // Add duration badge
+                if let duration = mediaItem.duration {
+                    let durationLabel = createDurationBadge(duration: duration, frame: item.frame)
+                    addSubview(durationLabel)
+                    durationLabels.append(durationLabel)
+                }
+            } else {
+                // Load photo thumbnail
+                ImageCache.shared.loadThumbnail(for: mediaItem.fileName, targetSize: targetSize) { [weak imageView] image in
                     imageView?.image = image
                 }
             }
@@ -542,12 +591,24 @@ final class MosaicMediaView: UIView {
         }
     }
 
+    /// Configure with file names (async loading with cache) - photos only
+    /// - Parameters:
+    ///   - fileNames: Array of photo file names
+    ///   - aspectRatios: Pre-calculated aspect ratios for layout
+    ///   - maxWidth: Maximum width for the mosaic
+    ///   - isAtBottom: If true, bottom corners will be rounded (for photos-only messages)
+    func configure(with fileNames: [String], aspectRatios: [CGFloat], maxWidth: CGFloat, isAtBottom: Bool = true) {
+        // Convert to MediaItems and delegate
+        let mediaItems = fileNames.map { MediaItem.photo($0) }
+        configure(with: mediaItems, aspectRatios: aspectRatios, maxWidth: maxWidth, isAtBottom: isAtBottom)
+    }
+
     /// Configure with images (legacy, still used for initial layout calculation)
     func configure(with images: [UIImage], maxWidth: CGFloat, isAtBottom: Bool = true) {
         // Clear old views
-        imageViews.forEach { $0.removeFromSuperview() }
-        imageViews.removeAll()
+        clearViews()
         currentFileNames = []
+        currentMediaItems = []
 
         guard !images.isEmpty else { return }
 
@@ -570,7 +631,7 @@ final class MosaicMediaView: UIView {
 
             imageView.isUserInteractionEnabled = true
             imageView.tag = index
-            let tap = UITapGestureRecognizer(target: self, action: #selector(imageTapped(_:)))
+            let tap = UITapGestureRecognizer(target: self, action: #selector(mediaTapped(_:)))
             imageView.addGestureRecognizer(tap)
 
             addSubview(imageView)
@@ -579,6 +640,88 @@ final class MosaicMediaView: UIView {
 
         if let maxY = layoutItems.map({ $0.frame.maxY }).max() {
             frame.size.height = maxY
+        }
+    }
+
+    private func clearViews() {
+        imageViews.forEach { $0.removeFromSuperview() }
+        imageViews.removeAll()
+        playOverlays.forEach { $0.removeFromSuperview() }
+        playOverlays.removeAll()
+        durationLabels.forEach { $0.removeFromSuperview() }
+        durationLabels.removeAll()
+    }
+
+    // MARK: - Play Overlay
+
+    private func createPlayOverlay(frame: CGRect) -> UIView {
+        let overlaySize: CGFloat = 44
+        let overlay = UIView()
+        overlay.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        overlay.layer.cornerRadius = overlaySize / 2
+        overlay.isUserInteractionEnabled = false
+
+        let playIcon = UIImageView()
+        let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+        playIcon.image = UIImage(systemName: "play.fill", withConfiguration: config)
+        playIcon.tintColor = .white
+        playIcon.translatesAutoresizingMaskIntoConstraints = false
+
+        overlay.addSubview(playIcon)
+        NSLayoutConstraint.activate([
+            playIcon.centerXAnchor.constraint(equalTo: overlay.centerXAnchor, constant: 2), // Slight offset for visual balance
+            playIcon.centerYAnchor.constraint(equalTo: overlay.centerYAnchor)
+        ])
+
+        overlay.frame = CGRect(
+            x: frame.midX - overlaySize / 2,
+            y: frame.midY - overlaySize / 2,
+            width: overlaySize,
+            height: overlaySize
+        )
+
+        return overlay
+    }
+
+    // MARK: - Duration Badge
+
+    private func createDurationBadge(duration: Double, frame: CGRect) -> UILabel {
+        let label = UILabel()
+        label.text = formatDuration(duration)
+        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.textColor = .white
+        label.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        label.textAlignment = .center
+        label.layer.cornerRadius = 4
+        label.clipsToBounds = true
+        label.isUserInteractionEnabled = false
+
+        // Size to fit content with padding
+        label.sizeToFit()
+        let padding: CGFloat = 8
+        let badgeWidth = label.frame.width + padding
+        let badgeHeight: CGFloat = 18
+
+        label.frame = CGRect(
+            x: frame.maxX - badgeWidth - 6,
+            y: frame.maxY - badgeHeight - 6,
+            width: badgeWidth,
+            height: badgeHeight
+        )
+
+        return label
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        let totalSeconds = Int(seconds)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let secs = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%d:%02d", minutes, secs)
         }
     }
 
@@ -624,13 +767,23 @@ final class MosaicMediaView: UIView {
         return CGSize(width: UIView.noIntrinsicMetric, height: height)
     }
 
-    @objc private func imageTapped(_ gesture: UITapGestureRecognizer) {
+    @objc private func mediaTapped(_ gesture: UITapGestureRecognizer) {
         guard let imageView = gesture.view as? UIImageView,
               let image = imageView.image,
               let window = window else { return }
 
         let index = imageView.tag
         let frameInWindow = imageView.convert(imageView.bounds, to: window)
-        onPhotoTapped?(index, frameInWindow, image, currentFileNames)
+
+        // Check if this is a video
+        let isVideo = index < currentMediaItems.count && currentMediaItems[index].isVideo
+
+        // Call new callback if set
+        onMediaTapped?(index, frameInWindow, image, currentFileNames, isVideo)
+
+        // Backward compatibility: call old callback for photos
+        if !isVideo {
+            onPhotoTapped?(index, frameInWindow, image, currentFileNames)
+        }
     }
 }
