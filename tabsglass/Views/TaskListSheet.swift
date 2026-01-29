@@ -93,8 +93,10 @@ struct TaskListSheet: View {
                             } label: {
                                 Label(L10n.TaskList.addItem, systemImage: "plus")
                             }
+                            .id("addButton")
                         }
                     }
+
                 }
                 .listStyle(.insetGrouped)
                 .environment(\.editMode, .constant(.active))
@@ -122,8 +124,8 @@ struct TaskListSheet: View {
                 }
             }
             .onAppear {
-                // Focus first task item on appear
-                if let first = items.first {
+                // Focus first task item only in create mode
+                if !isEditMode, let first = items.first {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         focusedItemId = first.id
                     }
@@ -139,11 +141,7 @@ struct TaskListSheet: View {
         let newItem = EditableTodoItem(text: "", isCompleted: false)
         items.append(newItem)
         focusedItemId = newItem.id
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation {
-                proxy.scrollTo(newItem.id, anchor: .bottom)
-            }
-        }
+        scrollToBottom(proxy: proxy)
     }
 
     private func addNewItemAfter(_ item: EditableTodoItem, proxy: ScrollViewProxy) {
@@ -152,9 +150,14 @@ struct TaskListSheet: View {
         let newItem = EditableTodoItem(text: "", isCompleted: false)
         items.insert(newItem, at: index + 1)
         focusedItemId = newItem.id
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation {
-                proxy.scrollTo(newItem.id, anchor: .bottom)
+        scrollToBottom(proxy: proxy)
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        // Delay to ensure layout is complete after keyboard appears
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo("addButton", anchor: .bottom)
             }
         }
     }
@@ -165,12 +168,25 @@ struct TaskListSheet: View {
 
     private func deleteItem(_ item: EditableTodoItem) {
         guard items.count > 1 else { return }
-        if let index = items.firstIndex(where: { $0.id == item.id }) {
-            items.remove(at: index)
-            // Focus previous or next item
-            if !items.isEmpty {
-                let newIndex = min(index, items.count - 1)
-                focusedItemId = items[newIndex].id
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+
+        // Check if the deleted item was focused (keyboard was active)
+        let wasItemFocused = focusedItemId == item.id
+
+        if wasItemFocused {
+            // Move focus first to keep keyboard open, then delete
+            let targetIndex = index > 0 ? index - 1 : 1
+            focusedItemId = items[targetIndex].id
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
+                _ = withAnimation {
+                    items.remove(at: index)
+                }
+            }
+        } else {
+            // No keyboard active, just delete
+            _ = withAnimation {
+                items.remove(at: index)
             }
         }
     }

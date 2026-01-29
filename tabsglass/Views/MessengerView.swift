@@ -52,7 +52,7 @@ final class ComposerState {
             imagesSectionHeight = 0
             attachedImages.removeAll()
         } else {
-            withAnimation(.easeOut(duration: 0.2)) {
+            _ = withAnimation(.easeOut(duration: 0.2)) {
                 attachedImages.remove(at: index)
             }
         }
