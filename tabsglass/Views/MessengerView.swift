@@ -525,6 +525,9 @@ struct AttachedImageView: View {
 
 final class MessageTableCell: UITableViewCell {
     private let bubbleView = UIView()
+
+    /// Public access to bubble view for context menu
+    var bubbleViewForContextMenu: UIView { bubbleView }
     private let mosaicView = MosaicMediaView()
     private let messageTextView = UITextView()
     private let todoView = TodoBubbleView()

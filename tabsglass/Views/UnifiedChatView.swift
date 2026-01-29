@@ -911,7 +911,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
             // Add Inbox option if not already in Inbox
             if self.currentTabId != nil {
-                moveMenuChildren.append(UIAction(title: L10n.Reorder.inbox) { [weak self] _ in
+                moveMenuChildren.append(UIAction(title: L10n.Reorder.inbox, image: UIImage(systemName: "tray")) { [weak self] _ in
                     self?.animateDeleteMessage(message) {
                         self?.onMoveMessage?(message, nil)
                     }
@@ -954,7 +954,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 image: UIImage(systemName: "trash"),
                 attributes: .destructive
             ) { [weak self] _ in
-                // Animate deletion first, then delete from data
                 self?.animateDeleteMessage(message) {
                     self?.onDeleteMessage?(message)
                 }
@@ -966,60 +965,54 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
     }
 
     func tableView(_ tableView: UITableView, previewForHighlightingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        return makeTargetedPreview(for: tableView, configuration: configuration)
+        return makeTargetedPreview(for: configuration)
     }
 
     func tableView(_ tableView: UITableView, previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        return makeTargetedPreview(for: tableView, configuration: configuration)
+        return makeTargetedPreview(for: configuration)
     }
 
-    private func makeTargetedPreview(for tableView: UITableView, configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
+    private func makeTargetedPreview(for configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
         guard let indexPath = configuration.identifier as? IndexPath,
               let cell = tableView.cellForRow(at: indexPath) as? MessageTableCell else {
             return nil
         }
 
-        // Max preview height = half screen height
-        let maxPreviewHeight = UIScreen.main.bounds.height / 2
-        let cellHeight = cell.bounds.height
-        let overflow: CGFloat = 10
+        let bubbleView = cell.bubbleViewForContextMenu
+        let bubbleFrame = bubbleView.convert(bubbleView.bounds, to: nil)
+        let maxPreviewHeight = UIScreen.main.bounds.height * 0.4
 
-        // For tall cells, create a snapshot of the top portion
-        if cellHeight > maxPreviewHeight {
-            let snapshotHeight = maxPreviewHeight
-
-            // Create container for cropped snapshot
-            let containerView = UIView(frame: CGRect(x: 0, y: 0, width: cell.bounds.width, height: snapshotHeight))
-            containerView.backgroundColor = .clear
-            containerView.clipsToBounds = true
-            containerView.layer.cornerRadius = 18
-
-            // Create snapshot and position it at top
-            if let snapshot = cell.snapshotView(afterScreenUpdates: false) {
-                snapshot.frame.origin = .zero
-                containerView.addSubview(snapshot)
-            }
-
+        // For short cells, use standard preview
+        if bubbleFrame.height <= maxPreviewHeight {
             let parameters = UIPreviewParameters()
             parameters.backgroundColor = .clear
-
-            // Target at the top of the original cell
-            let center = CGPoint(x: cell.bounds.midX, y: snapshotHeight / 2)
-            let target = UIPreviewTarget(container: cell, center: center)
-
-            return UITargetedPreview(view: containerView, parameters: parameters, target: target)
+            parameters.visiblePath = UIBezierPath(roundedRect: bubbleView.bounds, cornerRadius: 18)
+            return UITargetedPreview(view: bubbleView, parameters: parameters)
         }
 
-        // For short cells, use standard preview showing entire cell
-        var expandedBounds = cell.bounds
-        expandedBounds.origin.y -= overflow
-        expandedBounds.size.height += overflow * 2
+        // For tall cells, show top portion
+        let snapshotHeight = maxPreviewHeight
+
+        // Create container for top portion
+        let containerView = UIView(frame: CGRect(x: 0, y: 0, width: bubbleView.bounds.width, height: snapshotHeight))
+        containerView.backgroundColor = .clear
+        containerView.clipsToBounds = true
+        containerView.layer.cornerRadius = 18
+
+        // Create snapshot positioned at top
+        if let snapshot = bubbleView.snapshotView(afterScreenUpdates: false) {
+            snapshot.frame = CGRect(x: 0, y: 0, width: bubbleView.bounds.width, height: bubbleView.bounds.height)
+            containerView.addSubview(snapshot)
+        }
 
         let parameters = UIPreviewParameters()
         parameters.backgroundColor = .clear
-        parameters.visiblePath = UIBezierPath(roundedRect: expandedBounds, cornerRadius: 18)
 
-        return UITargetedPreview(view: cell, parameters: parameters)
+        // Target at the top of the bubble view
+        let center = CGPoint(x: bubbleView.bounds.midX, y: snapshotHeight / 2)
+        let target = UIPreviewTarget(container: bubbleView, center: center)
+
+        return UITargetedPreview(view: containerView, parameters: parameters, target: target)
     }
 }
 
