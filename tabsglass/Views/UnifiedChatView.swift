@@ -25,6 +25,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     var onRestoreMessage: (() -> Void)?
     var onShowTaskList: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
+    var onToggleReminder: ((Message) -> Void)?
 
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
@@ -38,6 +39,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onRestoreMessage = onRestoreMessage
         vc.onShowTaskList = onShowTaskList
         vc.onToggleTodoItem = onToggleTodoItem
+        vc.onToggleReminder = onToggleReminder
         vc.onIndexChange = { newIndex in
             selectedIndex = newIndex
         }
@@ -65,6 +67,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onRestoreMessage = onRestoreMessage
         uiViewController.onShowTaskList = onShowTaskList
         uiViewController.onToggleTodoItem = onToggleTodoItem
+        uiViewController.onToggleReminder = onToggleReminder
         if uiViewController.selectedIndex != selectedIndex {
             uiViewController.selectedIndex = selectedIndex
             uiViewController.updatePageSelection(animated: true)
@@ -94,6 +97,7 @@ final class UnifiedChatViewController: UIViewController {
     var onRestoreMessage: (() -> Void)?
     var onShowTaskList: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
+    var onToggleReminder: ((Message) -> Void)?
 
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
@@ -320,6 +324,9 @@ final class UnifiedChatViewController: UIViewController {
         }
         vc.onToggleTodoItem = { [weak self] message, itemId, isCompleted in
             self?.onToggleTodoItem?(message, itemId, isCompleted)
+        }
+        vc.onToggleReminder = { [weak self] message in
+            self?.onToggleReminder?(message)
         }
         messageControllers[index] = vc
         return vc
@@ -582,6 +589,8 @@ final class MessageListViewController: UIViewController {
     var onOpenGallery: ((Int, [String], CGRect) -> Void)?
     /// Callback when a todo item is toggled: (message, itemId, isCompleted)
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
+    /// Callback when reminder is toggled on a message
+    var onToggleReminder: ((Message) -> Void)?
 
     private let tableView = UITableView()
     private var sortedMessages: [Message] = []
@@ -664,13 +673,41 @@ final class MessageListViewController: UIViewController {
     }
 
     func reloadMessages() {
-        // Messages are passed from SwiftUI, already filtered by tabId
-        sortedMessages = messages
+        let oldMessages = sortedMessages
+        let newMessages = messages
             .filter { !$0.isEmpty }
             .sorted { $0.createdAt > $1.createdAt }
-        // Disable animations to prevent glitches with flipped tableView and context menu
-        UIView.performWithoutAnimation {
-            tableView.reloadData()
+
+        // Check if only content changed (same IDs, same order) - just reconfigure cells
+        let oldIds = oldMessages.map { $0.id }
+        let newIds = newMessages.map { $0.id }
+
+        if oldIds == newIds {
+            // Same messages, just update content - reconfigure visible cells without animation
+            sortedMessages = newMessages
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            UIView.performWithoutAnimation {
+                for cell in tableView.visibleCells {
+                    guard let messageCell = cell as? MessageTableCell,
+                          let indexPath = tableView.indexPath(for: cell),
+                          indexPath.row < sortedMessages.count else { continue }
+                    messageCell.configure(with: sortedMessages[indexPath.row])
+                }
+                // Force UITableView to recalculate row heights (e.g., after todo items change)
+                tableView.beginUpdates()
+                tableView.endUpdates()
+            }
+            CATransaction.commit()
+        } else {
+            // Structure changed - full reload
+            sortedMessages = newMessages
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            UIView.performWithoutAnimation {
+                tableView.reloadData()
+            }
+            CATransaction.commit()
         }
     }
 
@@ -846,7 +883,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
         let message = sortedMessages[indexPath.row]
 
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+        return UIContextMenuConfiguration(identifier: indexPath as NSCopying, previewProvider: nil) { [weak self] _ in
             guard let self = self else { return nil }
 
             var actions: [UIMenuElement] = []
@@ -900,6 +937,17 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 actions.append(moveMenu)
             }
 
+            // Reminder action
+            let reminderTitle = message.hasReminder ? L10n.Menu.removeReminder : L10n.Menu.remind
+            let reminderIcon = message.hasReminder ? "bell.slash" : "bell"
+            let reminderAction = UIAction(
+                title: reminderTitle,
+                image: UIImage(systemName: reminderIcon)
+            ) { [weak self] _ in
+                self?.onToggleReminder?(message)
+            }
+            actions.append(reminderAction)
+
             // Delete action
             let deleteAction = UIAction(
                 title: L10n.Menu.delete,
@@ -915,6 +963,63 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
             return UIMenu(children: actions)
         }
+    }
+
+    func tableView(_ tableView: UITableView, previewForHighlightingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
+        return makeTargetedPreview(for: tableView, configuration: configuration)
+    }
+
+    func tableView(_ tableView: UITableView, previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
+        return makeTargetedPreview(for: tableView, configuration: configuration)
+    }
+
+    private func makeTargetedPreview(for tableView: UITableView, configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
+        guard let indexPath = configuration.identifier as? IndexPath,
+              let cell = tableView.cellForRow(at: indexPath) as? MessageTableCell else {
+            return nil
+        }
+
+        // Max preview height = half screen height
+        let maxPreviewHeight = UIScreen.main.bounds.height / 2
+        let cellHeight = cell.bounds.height
+        let overflow: CGFloat = 10
+
+        // For tall cells, create a snapshot of the top portion
+        if cellHeight > maxPreviewHeight {
+            let snapshotHeight = maxPreviewHeight
+
+            // Create container for cropped snapshot
+            let containerView = UIView(frame: CGRect(x: 0, y: 0, width: cell.bounds.width, height: snapshotHeight))
+            containerView.backgroundColor = .clear
+            containerView.clipsToBounds = true
+            containerView.layer.cornerRadius = 18
+
+            // Create snapshot and position it at top
+            if let snapshot = cell.snapshotView(afterScreenUpdates: false) {
+                snapshot.frame.origin = .zero
+                containerView.addSubview(snapshot)
+            }
+
+            let parameters = UIPreviewParameters()
+            parameters.backgroundColor = .clear
+
+            // Target at the top of the original cell
+            let center = CGPoint(x: cell.bounds.midX, y: snapshotHeight / 2)
+            let target = UIPreviewTarget(container: cell, center: center)
+
+            return UITargetedPreview(view: containerView, parameters: parameters, target: target)
+        }
+
+        // For short cells, use standard preview showing entire cell
+        var expandedBounds = cell.bounds
+        expandedBounds.origin.y -= overflow
+        expandedBounds.size.height += overflow * 2
+
+        let parameters = UIPreviewParameters()
+        parameters.backgroundColor = .clear
+        parameters.visiblePath = UIBezierPath(roundedRect: expandedBounds, cornerRadius: 18)
+
+        return UITargetedPreview(view: cell, parameters: parameters)
     }
 }
 
