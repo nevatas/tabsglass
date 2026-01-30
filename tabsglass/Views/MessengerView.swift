@@ -328,9 +328,18 @@ final class SwiftUIComposerContainer: UIView {
         invalidateIntrinsicContentSize()
         onHeightChange?(currentHeight)
 
-        // Recalculate actual height after clearing (safety for SwiftUI updates)
-        DispatchQueue.main.async { [weak self] in
-            self?.updateHeight()
+        // Recalculate actual height after SwiftUI has fully updated
+        // Use longer delay to ensure FormattingTextView size is recalculated
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
+            // Force FormattingTextView to recalculate its size
+            if let textView = self.composerState.formattingTextView {
+                let size = textView.sizeThatFits(CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude))
+                self.composerState.textViewHeight = max(24, size.height)
+            }
+            self.hostingController?.view.setNeedsLayout()
+            self.hostingController?.view.layoutIfNeeded()
+            self.updateHeight()
         }
     }
 

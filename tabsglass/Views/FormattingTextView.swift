@@ -487,6 +487,7 @@ final class FormattingTextView: UITextView {
     func clear() {
         resetToDefaultAttributes()
         placeholderLabel.isHidden = false
+        invalidateIntrinsicContentSize()
     }
 
     private func setupEditMenuTracking() {
