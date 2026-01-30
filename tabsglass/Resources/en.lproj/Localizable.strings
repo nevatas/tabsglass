@@ -85,7 +85,7 @@
 
 "composer.placeholder" = "Note...";
 "composer.camera" = "Camera";
-"composer.photo" = "Photo";
+"composer.gallery" = "Gallery";
 "composer.list" = "List";
 
 // MARK: - Task List
@@ -115,3 +115,59 @@
 "reminder.send_on_date" = "Remind %@ at %@";
 "reminder.notification_title" = "Reminder";
 "reminder.notification_body_empty" = "You have a reminder";
+
+// MARK: - Share Extension
+
+"share.title" = "Save to Taby";
+"share.cancel" = "Cancel";
+"share.save" = "Save";
+"share.save_to" = "SAVE TO";
+"share.inbox" = "📥 Inbox";
+"share.inbox_info" = "Will be saved to Inbox. Open Taby to move to another tab.";
+"share.where_to_save" = "Where to save?";
+
+// MARK: - Data (Export/Import)
+
+"data.title" = "Data";
+"data.export" = "Export Data";
+"data.import" = "Import Data";
+"data.exporting" = "Exporting...";
+"data.importing" = "Importing...";
+"data.export_success" = "Export completed";
+"data.import_success" = "Import completed";
+"data.export_error" = "Export failed";
+"data.import_error" = "Import failed";
+
+// Import Preview
+"data.import_preview_title" = "Import Preview";
+"data.preview_archive_info" = "ARCHIVE INFO";
+"data.preview_contents" = "CONTENTS";
+"data.preview_date" = "Date";
+"data.preview_device" = "Device";
+"data.preview_app_version" = "App Version";
+"data.preview_tabs" = "Tabs";
+"data.preview_messages" = "Messages";
+"data.preview_photos" = "Photos";
+"data.preview_videos" = "Videos";
+
+// Import Modes
+"data.import_mode" = "IMPORT MODE";
+"data.mode_replace" = "Replace All";
+"data.mode_replace_description" = "Delete all existing data and import from archive";
+"data.mode_replace_warning" = "All current data will be permanently deleted!";
+"data.mode_merge" = "Merge";
+"data.mode_merge_description" = "Keep existing data and add new items from archive";
+"data.import_button" = "Import";
+"data.imported_stats" = "Imported %d tabs and %d messages";
+
+// Progress Phases
+"data.phase_preparing" = "Preparing...";
+"data.phase_exporting_data" = "Exporting data...";
+"data.phase_copying_photos" = "Copying photos...";
+"data.phase_copying_videos" = "Copying videos...";
+"data.phase_compressing" = "Compressing...";
+"data.phase_extracting" = "Extracting...";
+"data.phase_importing_data" = "Importing data...";
+"data.phase_copying_media" = "Copying media...";
+"data.phase_scheduling_reminders" = "Scheduling reminders...";
+"data.phase_complete" = "Complete";

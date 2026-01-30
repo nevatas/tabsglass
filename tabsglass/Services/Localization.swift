@@ -102,7 +102,7 @@ enum L10n {
     enum Composer {
         static var placeholder: String { NSLocalizedString("composer.placeholder", comment: "Composer placeholder") }
         static var camera: String { NSLocalizedString("composer.camera", comment: "Camera option") }
-        static var photo: String { NSLocalizedString("composer.photo", comment: "Photo option") }
+        static var gallery: String { NSLocalizedString("composer.gallery", comment: "Gallery option") }
         static var list: String { NSLocalizedString("composer.list", comment: "List option") }
     }
 
@@ -142,5 +142,67 @@ enum L10n {
         // Notifications
         static var notificationTitle: String { NSLocalizedString("reminder.notification_title", comment: "Notification title") }
         static var notificationBodyEmpty: String { NSLocalizedString("reminder.notification_body_empty", comment: "Notification body for empty message") }
+    }
+
+    // MARK: - Share Extension
+    enum Share {
+        static var title: String { NSLocalizedString("share.title", comment: "Share extension title") }
+        static var cancel: String { NSLocalizedString("share.cancel", comment: "Cancel button") }
+        static var save: String { NSLocalizedString("share.save", comment: "Save button") }
+        static var saveTo: String { NSLocalizedString("share.save_to", comment: "Save to section header") }
+        static var inbox: String { NSLocalizedString("share.inbox", comment: "Inbox option") }
+        static var inboxInfo: String { NSLocalizedString("share.inbox_info", comment: "Info about saving to inbox") }
+        static var whereToSave: String { NSLocalizedString("share.where_to_save", comment: "Where to save title") }
+    }
+
+    // MARK: - Data (Export/Import)
+    enum Data {
+        static var title: String { NSLocalizedString("data.title", comment: "Data section title") }
+        static var export: String { NSLocalizedString("data.export", comment: "Export button") }
+        static var importData: String { NSLocalizedString("data.import", comment: "Import button") }
+        static var exporting: String { NSLocalizedString("data.exporting", comment: "Exporting progress title") }
+        static var importing: String { NSLocalizedString("data.importing", comment: "Importing progress title") }
+        static var exportSuccess: String { NSLocalizedString("data.export_success", comment: "Export success message") }
+        static var importSuccess: String { NSLocalizedString("data.import_success", comment: "Import success message") }
+        static var exportError: String { NSLocalizedString("data.export_error", comment: "Export error message") }
+        static var importError: String { NSLocalizedString("data.import_error", comment: "Import error message") }
+
+        // Preview
+        static var importPreviewTitle: String { NSLocalizedString("data.import_preview_title", comment: "Import preview title") }
+        static var previewArchiveInfo: String { NSLocalizedString("data.preview_archive_info", comment: "Archive info section") }
+        static var previewContents: String { NSLocalizedString("data.preview_contents", comment: "Contents section") }
+        static var previewDate: String { NSLocalizedString("data.preview_date", comment: "Export date label") }
+        static var previewDevice: String { NSLocalizedString("data.preview_device", comment: "Device name label") }
+        static var previewAppVersion: String { NSLocalizedString("data.preview_app_version", comment: "App version label") }
+        static var previewTabs: String { NSLocalizedString("data.preview_tabs", comment: "Tabs count label") }
+        static var previewMessages: String { NSLocalizedString("data.preview_messages", comment: "Messages count label") }
+        static var previewPhotos: String { NSLocalizedString("data.preview_photos", comment: "Photos count label") }
+        static var previewVideos: String { NSLocalizedString("data.preview_videos", comment: "Videos count label") }
+
+        // Import modes
+        static var importMode: String { NSLocalizedString("data.import_mode", comment: "Import mode section") }
+        static var modeReplace: String { NSLocalizedString("data.mode_replace", comment: "Replace mode") }
+        static var modeReplaceDescription: String { NSLocalizedString("data.mode_replace_description", comment: "Replace mode description") }
+        static var modeReplaceWarning: String { NSLocalizedString("data.mode_replace_warning", comment: "Replace mode warning") }
+        static var modeMerge: String { NSLocalizedString("data.mode_merge", comment: "Merge mode") }
+        static var modeMergeDescription: String { NSLocalizedString("data.mode_merge_description", comment: "Merge mode description") }
+        static var importButton: String { NSLocalizedString("data.import_button", comment: "Import button") }
+
+        // Import stats
+        static func importedStats(_ tabs: Int, _ messages: Int) -> String {
+            String(format: NSLocalizedString("data.imported_stats", comment: "Imported stats"), tabs, messages)
+        }
+
+        // Progress phases
+        static var phasePrepairing: String { NSLocalizedString("data.phase_preparing", comment: "Preparing phase") }
+        static var phaseExportingData: String { NSLocalizedString("data.phase_exporting_data", comment: "Exporting data phase") }
+        static var phaseCopyingPhotos: String { NSLocalizedString("data.phase_copying_photos", comment: "Copying photos phase") }
+        static var phaseCopyingVideos: String { NSLocalizedString("data.phase_copying_videos", comment: "Copying videos phase") }
+        static var phaseCompressing: String { NSLocalizedString("data.phase_compressing", comment: "Compressing phase") }
+        static var phaseExtracting: String { NSLocalizedString("data.phase_extracting", comment: "Extracting phase") }
+        static var phaseImportingData: String { NSLocalizedString("data.phase_importing_data", comment: "Importing data phase") }
+        static var phaseCopyingMedia: String { NSLocalizedString("data.phase_copying_media", comment: "Copying media phase") }
+        static var phaseSchedulingReminders: String { NSLocalizedString("data.phase_scheduling_reminders", comment: "Scheduling reminders phase") }
+        static var phaseComplete: String { NSLocalizedString("data.phase_complete", comment: "Complete phase") }
     }
 }

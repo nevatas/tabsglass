@@ -85,7 +85,7 @@
 
 "composer.placeholder" = "Note...";
 "composer.camera" = "Appareil photo";
-"composer.photo" = "Photo";
+"composer.gallery" = "Galerie";
 "composer.list" = "Liste";
 
 // MARK: - Task List
@@ -115,3 +115,59 @@
 "reminder.send_on_date" = "Rappeler le %@ à %@";
 "reminder.notification_title" = "Rappel";
 "reminder.notification_body_empty" = "Vous avez un rappel";
+
+// MARK: - Share Extension
+
+"share.title" = "Enregistrer dans Taby";
+"share.cancel" = "Annuler";
+"share.save" = "Enregistrer";
+"share.save_to" = "ENREGISTRER DANS";
+"share.inbox" = "📥 Reçus";
+"share.inbox_info" = "Sera enregistré dans Reçus. Ouvre Taby pour le déplacer vers un autre onglet.";
+"share.where_to_save" = "Où enregistrer ?";
+
+// MARK: - Data (Export/Import)
+
+"data.title" = "Données";
+"data.export" = "Exporter les données";
+"data.import" = "Importer les données";
+"data.exporting" = "Exportation...";
+"data.importing" = "Importation...";
+"data.export_success" = "Exportation terminée";
+"data.import_success" = "Importation terminée";
+"data.export_error" = "Échec de l'exportation";
+"data.import_error" = "Échec de l'importation";
+
+// Import Preview
+"data.import_preview_title" = "Aperçu de l'import";
+"data.preview_archive_info" = "INFO DE L'ARCHIVE";
+"data.preview_contents" = "CONTENU";
+"data.preview_date" = "Date";
+"data.preview_device" = "Appareil";
+"data.preview_app_version" = "Version de l'app";
+"data.preview_tabs" = "Onglets";
+"data.preview_messages" = "Messages";
+"data.preview_photos" = "Photos";
+"data.preview_videos" = "Vidéos";
+
+// Import Modes
+"data.import_mode" = "MODE D'IMPORT";
+"data.mode_replace" = "Tout remplacer";
+"data.mode_replace_description" = "Supprimer toutes les données et importer depuis l'archive";
+"data.mode_replace_warning" = "Toutes les données actuelles seront définitivement supprimées !";
+"data.mode_merge" = "Fusionner";
+"data.mode_merge_description" = "Garder les données existantes et ajouter les nouvelles de l'archive";
+"data.import_button" = "Importer";
+"data.imported_stats" = "%d onglets et %d messages importés";
+
+// Progress Phases
+"data.phase_preparing" = "Préparation...";
+"data.phase_exporting_data" = "Exportation des données...";
+"data.phase_copying_photos" = "Copie des photos...";
+"data.phase_copying_videos" = "Copie des vidéos...";
+"data.phase_compressing" = "Compression...";
+"data.phase_extracting" = "Extraction...";
+"data.phase_importing_data" = "Importation des données...";
+"data.phase_copying_media" = "Copie des médias...";
+"data.phase_scheduling_reminders" = "Planification des rappels...";
+"data.phase_complete" = "Terminé";

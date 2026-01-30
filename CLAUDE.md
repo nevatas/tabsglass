@@ -1,12 +1,60 @@
 # TabsGlass Project Notes
 
 ## Project Overview
-iOS notes app with messenger-like UI/UX and tabs. SwiftUI + SwiftData, iOS 26+.
+iOS notes app with messenger-like UI/UX and tabs. SwiftUI + UIKit hybrid, SwiftData, iOS 26+.
 
 ## Architecture
-- `Tab` -> `Message` (SwiftData models, cascade delete)
-- MainContainerView -> TabBarView -> TabPagerView -> ChatView -> MessageBubbleView
-- ComposerView - floating input bar with Liquid Glass effect
+
+### Data Models (`Models/`)
+- **Tab** — вкладка с `title`, `position`, cascade delete сообщений
+- **Message** — сообщение с полями:
+  - `content`, `tabId` (nil = Inbox), `position`
+  - `entities: [TextEntity]?` — Telegram-style форматирование
+  - `linkPreview: LinkPreview?` — превью ссылок
+  - `photoFileNames: [String]`, `photoAspectRatios: [Double]` — фото
+  - `todoItems: [TodoItem]?`, `todoTitle: String?` — чеклисты
+- **Inbox** — виртуальная вкладка (сообщения с `tabId = nil`)
+
+### View Hierarchy (`Views/`)
+```
+ContentView
+└── MainContainerView (оркестратор состояния)
+    ├── TabBarView (Telegram-style навигация, Liquid Glass)
+    └── UnifiedChatView (UIViewControllerRepresentable)
+        └── UnifiedChatViewController
+            ├── UIPageViewController (свайп между вкладками)
+            │   └── MessageListViewController (инвертированный UITableView)
+            │       └── MessageTableCell
+            │           ├── MosaicMediaView (сетка фото)
+            │           ├── UITextView (форматированный текст)
+            │           └── TodoBubbleView (чекбоксы)
+            └── SwiftUIComposerContainer
+                └── EmbeddedComposerView (ввод + фото)
+```
+
+### Services (`Services/`)
+- **ThemeManager** — 8 тем (system, light, dark, pink, beige, green, blue)
+- **ImageCache** — NSCache + downsampling, async loading
+- **DeletedMessageStore** — shake-to-undo (30 сек)
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `MainContainerView.swift` | State management, CRUD operations |
+| `TabBarView.swift` | Tab navigation with swipe tracking |
+| `UnifiedChatViewController.swift` | Page controller + composer |
+| `MessageListViewController.swift` | Message list, context menu |
+| `MessengerView.swift` | Composer UI, ComposerState |
+| `FormattingTextView.swift` | Rich text editing |
+| `MosaicLayout.swift` | Photo grid calculations |
+| `TodoBubbleView.swift` | Todo list rendering |
+
+### Features
+- До 10 фото на сообщение (хранятся в `Documents/MessagePhotos/`)
+- Telegram-style форматирование (bold, italic, links, code, spoiler)
+- Todo-списки с опциональным заголовком
+- Link previews
+- Локализация: en, de, es, fr, ru
 
 ## Liquid Glass (iOS 26+)
 

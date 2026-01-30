@@ -85,7 +85,7 @@
 
 "composer.placeholder" = "Заметка...";
 "composer.camera" = "Камера";
-"composer.photo" = "Фото";
+"composer.gallery" = "Галерея";
 "composer.list" = "Список";
 
 // MARK: - Task List
@@ -115,3 +115,59 @@
 "reminder.send_on_date" = "Напомнить %@ в %@";
 "reminder.notification_title" = "Напоминание";
 "reminder.notification_body_empty" = "У вас есть напоминание";
+
+// MARK: - Share Extension
+
+"share.title" = "Сохранить в Taby";
+"share.cancel" = "Отмена";
+"share.save" = "Сохранить";
+"share.save_to" = "СОХРАНИТЬ В";
+"share.inbox" = "📥 Входящие";
+"share.inbox_info" = "Сохранится во Входящие. Откройте Taby чтобы переместить в другой таб.";
+"share.where_to_save" = "Куда сохранить?";
+
+// MARK: - Data (Export/Import)
+
+"data.title" = "Данные";
+"data.export" = "Экспорт данных";
+"data.import" = "Импорт данных";
+"data.exporting" = "Экспорт...";
+"data.importing" = "Импорт...";
+"data.export_success" = "Экспорт завершён";
+"data.import_success" = "Импорт завершён";
+"data.export_error" = "Ошибка экспорта";
+"data.import_error" = "Ошибка импорта";
+
+// Import Preview
+"data.import_preview_title" = "Просмотр архива";
+"data.preview_archive_info" = "ИНФОРМАЦИЯ ОБ АРХИВЕ";
+"data.preview_contents" = "СОДЕРЖИМОЕ";
+"data.preview_date" = "Дата";
+"data.preview_device" = "Устройство";
+"data.preview_app_version" = "Версия приложения";
+"data.preview_tabs" = "Табы";
+"data.preview_messages" = "Сообщения";
+"data.preview_photos" = "Фото";
+"data.preview_videos" = "Видео";
+
+// Import Modes
+"data.import_mode" = "РЕЖИМ ИМПОРТА";
+"data.mode_replace" = "Заменить всё";
+"data.mode_replace_description" = "Удалить все данные и импортировать из архива";
+"data.mode_replace_warning" = "Все текущие данные будут безвозвратно удалены!";
+"data.mode_merge" = "Объединить";
+"data.mode_merge_description" = "Сохранить текущие данные и добавить новые из архива";
+"data.import_button" = "Импортировать";
+"data.imported_stats" = "Импортировано %d табов и %d сообщений";
+
+// Progress Phases
+"data.phase_preparing" = "Подготовка...";
+"data.phase_exporting_data" = "Экспорт данных...";
+"data.phase_copying_photos" = "Копирование фото...";
+"data.phase_copying_videos" = "Копирование видео...";
+"data.phase_compressing" = "Сжатие...";
+"data.phase_extracting" = "Распаковка...";
+"data.phase_importing_data" = "Импорт данных...";
+"data.phase_copying_media" = "Копирование медиа...";
+"data.phase_scheduling_reminders" = "Настройка напоминаний...";
+"data.phase_complete" = "Готово";

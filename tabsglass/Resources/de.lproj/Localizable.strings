@@ -85,7 +85,7 @@
 
 "composer.placeholder" = "Notiz...";
 "composer.camera" = "Kamera";
-"composer.photo" = "Foto";
+"composer.gallery" = "Galerie";
 "composer.list" = "Liste";
 
 // MARK: - Task List
@@ -115,3 +115,59 @@
 "reminder.send_on_date" = "Am %@ um %@ erinnern";
 "reminder.notification_title" = "Erinnerung";
 "reminder.notification_body_empty" = "Du hast eine Erinnerung";
+
+// MARK: - Share Extension
+
+"share.title" = "In Taby speichern";
+"share.cancel" = "Abbrechen";
+"share.save" = "Speichern";
+"share.save_to" = "SPEICHERN IN";
+"share.inbox" = "📥 Eingang";
+"share.inbox_info" = "Wird im Eingang gespeichert. Öffne Taby, um es in einen anderen Tab zu verschieben.";
+"share.where_to_save" = "Wo speichern?";
+
+// MARK: - Data (Export/Import)
+
+"data.title" = "Daten";
+"data.export" = "Daten exportieren";
+"data.import" = "Daten importieren";
+"data.exporting" = "Exportieren...";
+"data.importing" = "Importieren...";
+"data.export_success" = "Export abgeschlossen";
+"data.import_success" = "Import abgeschlossen";
+"data.export_error" = "Export fehlgeschlagen";
+"data.import_error" = "Import fehlgeschlagen";
+
+// Import Preview
+"data.import_preview_title" = "Import-Vorschau";
+"data.preview_archive_info" = "ARCHIV-INFO";
+"data.preview_contents" = "INHALT";
+"data.preview_date" = "Datum";
+"data.preview_device" = "Gerät";
+"data.preview_app_version" = "App-Version";
+"data.preview_tabs" = "Tabs";
+"data.preview_messages" = "Nachrichten";
+"data.preview_photos" = "Fotos";
+"data.preview_videos" = "Videos";
+
+// Import Modes
+"data.import_mode" = "IMPORTMODUS";
+"data.mode_replace" = "Alles ersetzen";
+"data.mode_replace_description" = "Alle Daten löschen und aus Archiv importieren";
+"data.mode_replace_warning" = "Alle aktuellen Daten werden dauerhaft gelöscht!";
+"data.mode_merge" = "Zusammenführen";
+"data.mode_merge_description" = "Bestehende Daten behalten und neue aus Archiv hinzufügen";
+"data.import_button" = "Importieren";
+"data.imported_stats" = "%d Tabs und %d Nachrichten importiert";
+
+// Progress Phases
+"data.phase_preparing" = "Vorbereiten...";
+"data.phase_exporting_data" = "Daten exportieren...";
+"data.phase_copying_photos" = "Fotos kopieren...";
+"data.phase_copying_videos" = "Videos kopieren...";
+"data.phase_compressing" = "Komprimieren...";
+"data.phase_extracting" = "Entpacken...";
+"data.phase_importing_data" = "Daten importieren...";
+"data.phase_copying_media" = "Medien kopieren...";
+"data.phase_scheduling_reminders" = "Erinnerungen planen...";
+"data.phase_complete" = "Fertig";

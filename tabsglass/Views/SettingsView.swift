@@ -6,12 +6,35 @@
 import SwiftUI
 import SwiftData
 import WebKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Query private var allTabs: [Tab]
+    @Query private var allMessages: [Message]
+
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
     @AppStorage("spaceName") private var spaceName = "Taby"
     private var themeManager: ThemeManager { ThemeManager.shared }
+
+    // Export/Import state
+    @State private var isExporting = false
+    @State private var isImporting = false
+    @State private var showExportProgress = false
+    @State private var showImportPicker = false
+    @State private var showImportPreview = false
+    @State private var exportProgress: ExportImportProgress?
+    @State private var importProgress: ExportImportProgress?
+    @State private var importManifest: ExportManifest?
+    @State private var importFileURL: URL?
+    @State private var showExportShareSheet = false
+    @State private var exportedFileURL: URL?
+    @State private var showAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
+
+    private let exportImportService = ExportImportService()
 
     var body: some View {
         NavigationStack {
@@ -52,6 +75,25 @@ struct SettingsView: View {
                     }
                 }
 
+                // Data section
+                Section {
+                    Button {
+                        startExport()
+                    } label: {
+                        Label(L10n.Data.export, systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(isExporting || isImporting)
+
+                    Button {
+                        showImportPicker = true
+                    } label: {
+                        Label(L10n.Data.importData, systemImage: "square.and.arrow.down")
+                    }
+                    .disabled(isExporting || isImporting)
+                } header: {
+                    Text(L10n.Data.title)
+                }
+
                 Section {
                     NavigationLink {
                         WebView(url: URL(string: "https://nevatas.github.io/taby-legal/PRIVACY_POLICY")!)
@@ -84,9 +126,201 @@ struct SettingsView: View {
                     }
                 }
             }
+            .overlay {
+                if showExportProgress, let progress = exportProgress {
+                    ExportProgressView(progress: progress, isExporting: true)
+                }
+                if isImporting, let progress = importProgress {
+                    ExportProgressView(progress: progress, isExporting: false)
+                }
+            }
+            .fileImporter(
+                isPresented: $showImportPicker,
+                allowedContentTypes: [UTType(filenameExtension: "taby") ?? .zip],
+                allowsMultipleSelection: false
+            ) { result in
+                handleFileImport(result)
+            }
+            .sheet(isPresented: $showImportPreview) {
+                if let manifest = importManifest {
+                    ImportPreviewView(
+                        manifest: manifest,
+                        onImport: { mode in
+                            showImportPreview = false
+                            startImport(mode: mode)
+                        },
+                        onCancel: {
+                            showImportPreview = false
+                            cleanupImportFile()
+                        }
+                    )
+                }
+            }
+            .sheet(isPresented: $showExportShareSheet) {
+                if let url = exportedFileURL {
+                    ShareSheet(items: [url])
+                        .onDisappear {
+                            // Clean up exported file after sharing
+                            try? FileManager.default.removeItem(at: url)
+                            exportedFileURL = nil
+                        }
+                }
+            }
+            .alert(alertTitle, isPresented: $showAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(alertMessage)
+            }
         }
         .preferredColorScheme(themeManager.currentTheme.colorSchemeOverride)
     }
+
+    // MARK: - Export
+
+    private func startExport() {
+        isExporting = true
+        showExportProgress = true
+        exportProgress = ExportImportProgress(phase: .preparing, current: 0, total: 1)
+
+        Task {
+            do {
+                let archiveURL = try await exportImportService.exportData(
+                    tabs: allTabs,
+                    messages: allMessages
+                ) { progress in
+                    exportProgress = progress
+                }
+
+                await MainActor.run {
+                    isExporting = false
+                    showExportProgress = false
+                    exportedFileURL = archiveURL
+                    showExportShareSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    isExporting = false
+                    showExportProgress = false
+                    alertTitle = L10n.Data.exportError
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                }
+            }
+        }
+    }
+
+    // MARK: - Import
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+
+            // Copy to temp location (file picker gives security-scoped URL)
+            guard url.startAccessingSecurityScopedResource() else {
+                alertTitle = L10n.Data.importError
+                alertMessage = "Cannot access file"
+                showAlert = true
+                return
+            }
+
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: tempURL)
+
+            do {
+                try FileManager.default.copyItem(at: url, to: tempURL)
+                importFileURL = tempURL
+
+                // Validate and show preview
+                Task {
+                    do {
+                        let manifest = try await exportImportService.validateArchive(at: tempURL)
+                        await MainActor.run {
+                            importManifest = manifest
+                            showImportPreview = true
+                        }
+                    } catch {
+                        await MainActor.run {
+                            cleanupImportFile()
+                            alertTitle = L10n.Data.importError
+                            alertMessage = error.localizedDescription
+                            showAlert = true
+                        }
+                    }
+                }
+            } catch {
+                alertTitle = L10n.Data.importError
+                alertMessage = error.localizedDescription
+                showAlert = true
+            }
+
+        case .failure(let error):
+            alertTitle = L10n.Data.importError
+            alertMessage = error.localizedDescription
+            showAlert = true
+        }
+    }
+
+    private func startImport(mode: ImportMode) {
+        guard let fileURL = importFileURL else { return }
+
+        isImporting = true
+        importProgress = ExportImportProgress(phase: .extracting, current: 0, total: 1)
+
+        Task {
+            do {
+                let (tabCount, messageCount) = try await exportImportService.importData(
+                    from: fileURL,
+                    mode: mode,
+                    modelContext: modelContext
+                ) { progress in
+                    importProgress = progress
+                }
+
+                await MainActor.run {
+                    isImporting = false
+                    importProgress = nil
+                    cleanupImportFile()
+
+                    alertTitle = L10n.Data.importSuccess
+                    alertMessage = L10n.Data.importedStats(tabCount, messageCount)
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isImporting = false
+                    importProgress = nil
+                    cleanupImportFile()
+
+                    alertTitle = L10n.Data.importError
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                }
+            }
+        }
+    }
+
+    private func cleanupImportFile() {
+        if let url = importFileURL {
+            try? FileManager.default.removeItem(at: url)
+            importFileURL = nil
+        }
+        importManifest = nil
+    }
+}
+
+// MARK: - Share Sheet
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Reorder Tabs View

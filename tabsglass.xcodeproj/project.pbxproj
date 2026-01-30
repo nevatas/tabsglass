@@ -178,6 +178,7 @@
 			);
 			name = tabsglass;
 			packageProductDependencies = (
+				D6EXPORT022F000002000F3043 /* ZIPFoundation */,
 			);
 			productName = tabsglass;
 			productReference = D63BFDEA2F217BAC00B28B56 /* Taby.app */;
@@ -290,6 +291,9 @@
 			);
 			mainGroup = D63BFDE12F217BAC00B28B56;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D6EXPORT012F000001000F3043 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D63BFDEB2F217BAC00B28B56 /* Products */;
 			projectDirPath = "";
@@ -528,7 +532,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = company.thecool.taby;
 				PRODUCT_MODULE_NAME = tabsglass;
 				PRODUCT_NAME = Taby;
@@ -565,7 +569,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = company.thecool.taby;
 				PRODUCT_MODULE_NAME = tabsglass;
 				PRODUCT_NAME = Taby;
@@ -679,7 +683,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = company.thecool.taby.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -708,7 +712,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = company.thecool.taby.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -770,6 +774,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D6EXPORT012F000001000F3043 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.19;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D6EXPORT022F000002000F3043 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D6EXPORT012F000001000F3043 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D63BFDE22F217BAC00B28B56 /* Project object */;
 }

@@ -565,27 +565,63 @@ struct MainContainerView: View {
         let tabId = tab.id
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.tabId == tabId })
         if let messages = try? modelContext.fetch(descriptor) {
-            // Collect notification IDs to cancel
-            let notificationIds = messages.compactMap { $0.notificationId }
-            NotificationService.shared.cancelReminders(notificationIds: notificationIds)
+            // Collect all data we need BEFORE deleting to avoid SwiftData detachment crash
+            var photoFilesToDelete: [String] = []
+            var videoFilesToDelete: [String] = []
+            var thumbnailFilesToDelete: [String] = []
+            var notificationIdsToCancel: [String] = []
 
             for message in messages {
-                // Delete associated media
-                message.deleteMediaFiles()
+                photoFilesToDelete.append(contentsOf: message.photoFileNames)
+                videoFilesToDelete.append(contentsOf: message.videoFileNames)
+                thumbnailFilesToDelete.append(contentsOf: message.videoThumbnailFileNames)
+                if let notificationId = message.notificationId {
+                    notificationIdsToCancel.append(notificationId)
+                }
+            }
+
+            // Cancel notifications
+            NotificationService.shared.cancelReminders(notificationIds: notificationIdsToCancel)
+
+            // Delete messages from context
+            for message in messages {
                 modelContext.delete(message)
             }
-        }
 
-        // Adjust selected index if needed (account for Inbox at index 0)
-        if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
-            let tabIndex = index + 1  // +1 because Inbox is at 0
-            if selectedTabIndex >= tabIndex {
-                selectedTabIndex = max(0, selectedTabIndex - 1)
+            // Adjust selected index if needed (account for Inbox at index 0)
+            if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
+                let tabIndex = index + 1  // +1 because Inbox is at 0
+                if selectedTabIndex >= tabIndex {
+                    selectedTabIndex = max(0, selectedTabIndex - 1)
+                }
             }
+
+            // Delete tab and save
+            modelContext.delete(tab)
+            try? modelContext.save()
+
+            // Clean up media files AFTER saving context
+            for fileName in photoFilesToDelete {
+                SharedPhotoStorage.deletePhoto(fileName)
+            }
+            for fileName in videoFilesToDelete {
+                SharedVideoStorage.deleteVideo(fileName)
+            }
+            for fileName in thumbnailFilesToDelete {
+                SharedPhotoStorage.deletePhoto(fileName)
+            }
+        } else {
+            // No messages, just delete the tab
+            if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
+                let tabIndex = index + 1
+                if selectedTabIndex >= tabIndex {
+                    selectedTabIndex = max(0, selectedTabIndex - 1)
+                }
+            }
+            modelContext.delete(tab)
+            try? modelContext.save()
         }
 
-        modelContext.delete(tab)
-        try? modelContext.save()
         syncTabsToExtension()
     }
 
