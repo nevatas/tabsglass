@@ -409,6 +409,7 @@ struct MainContainerView: View {
                     videoThumbnailFileNames: videoThumbnailFileNames
                 )
                 modelContext.insert(message)
+                try? modelContext.save()
             }
         }
     }
@@ -440,10 +441,12 @@ struct MainContainerView: View {
 
         // Delete from database (media kept for potential restore)
         modelContext.delete(message)
+        try? modelContext.save()
     }
 
     private func moveMessage(_ message: Message, toTabId targetTabId: UUID?) {
         message.tabId = targetTabId
+        try? modelContext.save()
     }
 
     private func sendTaskListMessage(title: String?, items: [TodoItem]) {
@@ -453,6 +456,7 @@ struct MainContainerView: View {
         message.todoTitle = title
         message.todoItems = items
         modelContext.insert(message)
+        try? modelContext.save()
     }
 
     private func updateTaskList(message: Message, newTitle: String?, newItems: [TodoItem]) {
@@ -463,6 +467,7 @@ struct MainContainerView: View {
             message.todoTitle = newTitle
             message.todoItems = newItems
         }
+        try? modelContext.save()
     }
 
     private func toggleTodoItem(message: Message, itemId: UUID, isCompleted: Bool) {
@@ -470,6 +475,7 @@ struct MainContainerView: View {
               let index = items.firstIndex(where: { $0.id == itemId }) else { return }
         items[index].isCompleted = isCompleted
         message.todoItems = items
+        try? modelContext.save()
     }
 
     private func saveReminder(message: Message, date: Date, repeatInterval: ReminderRepeatInterval) {
@@ -485,9 +491,12 @@ struct MainContainerView: View {
                 date: date,
                 repeatInterval: repeatInterval
             ) {
-                message.reminderDate = date
-                message.reminderRepeatInterval = repeatInterval
-                message.notificationId = notificationId
+                await MainActor.run {
+                    message.reminderDate = date
+                    message.reminderRepeatInterval = repeatInterval
+                    message.notificationId = notificationId
+                    try? modelContext.save()
+                }
             }
         }
     }
@@ -499,6 +508,7 @@ struct MainContainerView: View {
         message.reminderDate = nil
         message.reminderRepeatInterval = nil
         message.notificationId = nil
+        try? modelContext.save()
     }
 
     private func restoreDeletedMessage() {
@@ -525,12 +535,14 @@ struct MainContainerView: View {
         message.createdAt = snapshot.createdAt
 
         modelContext.insert(message)
+        try? modelContext.save()
     }
 
     private func createTab(title: String) {
         let maxPosition = tabs.map(\.position).max() ?? -1
         let newTab = Tab(title: title, position: maxPosition + 1)
         modelContext.insert(newTab)
+        try? modelContext.save()
         syncTabsToExtension()
 
         let key = "hasRequestedReviewAfterTabCreate"
@@ -544,6 +556,7 @@ struct MainContainerView: View {
 
     private func renameTab(_ tab: Tab, to newTitle: String) {
         tab.title = newTitle
+        try? modelContext.save()
         syncTabsToExtension()
     }
 
@@ -572,6 +585,7 @@ struct MainContainerView: View {
         }
 
         modelContext.delete(tab)
+        try? modelContext.save()
         syncTabsToExtension()
     }
 

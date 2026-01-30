@@ -696,6 +696,8 @@ final class MessageListViewController: UIViewController {
     private var sortedMessages: [Message] = []
     private var longPressGesture: UILongPressGestureRecognizer!
     private var hasAppearedBefore = false
+    /// IDs of messages that should animate appearance (scale + fade in)
+    private var pendingAppearAnimationIds: Set<UUID> = []
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -779,10 +781,10 @@ final class MessageListViewController: UIViewController {
             .sorted { $0.createdAt > $1.createdAt }
 
         // Check if only content changed (same IDs, same order) - just reconfigure cells
-        let oldIds = oldMessages.map { $0.id }
+        let oldIds = Set(oldMessages.map { $0.id })
         let newIds = newMessages.map { $0.id }
 
-        if oldIds == newIds {
+        if oldIds == Set(newIds) && oldMessages.map({ $0.id }) == newIds {
             // Same messages, just update content - reconfigure visible cells without animation
             sortedMessages = newMessages
             CATransaction.begin()
@@ -800,18 +802,59 @@ final class MessageListViewController: UIViewController {
             }
             CATransaction.commit()
         } else {
-            // Structure changed - full reload
-            sortedMessages = newMessages
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            UIView.performWithoutAnimation {
-                tableView.reloadData()
+            // Check if this is a simple insertion of new messages at the beginning
+            let newMessageIds = newIds.filter { !oldIds.contains($0) }
+            let isSimpleInsertion = !newMessageIds.isEmpty &&
+                                    oldIds.subtracting(Set(newIds)).isEmpty &&
+                                    newIds.dropFirst(newMessageIds.count).elementsEqual(oldMessages.map { $0.id })
+
+            if isSimpleInsertion && !oldMessages.isEmpty {
+                // New messages added at the top (row 0 in inverted table = newest)
+                // Mark these messages for appear animation (will be applied in cellForRowAt)
+                pendingAppearAnimationIds = Set(newMessageIds)
+                sortedMessages = newMessages
+                let insertIndexPaths = (0..<newMessageIds.count).map { IndexPath(row: $0, section: 0) }
+
+                // Insert rows - cells will start hidden due to pendingAppearAnimationIds
+                tableView.performBatchUpdates({
+                    tableView.insertRows(at: insertIndexPaths, with: .none)
+                })
+
+                // Start appear animation immediately (in parallel with insert animation)
+                // Use async to ensure cells are created first
+                DispatchQueue.main.async {
+                    self.pendingAppearAnimationIds.removeAll()
+
+                    for indexPath in insertIndexPaths {
+                        guard let cell = self.tableView.cellForRow(at: indexPath) else { continue }
+                        let originalTransform = CGAffineTransform(scaleX: 1, y: -1)
+
+                        // Set initial state: small and transparent
+                        cell.transform = originalTransform.scaledBy(x: 0.85, y: 0.85)
+                        cell.alpha = 0
+                        cell.isHidden = false
+
+                        // Animate to normal state (in parallel with other cells moving)
+                        UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseOut]) {
+                            cell.transform = originalTransform
+                            cell.alpha = 1
+                        }
+                    }
+                }
+            } else {
+                // Structure changed significantly - full reload
+                sortedMessages = newMessages
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                UIView.performWithoutAnimation {
+                    tableView.reloadData()
+                }
+                CATransaction.commit()
             }
-            CATransaction.commit()
         }
     }
 
-    /// Animate message deletion with smooth fade animation
+    /// Animate message deletion with smooth shrink + fade animation (like composer attachments)
     func animateDeleteMessage(_ message: Message, completion: @escaping () -> Void) {
         guard let index = sortedMessages.firstIndex(where: { $0.id == message.id }) else {
             completion()
@@ -830,14 +873,44 @@ final class MessageListViewController: UIViewController {
             return
         }
 
-        // Remove from local array first
-        sortedMessages.remove(at: index)
+        let indexPath = IndexPath(row: index, section: 0)
 
-        // Animate the row deletion
-        tableView.performBatchUpdates {
-            tableView.deleteRows(at: [IndexPath(row: index, section: 0)], with: .fade)
+        // Get the cell to animate (if visible)
+        guard let cell = tableView.cellForRow(at: indexPath) else {
+            // Cell not visible - just remove with standard animation
+            sortedMessages.remove(at: index)
+            tableView.performBatchUpdates({
+                tableView.deleteRows(at: [indexPath], with: .fade)
+            }) { _ in
+                completion()
+            }
+            return
+        }
+
+        // Save original transform (includes flip for inverted table)
+        let originalTransform = cell.transform
+
+        // Phase 1: Shrink and fade the cell
+        UIView.animate(withDuration: 0.125, delay: 0, options: [.curveEaseOut]) {
+            cell.transform = originalTransform.scaledBy(x: 0.85, y: 0.85)
+            cell.alpha = 0
         } completion: { _ in
-            completion()
+            // Hide cell completely to prevent "ghost" appearing during layout animation
+            cell.isHidden = true
+
+            // Remove from data source
+            self.sortedMessages.remove(at: index)
+
+            // Phase 2: Remove cell and let performBatchUpdates animate remaining cells
+            self.tableView.performBatchUpdates({
+                self.tableView.deleteRows(at: [indexPath], with: .none)
+            }) { _ in
+                // Reset cell state for reuse
+                cell.isHidden = false
+                cell.transform = originalTransform
+                cell.alpha = 1
+                completion()
+            }
         }
     }
 
@@ -916,6 +989,15 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
         cell.onTodoToggle = { [weak self] itemId, isCompleted in
             self?.onToggleTodoItem?(message, itemId, isCompleted)
+        }
+
+        // Check if this message needs appear animation
+        if pendingAppearAnimationIds.contains(message.id) {
+            // Hide completely until animation starts
+            cell.isHidden = true
+        } else {
+            cell.isHidden = false
+            cell.alpha = 1
         }
         cell.transform = CGAffineTransform(scaleX: 1, y: -1)
         return cell
