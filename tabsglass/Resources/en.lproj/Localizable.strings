@@ -126,6 +126,47 @@
 "share.inbox_info" = "Will be saved to Inbox. Open Taby to move to another tab.";
 "share.where_to_save" = "Where to save?";
 
+// MARK: - Auth
+
+"auth.login_title" = "Welcome Back";
+"auth.login_subtitle" = "Sign in to sync your notes across devices";
+"auth.register_title" = "Create Account";
+"auth.register_subtitle" = "Sign up to sync your notes across devices";
+
+"auth.email" = "Email";
+"auth.email_placeholder" = "you@example.com";
+"auth.password" = "Password";
+"auth.password_placeholder" = "Enter password";
+"auth.confirm_password" = "Confirm Password";
+"auth.confirm_password_placeholder" = "Re-enter password";
+
+"auth.login" = "Sign In";
+"auth.register" = "Sign Up";
+"auth.create_account" = "Create Account";
+"auth.logout" = "Log Out";
+"auth.cancel" = "Cancel";
+
+"auth.no_account" = "Don't have an account?";
+"auth.has_account" = "Already have an account?";
+
+"auth.invalid_email" = "Please enter a valid email address";
+"auth.password_too_short" = "Password must be at least 8 characters";
+"auth.password_mismatch" = "Passwords don't match";
+
+"auth.account" = "Account";
+"auth.logged_in_as" = "Signed in as";
+"auth.not_logged_in" = "Sign in to sync your notes across devices";
+"auth.sign_in" = "Sign In";
+"auth.sign_out" = "Sign Out";
+"auth.sign_out_confirm_title" = "Sign Out?";
+"auth.sign_out_confirm_message" = "Your data will remain on this device but won't sync until you sign in again.";
+
+"auth.sync_status" = "Sync Status";
+"auth.synced" = "Synced";
+"auth.syncing" = "Syncing...";
+"auth.pending_sync" = "Waiting to sync";
+"auth.offline" = "Offline";
+
 // MARK: - Data (Export/Import)
 
 "data.title" = "Data";

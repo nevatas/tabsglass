@@ -410,6 +410,9 @@ struct MainContainerView: View {
                 )
                 modelContext.insert(message)
                 try? modelContext.save()
+
+                // Queue for sync if authenticated
+                queueMessageCreate(message)
             }
         }
     }
@@ -436,6 +439,15 @@ struct MainContainerView: View {
             NotificationService.shared.cancelReminder(notificationId: notificationId)
         }
 
+        // Queue delete for sync (before local delete)
+        let messageId = message.id
+        let serverId = message.serverId
+        if let sid = serverId {
+            Task {
+                await SyncService.shared.queueDelete(type: .message, entityId: messageId, serverId: sid)
+            }
+        }
+
         // Store for undo (don't delete media yet)
         DeletedMessageStore.shared.store(message)
 
@@ -457,6 +469,9 @@ struct MainContainerView: View {
         message.todoItems = items
         modelContext.insert(message)
         try? modelContext.save()
+
+        // Queue for sync
+        queueMessageCreate(message)
     }
 
     private func updateTaskList(message: Message, newTitle: String?, newItems: [TodoItem]) {
@@ -545,6 +560,9 @@ struct MainContainerView: View {
         try? modelContext.save()
         syncTabsToExtension()
 
+        // Queue for sync
+        queueTabCreate(newTab)
+
         let key = "hasRequestedReviewAfterTabCreate"
         if !UserDefaults.standard.bool(forKey: key) {
             UserDefaults.standard.set(true, forKey: key)
@@ -558,9 +576,21 @@ struct MainContainerView: View {
         tab.title = newTitle
         try? modelContext.save()
         syncTabsToExtension()
+
+        // Queue for sync
+        queueTabUpdate(tab)
     }
 
     private func deleteTab(_ tab: Tab) {
+        // Queue delete for sync (before local delete)
+        let tabIdForSync = tab.id
+        let tabServerId = tab.serverId
+        if let sid = tabServerId {
+            Task {
+                await SyncService.shared.queueDelete(type: .tab, entityId: tabIdForSync, serverId: sid)
+            }
+        }
+
         // Delete all messages from this tab
         let tabId = tab.id
         let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.tabId == tabId })
@@ -630,6 +660,76 @@ struct MainContainerView: View {
         // Delay slightly to ensure SwiftData has updated
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
             TabsSync.saveTabs(Array(tabs))
+        }
+    }
+
+    // MARK: - Sync Queue Helpers
+
+    private func queueTabCreate(_ tab: Tab) {
+        guard AuthService.shared.isAuthenticated else { return }
+
+        let request = CreateTabRequest(
+            title: tab.title,
+            position: tab.position,
+            localId: tab.id
+        )
+        Task {
+            await SyncService.shared.queueCreate(request, type: .tab, entityId: tab.id)
+        }
+    }
+
+    private func queueTabUpdate(_ tab: Tab) {
+        guard AuthService.shared.isAuthenticated else { return }
+
+        let request = UpdateTabRequest(
+            title: tab.title,
+            position: tab.position
+        )
+        Task {
+            await SyncService.shared.queueUpdate(request, type: .tab, entityId: tab.id)
+        }
+    }
+
+    private func queueMessageCreate(_ message: Message) {
+        guard AuthService.shared.isAuthenticated else { return }
+
+        Task {
+            // Upload media first if message has any
+            var mediaItems: [MediaItemRequest] = []
+            if message.hasMedia {
+                do {
+                    mediaItems = try await MediaSyncService.shared.uploadAllMedia(for: message)
+                } catch {
+                    print("Failed to upload media: \(error.localizedDescription)")
+                    // Continue without media - will be synced later
+                }
+            }
+
+            // Get tab server ID if message is in a tab
+            var tabServerId: Int? = nil
+            if let tabId = message.tabId,
+               let tab = tabs.first(where: { $0.id == tabId }) {
+                tabServerId = tab.serverId
+            }
+
+            let request = CreateMessageRequest(
+                content: message.content,
+                tabServerId: tabServerId,
+                tabLocalId: message.tabId,  // Used to resolve serverId at sync time
+                localId: message.id,
+                position: message.position,
+                entities: message.entities?.map { TextEntityDTO(from: $0) },
+                linkPreview: message.linkPreview.map { LinkPreviewDTO(from: $0) },
+                sourceUrl: message.sourceUrl,
+                mediaGroupId: message.mediaGroupId,
+                todoItems: message.todoItems?.map { TodoItemDTO(from: $0) },
+                todoTitle: message.todoTitle,
+                reminderDate: message.reminderDate,
+                reminderRepeatInterval: message.reminderRepeatInterval?.rawValue,
+                media: mediaItems
+            )
+
+            await SyncService.shared.queueCreate(request, type: .message, entityId: message.id)
         }
     }
 }

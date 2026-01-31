@@ -11,6 +11,15 @@ enum SharedConstants {
     /// App Group identifier for sharing data between main app and extensions
     static let appGroupID = "group.company.thecool.taby"
 
+    // MARK: - API Configuration
+
+    /// Base URL for the backend API
+    /// Use Mac's local IP for real device testing
+    static let apiBaseURL = URL(string: "http://192.168.1.105:8080")!
+
+    /// WebSocket URL for real-time updates
+    static let webSocketURL = URL(string: "ws://192.168.1.105:8080")!
+
     /// Shared container URL for App Group
     static var containerURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)

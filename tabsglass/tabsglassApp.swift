@@ -36,9 +36,35 @@ struct tabsglassApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .task {
+                    // Check auth session on app launch
+                    await AuthService.shared.checkSession()
+
+                    // If authenticated, fetch settings and data from server
+                    if AuthService.shared.isAuthenticated {
+                        await SyncService.shared.fetchUserSettings()
+                        let context = modelContainer.mainContext
+                        await SyncService.shared.fetchDataFromServer(modelContext: context)
+                        try? await WebSocketService.shared.connect()
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                     // Process any pending share items when app returns to foreground
                     Self.processPendingShareItems(in: modelContainer)
+
+                    // Reconnect WebSocket and sync on foreground
+                    Task {
+                        if AuthService.shared.isAuthenticated {
+                            try? await WebSocketService.shared.connect()
+                        }
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                    // Disconnect WebSocket when backgrounded (with delay for quick returns)
+                    Task {
+                        try? await Task.sleep(for: .seconds(30))
+                        await WebSocketService.shared.disconnect()
+                    }
                 }
         }
         .modelContainer(modelContainer)

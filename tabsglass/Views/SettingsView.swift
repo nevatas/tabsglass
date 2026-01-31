@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
     @AppStorage("spaceName") private var spaceName = "Taby"
     private var themeManager: ThemeManager { ThemeManager.shared }
+    private var authService: AuthService { AuthService.shared }
 
     // Export/Import state
     @State private var isExporting = false
@@ -34,11 +35,51 @@ struct SettingsView: View {
     @State private var alertTitle = ""
     @State private var alertMessage = ""
 
+    // Auth state
+    @State private var showLoginSheet = false
+    @State private var showRegisterSheet = false
+    @State private var showSignOutConfirm = false
+    @State private var showClearDataConfirm = false
+    @State private var showLocalDataConflict = false
+    @State private var pendingLoginCompletion: (() -> Void)?
+
     private let exportImportService = ExportImportService()
 
     var body: some View {
         NavigationStack {
             List {
+                // Account section
+                Section {
+                    if authService.isAuthenticated, let user = authService.currentUser {
+                        HStack {
+                            Label(user.email, systemImage: "person.circle.fill")
+                            Spacer()
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+
+                        Button(role: .destructive) {
+                            showSignOutConfirm = true
+                        } label: {
+                            Label(L10n.Auth.signOut, systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    } else {
+                        Button {
+                            showLoginSheet = true
+                        } label: {
+                            Label(L10n.Auth.signIn, systemImage: "person.circle")
+                        }
+                    }
+                } header: {
+                    Text(L10n.Auth.account)
+                } footer: {
+                    if authService.isAuthenticated {
+                        Text(L10n.Auth.synced)
+                    } else {
+                        Text(L10n.Auth.notLoggedIn)
+                    }
+                }
+
                 Section {
                     HStack {
                         Label(L10n.Settings.spaceName, systemImage: "character.cursor.ibeam")
@@ -50,6 +91,8 @@ struct SettingsView: View {
                                 if newValue.count > 20 {
                                     spaceName = String(newValue.prefix(20))
                                 }
+                                // Sync to server
+                                syncSettingsToServer()
                             }
                     }
 
@@ -72,6 +115,8 @@ struct SettingsView: View {
                     }
                     .onChange(of: autoFocusInput) { _, newValue in
                         AppSettings.shared.autoFocusInput = newValue
+                        // Sync to server
+                        syncSettingsToServer()
                     }
                 }
 
@@ -170,6 +215,82 @@ struct SettingsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(alertMessage)
+            }
+            .alert(L10n.Auth.signOutConfirmTitle, isPresented: $showSignOutConfirm) {
+                Button(L10n.Auth.cancel, role: .cancel) {}
+                Button(L10n.Auth.signOut, role: .destructive) {
+                    Task {
+                        // Process pending operations before logout
+                        await SyncService.shared.processQueuedOperations(modelContext: modelContext)
+                        try? modelContext.save()
+                        await authService.logout()
+                        // Always clear local data on logout
+                        clearAllLocalData()
+                    }
+                }
+            } message: {
+                Text(L10n.Auth.signOutConfirmMessage)
+            }
+            .alert("Clear local data?", isPresented: $showClearDataConfirm) {
+                Button("Keep Data", role: .cancel) {}
+                Button("Clear All", role: .destructive) {
+                    clearAllLocalData()
+                }
+            } message: {
+                Text("Do you want to clear all local notes and tabs? This cannot be undone.")
+            }
+            .alert("Local Data Found", isPresented: $showLocalDataConflict) {
+                Button("Delete Local", role: .destructive) {
+                    clearAllLocalData()
+                    completeLoginFlow()
+                }
+                Button("Export First") {
+                    // Close dialog and start export, then user can login again
+                    startExport()
+                }
+                Button("Add to Account") {
+                    // Upload local data to server, then fetch server data
+                    Task {
+                        await SyncService.shared.performInitialSync(modelContext: modelContext)
+                        await SyncService.shared.fetchDataFromServer(modelContext: modelContext)
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    // Logout since we didn't complete the flow
+                    Task { await authService.logout() }
+                }
+            } message: {
+                Text("You have \(allMessages.count) notes and \(allTabs.count) tabs stored locally. What would you like to do with them?")
+            }
+            .sheet(isPresented: $showLoginSheet) {
+                LoginView(
+                    onSuccess: {
+                        handleLoginSuccess()
+                    },
+                    onSwitchToRegister: {
+                        showLoginSheet = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            showRegisterSheet = true
+                        }
+                    }
+                )
+            }
+            .sheet(isPresented: $showRegisterSheet) {
+                RegisterView(
+                    onSuccess: {
+                        // For new user, upload all local data to server and fetch settings
+                        Task {
+                            await SyncService.shared.saveUserSettings()
+                            await SyncService.shared.performInitialSync(modelContext: modelContext)
+                        }
+                    },
+                    onSwitchToLogin: {
+                        showRegisterSheet = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            showLoginSheet = true
+                        }
+                    }
+                )
             }
         }
         .preferredColorScheme(themeManager.currentTheme.colorSchemeOverride)
@@ -309,6 +430,50 @@ struct SettingsView: View {
         }
         importManifest = nil
     }
+
+    private func clearAllLocalData() {
+        // Delete all messages first (to avoid cascade issues)
+        for message in allMessages {
+            message.deleteMediaFiles()
+            modelContext.delete(message)
+        }
+
+        // Delete all tabs
+        for tab in allTabs {
+            modelContext.delete(tab)
+        }
+
+        try? modelContext.save()
+    }
+
+    private func syncSettingsToServer() {
+        guard authService.isAuthenticated else { return }
+        Task {
+            await SyncService.shared.saveUserSettings()
+        }
+    }
+
+    // MARK: - Login Flow
+
+    private func handleLoginSuccess() {
+        // Check if there's local data
+        let hasLocalData = !allMessages.isEmpty || !allTabs.isEmpty
+
+        if hasLocalData {
+            // Show conflict dialog
+            showLocalDataConflict = true
+        } else {
+            // No local data - just fetch from server
+            completeLoginFlow()
+        }
+    }
+
+    private func completeLoginFlow() {
+        Task {
+            await SyncService.shared.fetchUserSettings()
+            await SyncService.shared.fetchDataFromServer(modelContext: modelContext)
+        }
+    }
 }
 
 // MARK: - Share Sheet
@@ -388,6 +553,7 @@ struct ReorderTabsView: View {
 
 struct AppearanceSettingsView: View {
     private var themeManager: ThemeManager { ThemeManager.shared }
+    private var authService: AuthService { AuthService.shared }
 
     var body: some View {
         List {
@@ -402,6 +568,7 @@ struct AppearanceSettingsView: View {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 themeManager.currentTheme = theme
                             }
+                            syncThemeToServer()
                         }
                     )
                 }
@@ -418,6 +585,7 @@ struct AppearanceSettingsView: View {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 themeManager.currentTheme = theme
                             }
+                            syncThemeToServer()
                         }
                     )
                 }
@@ -425,6 +593,13 @@ struct AppearanceSettingsView: View {
         }
         .navigationTitle(L10n.Settings.appearance)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func syncThemeToServer() {
+        guard authService.isAuthenticated else { return }
+        Task {
+            await SyncService.shared.saveUserSettings()
+        }
     }
 }
 

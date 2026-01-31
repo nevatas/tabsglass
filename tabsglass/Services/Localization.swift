@@ -155,6 +155,50 @@ enum L10n {
         static var whereToSave: String { NSLocalizedString("share.where_to_save", comment: "Where to save title") }
     }
 
+    // MARK: - Auth
+    enum Auth {
+        static var loginTitle: String { NSLocalizedString("auth.login_title", comment: "Login title") }
+        static var loginSubtitle: String { NSLocalizedString("auth.login_subtitle", comment: "Login subtitle") }
+        static var registerTitle: String { NSLocalizedString("auth.register_title", comment: "Register title") }
+        static var registerSubtitle: String { NSLocalizedString("auth.register_subtitle", comment: "Register subtitle") }
+
+        static var email: String { NSLocalizedString("auth.email", comment: "Email label") }
+        static var emailPlaceholder: String { NSLocalizedString("auth.email_placeholder", comment: "Email placeholder") }
+        static var password: String { NSLocalizedString("auth.password", comment: "Password label") }
+        static var passwordPlaceholder: String { NSLocalizedString("auth.password_placeholder", comment: "Password placeholder") }
+        static var confirmPassword: String { NSLocalizedString("auth.confirm_password", comment: "Confirm password label") }
+        static var confirmPasswordPlaceholder: String { NSLocalizedString("auth.confirm_password_placeholder", comment: "Confirm password placeholder") }
+
+        static var login: String { NSLocalizedString("auth.login", comment: "Login button") }
+        static var register: String { NSLocalizedString("auth.register", comment: "Register button") }
+        static var createAccount: String { NSLocalizedString("auth.create_account", comment: "Create account button") }
+        static var logout: String { NSLocalizedString("auth.logout", comment: "Logout button") }
+        static var cancel: String { NSLocalizedString("auth.cancel", comment: "Cancel button") }
+
+        static var noAccount: String { NSLocalizedString("auth.no_account", comment: "No account text") }
+        static var hasAccount: String { NSLocalizedString("auth.has_account", comment: "Has account text") }
+
+        static var invalidEmail: String { NSLocalizedString("auth.invalid_email", comment: "Invalid email error") }
+        static var passwordTooShort: String { NSLocalizedString("auth.password_too_short", comment: "Password too short error") }
+        static var passwordMismatch: String { NSLocalizedString("auth.password_mismatch", comment: "Password mismatch error") }
+
+        // Account section in settings
+        static var account: String { NSLocalizedString("auth.account", comment: "Account section title") }
+        static var loggedInAs: String { NSLocalizedString("auth.logged_in_as", comment: "Logged in as prefix") }
+        static var notLoggedIn: String { NSLocalizedString("auth.not_logged_in", comment: "Not logged in text") }
+        static var signIn: String { NSLocalizedString("auth.sign_in", comment: "Sign in button") }
+        static var signOut: String { NSLocalizedString("auth.sign_out", comment: "Sign out button") }
+        static var signOutConfirmTitle: String { NSLocalizedString("auth.sign_out_confirm_title", comment: "Sign out confirm title") }
+        static var signOutConfirmMessage: String { NSLocalizedString("auth.sign_out_confirm_message", comment: "Sign out confirm message") }
+
+        // Sync status
+        static var syncStatus: String { NSLocalizedString("auth.sync_status", comment: "Sync status label") }
+        static var synced: String { NSLocalizedString("auth.synced", comment: "Synced status") }
+        static var syncing: String { NSLocalizedString("auth.syncing", comment: "Syncing status") }
+        static var pendingSync: String { NSLocalizedString("auth.pending_sync", comment: "Pending sync status") }
+        static var offline: String { NSLocalizedString("auth.offline", comment: "Offline status") }
+    }
+
     // MARK: - Data (Export/Import)
     enum Data {
         static var title: String { NSLocalizedString("data.title", comment: "Data section title") }

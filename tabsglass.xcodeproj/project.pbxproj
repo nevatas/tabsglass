@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		D6C2B1552F2B909B000F3043 /* share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D6C2B14B2F2B909B000F3043 /* share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D6C2B2502F2D54D3000F3043 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = D6EXPORT022F000002000F3043 /* ZIPFoundation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,12 +72,20 @@
 			);
 			target = D6C2B14A2F2B909B000F3043 /* share */;
 		};
+		D6C2B2E52F2E5626000F3043 /* Exceptions for "tabsglass" folder in "tabsglass" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D63BFDE92F217BAC00B28B56 /* tabsglass */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D63BFDEC2F217BAC00B28B56 /* tabsglass */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				D6C2B2E52F2E5626000F3043 /* Exceptions for "tabsglass" folder in "tabsglass" target */,
 				D6C2B15E2F2B91CB000F3043 /* Exceptions for "tabsglass" folder in "share" target */,
 			);
 			path = tabsglass;
@@ -107,6 +116,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D6C2B2502F2D54D3000F3043 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -520,6 +530,7 @@
 				DEVELOPMENT_TEAM = Y33Y2LGZBR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = tabsglass/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Taby;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "To add photos to your notes";
@@ -557,6 +568,7 @@
 				DEVELOPMENT_TEAM = Y33Y2LGZBR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = tabsglass/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Taby;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "To add photos to your notes";
