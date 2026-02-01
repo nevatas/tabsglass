@@ -137,6 +137,11 @@ private enum WebSocketEventListenerManager {
         // Cancel any existing listener to prevent duplicates
         eventListenerTask?.cancel()
 
+        // Set model container for the event queue
+        Task {
+            await WebSocketEventQueue.shared.setModelContainer(container)
+        }
+
         eventListenerTask = Task {
             await tabsglassApp.handleWebSocketEvents(in: container)
         }
@@ -249,7 +254,7 @@ private extension tabsglassApp {
 
             case .tabCreated(let serverTab):
                 wsLogger.info("📁 Tab created: serverId=\(serverTab.serverId), title=\(serverTab.title)")
-                handleTabCreated(serverTab, context: context)
+                await handleTabCreated(serverTab, context: context)
 
             case .tabUpdated(let serverTab):
                 wsLogger.info("📁 Tab updated: serverId=\(serverTab.serverId)")
@@ -298,28 +303,18 @@ private extension tabsglassApp {
             }
         }
 
-        // Debug: list all tabs in the database
-        let allTabsDescriptor = FetchDescriptor<Tab>()
-        if let allTabs = try? context.fetch(allTabsDescriptor) {
-            wsLogger.info("🗂️ All tabs in DB: \(allTabs.map { "(\($0.id), serverId=\($0.serverId ?? -1), \($0.title))" }.joined(separator: ", "))")
-        }
-
-        // Find tab by serverId (with retry for race conditions)
+        // Find tab by serverId (single lookup - queue handles retries)
         var tabId: UUID? = nil
         if let tabServerId = serverMessage.tabServerId {
-            // Try up to 3 times with small delay (tab might be syncing)
-            for attempt in 1...3 {
-                let tabDescriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == tabServerId })
-                if let tabs = try? context.fetch(tabDescriptor), let tab = tabs.first {
-                    tabId = tab.id
-                    wsLogger.info("✅ Found tab: serverId=\(tabServerId) -> localId=\(tab.id)")
-                    break
-                } else if attempt < 3 {
-                    wsLogger.info("⏳ Tab not found (attempt \(attempt)), waiting...")
-                    try? await Task.sleep(for: .milliseconds(500))
-                } else {
-                    wsLogger.warning("⚠️ Tab not found for serverId=\(tabServerId) after \(attempt) attempts")
-                }
+            let tabDescriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == tabServerId })
+            if let tabs = try? context.fetch(tabDescriptor), let tab = tabs.first {
+                tabId = tab.id
+                wsLogger.info("✅ Found tab: serverId=\(tabServerId) -> localId=\(tab.id)")
+            } else {
+                // Tab not found - enqueue for later processing
+                wsLogger.info("⏳ Tab not found for serverId=\(tabServerId), enqueueing message")
+                await WebSocketEventQueue.shared.enqueue(serverMessage)
+                return
             }
         }
 
@@ -410,7 +405,7 @@ private extension tabsglassApp {
     }
 
     @MainActor
-    static func handleTabCreated(_ serverTab: ServerTab, context: ModelContext) {
+    static func handleTabCreated(_ serverTab: ServerTab, context: ModelContext) async {
         // Check if tab already exists
         let serverId = serverTab.serverId
         let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == serverId })
@@ -424,6 +419,8 @@ private extension tabsglassApp {
             if let existing = try? context.fetch(localDescriptor), let tab = existing.first {
                 tab.serverId = serverId
                 try? context.save()
+                // Notify queue that tab was linked
+                await WebSocketEventQueue.shared.onTabCreated(serverId)
                 return
             }
         }
@@ -433,6 +430,9 @@ private extension tabsglassApp {
 
         context.insert(tab)
         try? context.save()
+
+        // Notify queue that new tab was created
+        await WebSocketEventQueue.shared.onTabCreated(serverId)
     }
 
     @MainActor
