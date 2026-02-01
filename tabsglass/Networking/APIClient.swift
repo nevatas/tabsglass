@@ -78,20 +78,37 @@ actor APIClient {
 
     /// Upload data to a presigned URL (R2)
     func upload(data: Data, to url: URL, contentType: String) async throws {
+        try await upload(data: data, to: url, contentType: contentType, onProgress: nil)
+    }
+
+    /// Upload data to a presigned URL (R2) with progress callback
+    nonisolated func upload(data: Data, to url: URL, contentType: String, onProgress: ((Double) -> Void)?) async throws {
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue(String(data.count), forHTTPHeaderField: "Content-Length")
-        request.httpBody = data
 
-        let (_, response) = try await session.data(for: request)
+        // Use upload task with delegate for progress tracking
+        let (_, response) = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(Data, URLResponse), Error>) in
+            let delegate = UploadProgressDelegate(onProgress: onProgress) { result in
+                continuation.resume(with: result)
+            }
+
+            // Create session with delegate for this upload (extended timeout for large files)
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 300  // 5 minutes for slow uploads
+            config.timeoutIntervalForResource = 600 // 10 minutes total
+            let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+            let task = session.uploadTask(with: request, from: data)
+            delegate.associateWith(task: task)
+            task.resume()
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            logger.error("Upload failed with status \(httpResponse.statusCode)")
             throw APIError.httpError(statusCode: httpResponse.statusCode, message: "Upload failed")
         }
     }
@@ -167,6 +184,14 @@ actor APIClient {
             if let token = try? KeychainService.shared.load(.accessToken) {
                 request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             }
+        }
+
+        // Add WebSocket connection ID to exclude self from broadcasts
+        if let connectionId = WebSocketConnectionStore.shared.connectionId {
+            request.setValue(connectionId, forHTTPHeaderField: "X-Connection-ID")
+            logger.debug("🔗 X-Connection-ID: \(connectionId)")
+        } else {
+            logger.warning("⚠️ No WebSocket connection ID available for request")
         }
 
         // Add body if present
@@ -267,5 +292,70 @@ private struct AnyEncodable: Encodable {
 
     func encode(to encoder: Encoder) throws {
         try _encode(encoder)
+    }
+}
+
+// MARK: - Upload Progress Delegate
+
+/// URLSession delegate for tracking upload progress
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
+    private let onProgress: ((Double) -> Void)?
+    private let completion: (Result<(Data, URLResponse), Error>) -> Void
+    private var receivedData = Data()
+    private var response: URLResponse?
+
+    init(onProgress: ((Double) -> Void)?, completion: @escaping (Result<(Data, URLResponse), Error>) -> Void) {
+        self.onProgress = onProgress
+        self.completion = completion
+        super.init()
+    }
+
+    /// Keep a strong reference to self while task is running
+    private static var activeDelegates: [Int: UploadProgressDelegate] = [:]
+    private static let lock = NSLock()
+
+    func associateWith(task: URLSessionTask) {
+        Self.lock.lock()
+        Self.activeDelegates[task.taskIdentifier] = self
+        Self.lock.unlock()
+    }
+
+    private func cleanup(taskIdentifier: Int) {
+        Self.lock.lock()
+        Self.activeDelegates.removeValue(forKey: taskIdentifier)
+        Self.lock.unlock()
+    }
+
+    // MARK: - URLSessionTaskDelegate
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        let progress = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
+        DispatchQueue.main.async { [weak self] in
+            self?.onProgress?(progress)
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        defer { cleanup(taskIdentifier: task.taskIdentifier) }
+
+        if let error = error {
+            completion(.failure(error))
+        } else if let response = response {
+            completion(.success((receivedData, response)))
+        } else {
+            completion(.failure(URLError(.badServerResponse)))
+        }
+    }
+
+    // MARK: - URLSessionDataDelegate
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        self.response = response
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        receivedData.append(data)
     }
 }

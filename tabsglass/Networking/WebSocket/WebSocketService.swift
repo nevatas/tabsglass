@@ -25,6 +25,14 @@ actor WebSocketService {
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 10
 
+    /// Connection ID received from server (used to exclude self from broadcasts)
+    /// Stored in a thread-safe static for synchronous access by APIClient
+    private var _connectionId: String? {
+        didSet {
+            WebSocketConnectionStore.shared.connectionId = _connectionId
+        }
+    }
+
     /// Stream for broadcasting events to subscribers
     private var eventContinuations: [UUID: AsyncStream<WebSocketEvent>.Continuation] = [:]
 
@@ -36,15 +44,19 @@ actor WebSocketService {
 
     /// Connect to WebSocket server
     func connect() async throws {
+        logger.info("🔌 connect() called, isConnected=\(self.isConnected)")
+
         guard !isConnected else {
-            logger.debug("Already connected")
+            logger.debug("Already connected, skipping")
             return
         }
 
         guard let token = try? KeychainService.shared.load(.accessToken) else {
-            logger.warning("No access token, cannot connect to WebSocket")
+            logger.warning("⚠️ No access token in Keychain, cannot connect to WebSocket")
             return
         }
+
+        logger.info("🔑 Got access token, length=\(token.count)")
 
         shouldReconnect = true
         reconnectAttempts = 0
@@ -61,16 +73,19 @@ actor WebSocketService {
 
         var request = URLRequest(url: url)
 
+        logger.info("🔌 Connecting to WebSocket: \(url.absoluteString)")
+
         let session = URLSession(configuration: .default)
         webSocketTask = session.webSocketTask(with: request)
         webSocketTask?.resume()
 
         isConnected = true
-        broadcastEvent(.connected)
-        logger.info("WebSocket connected")
+        logger.info("✅ WebSocket task started, waiting for connected event...")
 
-        // Start receiving messages
-        await receiveMessages()
+        // Start receiving messages in a separate task (don't block connect())
+        Task { [weak self] in
+            await self?.receiveMessages()
+        }
     }
 
     /// Disconnect from WebSocket server
@@ -79,6 +94,7 @@ actor WebSocketService {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
+        _connectionId = nil  // Clear connection ID
         broadcastEvent(.disconnected(reason: nil))
         logger.info("WebSocket disconnected")
     }
@@ -102,11 +118,17 @@ actor WebSocketService {
     }
 
     private func receiveMessages() async {
-        guard let task = webSocketTask else { return }
+        guard let task = webSocketTask else {
+            logger.error("❌ receiveMessages: webSocketTask is nil")
+            return
+        }
+
+        logger.info("👂 Started receiving messages...")
 
         do {
             while isConnected {
                 let message = try await task.receive()
+                logger.debug("📩 Raw message received")
 
                 switch message {
                 case .string(let text):
@@ -132,6 +154,8 @@ actor WebSocketService {
     }
 
     private func handleMessage(_ text: String) async {
+        logger.info("📨 WS received: \(text)")
+
         guard let data = text.data(using: .utf8) else { return }
 
         let decoder = JSONDecoder()
@@ -139,10 +163,26 @@ actor WebSocketService {
 
         do {
             let wsMessage = try decoder.decode(WebSocketMessage.self, from: data)
+            logger.info("📨 WS event type: \(wsMessage.type)")
+
+            // Handle "connected" message specially to extract connection_id
+            if wsMessage.type == "connected" {
+                if case .connected(let connPayload) = wsMessage.payload {
+                    _connectionId = connPayload.connectionId
+                    logger.info("✅ WebSocket connection ID saved: \(connPayload.connectionId)")
+                } else {
+                    logger.warning("⚠️ Connected event but no connection_id in payload")
+                }
+                broadcastEvent(.connected)
+                return
+            }
+
             let event = try parseEvent(from: wsMessage)
+            logger.info("✅ Parsed event: \(wsMessage.type)")
             broadcastEvent(event)
         } catch {
-            logger.error("Failed to parse WebSocket message: \(error.localizedDescription)")
+            logger.error("❌ Failed to parse WebSocket message: \(error.localizedDescription)")
+            logger.error("❌ Raw message: \(text)")
         }
     }
 
@@ -263,4 +303,29 @@ enum WebSocketError: LocalizedError {
             return "WebSocket connection failed"
         }
     }
+}
+
+// MARK: - Connection Store
+
+/// Thread-safe storage for WebSocket connection ID (for synchronous access by APIClient)
+final class WebSocketConnectionStore: @unchecked Sendable {
+    static let shared = WebSocketConnectionStore()
+
+    private let lock = NSLock()
+    private var _connectionId: String?
+
+    var connectionId: String? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _connectionId
+        }
+        set {
+            lock.lock()
+            _connectionId = newValue
+            lock.unlock()
+        }
+    }
+
+    private init() {}
 }

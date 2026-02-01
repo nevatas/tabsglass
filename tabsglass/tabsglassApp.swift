@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import os.log
 
 @main
 struct tabsglassApp: App {
@@ -26,6 +27,7 @@ struct tabsglassApp: App {
         do {
             let container = try SharedModelContainer.create()
             self.modelContainer = container
+            SharedModelContainer.setShared(container)  // Make accessible to services
             Self.seedWelcomeMessagesIfNeeded(in: container)
             Self.processPendingShareItems(in: container)
         } catch {
@@ -42,13 +44,30 @@ struct tabsglassApp: App {
 
                     // If authenticated, fetch settings and data from server
                     if AuthService.shared.isAuthenticated {
+                        print("🔐 User authenticated, starting sync...")
                         await SyncService.shared.fetchUserSettings()
                         let context = modelContainer.mainContext
                         await SyncService.shared.fetchDataFromServer(modelContext: context)
-                        try? await WebSocketService.shared.connect()
+
+                        print("🔌 Connecting to WebSocket...")
+                        do {
+                            try await WebSocketService.shared.connect()
+                            print("✅ WebSocket connect() completed")
+                        } catch {
+                            print("❌ WebSocket connect() failed: \(error)")
+                        }
+
+                        // Start listening to WebSocket events (using manager to prevent duplicates)
+                        print("🎧 Starting WebSocket event listener...")
+                        WebSocketEventListenerManager.start(in: modelContainer)
+                    } else {
+                        print("⚠️ User not authenticated, skipping sync and WebSocket")
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                    // Cancel any pending disconnect
+                    Self.cancelBackgroundDisconnect()
+
                     // Process any pending share items when app returns to foreground
                     Self.processPendingShareItems(in: modelContainer)
 
@@ -60,14 +79,82 @@ struct tabsglassApp: App {
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
-                    // Disconnect WebSocket when backgrounded (with delay for quick returns)
+                    // Schedule delayed disconnect (will be cancelled if app returns quickly)
+                    Self.scheduleBackgroundDisconnect()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .userDidAuthenticate)) { _ in
+                    // Connect WebSocket and start sync after login/registration
                     Task {
-                        try? await Task.sleep(for: .seconds(30))
-                        await WebSocketService.shared.disconnect()
+                        print("🔐 User authenticated via login/register, connecting WebSocket...")
+
+                        // Fetch settings and initial data
+                        await SyncService.shared.fetchUserSettings()
+                        let context = modelContainer.mainContext
+                        await SyncService.shared.fetchDataFromServer(modelContext: context)
+
+                        // Connect WebSocket
+                        do {
+                            try await WebSocketService.shared.connect()
+                            print("✅ WebSocket connected after auth")
+                        } catch {
+                            print("❌ WebSocket connection failed after auth: \(error)")
+                        }
+
+                        // Start listening to WebSocket events (using manager to prevent duplicates)
+                        WebSocketEventListenerManager.start(in: modelContainer)
                     }
                 }
         }
         .modelContainer(modelContainer)
+    }
+}
+
+// MARK: - Background Disconnect Management
+
+/// Manages the delayed WebSocket disconnect when app enters background
+private enum BackgroundDisconnectManager {
+    private static var disconnectTask: Task<Void, Never>?
+
+    static func schedule() {
+        disconnectTask = Task {
+            try? await Task.sleep(for: .seconds(30))
+            guard !Task.isCancelled else { return }
+            await WebSocketService.shared.disconnect()
+        }
+    }
+
+    static func cancel() {
+        disconnectTask?.cancel()
+        disconnectTask = nil
+    }
+}
+
+/// Manages the WebSocket event listener task to prevent duplicates
+private enum WebSocketEventListenerManager {
+    private static var eventListenerTask: Task<Void, Never>?
+
+    static func start(in container: ModelContainer) {
+        // Cancel any existing listener to prevent duplicates
+        eventListenerTask?.cancel()
+
+        eventListenerTask = Task {
+            await tabsglassApp.handleWebSocketEvents(in: container)
+        }
+    }
+
+    static func cancel() {
+        eventListenerTask?.cancel()
+        eventListenerTask = nil
+    }
+}
+
+private extension tabsglassApp {
+    static func scheduleBackgroundDisconnect() {
+        BackgroundDisconnectManager.schedule()
+    }
+
+    static func cancelBackgroundDisconnect() {
+        BackgroundDisconnectManager.cancel()
     }
 }
 
@@ -127,6 +214,251 @@ private extension tabsglassApp {
 
         try? context.save()
         UserDefaults.standard.set(true, forKey: key)
+    }
+}
+
+// MARK: - WebSocket Event Handling
+
+private extension tabsglassApp {
+    private static let wsLogger = Logger(subsystem: "tabsglass", category: "WebSocketEvents")
+
+    @MainActor
+    static func handleWebSocketEvents(in container: ModelContainer) async {
+        let context = container.mainContext
+        wsLogger.info("🎧 Started listening for WebSocket events")
+
+        for await event in await WebSocketService.shared.events() {
+            wsLogger.info("📥 Received event: \(String(describing: event))")
+
+            switch event {
+            case .messageCreated(let serverMessage):
+                wsLogger.info("📩 Message created: serverId=\(serverMessage.serverId), content=\(serverMessage.content.prefix(50))")
+                await handleMessageCreated(serverMessage, context: context)
+
+            case .messageUpdated(let serverMessage):
+                wsLogger.info("📝 Message updated: serverId=\(serverMessage.serverId)")
+                await handleMessageUpdated(serverMessage, context: context)
+
+            case .messageDeleted(let serverId):
+                wsLogger.info("🗑️ Message deleted: serverId=\(serverId)")
+                handleMessageDeleted(serverId: serverId, context: context)
+
+            case .messageMoved(let serverId, let newTabServerId):
+                wsLogger.info("📦 Message moved: serverId=\(serverId) to tab=\(String(describing: newTabServerId))")
+                handleMessageMoved(serverId: serverId, newTabServerId: newTabServerId, context: context)
+
+            case .tabCreated(let serverTab):
+                wsLogger.info("📁 Tab created: serverId=\(serverTab.serverId), title=\(serverTab.title)")
+                handleTabCreated(serverTab, context: context)
+
+            case .tabUpdated(let serverTab):
+                wsLogger.info("📁 Tab updated: serverId=\(serverTab.serverId)")
+                handleTabUpdated(serverTab, context: context)
+
+            case .tabDeleted(let serverId):
+                wsLogger.info("🗑️ Tab deleted: serverId=\(serverId)")
+                handleTabDeleted(serverId: serverId, context: context)
+
+            case .syncRequired:
+                wsLogger.info("🔄 Sync required")
+                await SyncService.shared.fetchDataFromServer(modelContext: context)
+
+            case .connected:
+                wsLogger.info("✅ WebSocket connected event received")
+
+            case .disconnected(let reason):
+                wsLogger.info("❌ WebSocket disconnected: \(reason ?? "no reason")")
+
+            case .error(let error):
+                wsLogger.error("❌ WebSocket error: \(error)")
+            }
+        }
+    }
+
+    @MainActor
+    static func handleMessageCreated(_ serverMessage: ServerMessage, context: ModelContext) async {
+        wsLogger.info("🔍 handleMessageCreated: serverId=\(serverMessage.serverId), tabServerId=\(String(describing: serverMessage.tabServerId))")
+
+        // Check if message already exists
+        let serverId = serverMessage.serverId
+        let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.serverId == serverId })
+        if let existing = try? context.fetch(descriptor), !existing.isEmpty {
+            wsLogger.info("⏭️ Message already exists by serverId, skipping")
+            return // Already exists
+        }
+
+        // Also check by localId
+        if let localId = serverMessage.localId {
+            let localDescriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == localId })
+            if let existing = try? context.fetch(localDescriptor), let msg = existing.first {
+                wsLogger.info("🔗 Linking existing local message to serverId=\(serverId)")
+                msg.serverId = serverId
+                try? context.save()
+                return
+            }
+        }
+
+        // Debug: list all tabs in the database
+        let allTabsDescriptor = FetchDescriptor<Tab>()
+        if let allTabs = try? context.fetch(allTabsDescriptor) {
+            wsLogger.info("🗂️ All tabs in DB: \(allTabs.map { "(\($0.id), serverId=\($0.serverId ?? -1), \($0.title))" }.joined(separator: ", "))")
+        }
+
+        // Find tab by serverId (with retry for race conditions)
+        var tabId: UUID? = nil
+        if let tabServerId = serverMessage.tabServerId {
+            // Try up to 3 times with small delay (tab might be syncing)
+            for attempt in 1...3 {
+                let tabDescriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == tabServerId })
+                if let tabs = try? context.fetch(tabDescriptor), let tab = tabs.first {
+                    tabId = tab.id
+                    wsLogger.info("✅ Found tab: serverId=\(tabServerId) -> localId=\(tab.id)")
+                    break
+                } else if attempt < 3 {
+                    wsLogger.info("⏳ Tab not found (attempt \(attempt)), waiting...")
+                    try? await Task.sleep(for: .milliseconds(500))
+                } else {
+                    wsLogger.warning("⚠️ Tab not found for serverId=\(tabServerId) after \(attempt) attempts")
+                }
+            }
+        }
+
+        // Create new message
+        wsLogger.info("➕ Creating new message: serverId=\(serverId), tabId=\(String(describing: tabId))")
+        let message = Message(
+            content: serverMessage.content,
+            tabId: tabId,
+            entities: serverMessage.entities,
+            position: serverMessage.position,
+            sourceUrl: serverMessage.sourceUrl,
+            linkPreview: serverMessage.linkPreview
+        )
+        message.serverId = serverMessage.serverId
+        message.createdAt = serverMessage.createdAt
+        message.todoItems = serverMessage.todoItems
+        message.todoTitle = serverMessage.todoTitle
+        message.reminderDate = serverMessage.reminderDate
+        message.reminderRepeatInterval = serverMessage.reminderRepeatInterval
+
+        context.insert(message)
+        do {
+            try context.save()
+            wsLogger.info("✅ Message saved successfully")
+        } catch {
+            wsLogger.error("❌ Failed to save message: \(error)")
+        }
+
+        // Download media if present
+        if let media = serverMessage.media, !media.isEmpty {
+            await MediaSyncService.shared.downloadMedia(for: message, media: media)
+        }
+    }
+
+    @MainActor
+    static func handleMessageUpdated(_ serverMessage: ServerMessage, context: ModelContext) async {
+        let serverId = serverMessage.serverId
+        let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.serverId == serverId })
+
+        guard let messages = try? context.fetch(descriptor), let message = messages.first else {
+            return
+        }
+
+        message.content = serverMessage.content
+        message.position = serverMessage.position
+        message.entities = serverMessage.entities
+        message.linkPreview = serverMessage.linkPreview
+        message.todoItems = serverMessage.todoItems
+        message.todoTitle = serverMessage.todoTitle
+        message.reminderDate = serverMessage.reminderDate
+        message.reminderRepeatInterval = serverMessage.reminderRepeatInterval
+
+        try? context.save()
+    }
+
+    @MainActor
+    static func handleMessageDeleted(serverId: Int, context: ModelContext) {
+        let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.serverId == serverId })
+
+        guard let messages = try? context.fetch(descriptor), let message = messages.first else {
+            return
+        }
+
+        message.deletePhotoFiles()
+        message.deleteVideoFiles()
+        context.delete(message)
+        try? context.save()
+    }
+
+    @MainActor
+    static func handleMessageMoved(serverId: Int, newTabServerId: Int?, context: ModelContext) {
+        let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.serverId == serverId })
+
+        guard let messages = try? context.fetch(descriptor), let message = messages.first else {
+            return
+        }
+
+        if let tabServerId = newTabServerId {
+            let tabDescriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == tabServerId })
+            if let tabs = try? context.fetch(tabDescriptor), let tab = tabs.first {
+                message.tabId = tab.id
+            }
+        } else {
+            message.tabId = nil // Move to Inbox
+        }
+
+        try? context.save()
+    }
+
+    @MainActor
+    static func handleTabCreated(_ serverTab: ServerTab, context: ModelContext) {
+        // Check if tab already exists
+        let serverId = serverTab.serverId
+        let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == serverId })
+        if let existing = try? context.fetch(descriptor), !existing.isEmpty {
+            return
+        }
+
+        // Check by localId
+        if let localId = serverTab.localId {
+            let localDescriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.id == localId })
+            if let existing = try? context.fetch(localDescriptor), let tab = existing.first {
+                tab.serverId = serverId
+                try? context.save()
+                return
+            }
+        }
+
+        let tab = Tab(title: serverTab.title, position: serverTab.position)
+        tab.serverId = serverTab.serverId
+
+        context.insert(tab)
+        try? context.save()
+    }
+
+    @MainActor
+    static func handleTabUpdated(_ serverTab: ServerTab, context: ModelContext) {
+        let serverId = serverTab.serverId
+        let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == serverId })
+
+        guard let tabs = try? context.fetch(descriptor), let tab = tabs.first else {
+            return
+        }
+
+        tab.title = serverTab.title
+        tab.position = serverTab.position
+        try? context.save()
+    }
+
+    @MainActor
+    static func handleTabDeleted(serverId: Int, context: ModelContext) {
+        let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == serverId })
+
+        guard let tabs = try? context.fetch(descriptor), let tab = tabs.first else {
+            return
+        }
+
+        context.delete(tab)
+        try? context.save()
     }
 }
 

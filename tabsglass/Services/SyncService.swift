@@ -29,6 +29,12 @@ actor SyncService {
     /// Whether sync is currently in progress
     private var isSyncing = false
 
+    /// Whether queue processing is currently in progress
+    private var isProcessingQueue = false
+
+    /// Flag to reprocess queue after current processing completes
+    private var shouldReprocessQueue = false
+
     private init() {}
 
     /// Check and set syncing state atomically
@@ -77,21 +83,37 @@ actor SyncService {
             logger.info("Fetched \(tabsResponse.tabs.count) tabs from server")
 
             for tabResponse in tabsResponse.tabs {
-                // Check if tab already exists locally
+                // Check if tab already exists locally (by serverId or localId)
                 let serverId = tabResponse.id
-                let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == serverId })
+                let localId = tabResponse.localId
 
-                if let existingTabs = try? modelContext.fetch(descriptor), !existingTabs.isEmpty {
-                    // Update existing
-                    if let existingTab = existingTabs.first {
-                        existingTab.title = tabResponse.title
-                        existingTab.position = tabResponse.position
+                // First try to find by serverId
+                var existingTab: Tab? = nil
+                let serverIdDescriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.serverId == serverId })
+                if let tabs = try? modelContext.fetch(serverIdDescriptor), let tab = tabs.first {
+                    existingTab = tab
+                }
+
+                // If not found by serverId, try by localId
+                if existingTab == nil, let localId = localId {
+                    let localIdDescriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.id == localId })
+                    if let tabs = try? modelContext.fetch(localIdDescriptor), let tab = tabs.first {
+                        existingTab = tab
+                        // Update serverId since we found by localId
+                        tab.serverId = serverId
+                        logger.info("Linked local tab \(localId) to serverId \(serverId)")
                     }
+                }
+
+                if let existingTab = existingTab {
+                    // Update existing
+                    existingTab.title = tabResponse.title
+                    existingTab.position = tabResponse.position
                 } else {
                     // Create new local tab
                     let newTab = Tab(title: tabResponse.title, position: tabResponse.position)
                     newTab.serverId = tabResponse.id
-                    if let localId = tabResponse.localId {
+                    if let localId = localId {
                         newTab.id = localId
                     }
                     modelContext.insert(newTab)
@@ -116,20 +138,36 @@ actor SyncService {
                     logger.info("Message \(msgResponse.id) has no media")
                 }
 
-                // Check if message already exists locally
+                // Check if message already exists locally (by serverId or localId)
                 let serverId = msgResponse.id
-                let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.serverId == serverId })
+                let localId = msgResponse.localId
 
-                if let existingMessages = try? modelContext.fetch(descriptor), !existingMessages.isEmpty {
+                // First try to find by serverId
+                var existingMessage: Message? = nil
+                let serverIdDescriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.serverId == serverId })
+                if let messages = try? modelContext.fetch(serverIdDescriptor), let msg = messages.first {
+                    existingMessage = msg
+                }
+
+                // If not found by serverId, try by localId
+                if existingMessage == nil, let localId = localId {
+                    let localIdDescriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == localId })
+                    if let messages = try? modelContext.fetch(localIdDescriptor), let msg = messages.first {
+                        existingMessage = msg
+                        // Update serverId since we found by localId
+                        msg.serverId = serverId
+                        logger.info("Linked local message \(localId) to serverId \(serverId)")
+                    }
+                }
+
+                if let existingMessage = existingMessage {
                     // Update existing
-                    if let existingMessage = existingMessages.first {
-                        updateMessage(existingMessage, from: msgResponse)
+                    updateMessage(existingMessage, from: msgResponse)
 
-                        // Download media if present and not already downloaded
-                        if let media = msgResponse.media, !media.isEmpty,
-                           existingMessage.photoFileNames.isEmpty && existingMessage.videoFileNames.isEmpty {
-                            await MediaSyncService.shared.downloadMedia(for: existingMessage, media: media)
-                        }
+                    // Download media if present and not already downloaded
+                    if let media = msgResponse.media, !media.isEmpty,
+                       existingMessage.photoFileNames.isEmpty && existingMessage.videoFileNames.isEmpty {
+                        await MediaSyncService.shared.downloadMedia(for: existingMessage, media: media)
                     }
                 } else {
                     // Create new local message
@@ -454,7 +492,9 @@ actor SyncService {
 
     /// Process queued operations immediately (public method)
     func processQueuedOperations() async {
-        await processPendingQueue(modelContext: nil)
+        // Get the main context from the shared container
+        let context = await MainActor.run { SharedModelContainer.mainContext }
+        await processPendingQueue(modelContext: context)
     }
 
     /// Process queued operations with model context for updating server IDs
@@ -465,6 +505,25 @@ actor SyncService {
 
     /// Process all pending operations
     private func processPendingQueue(modelContext: ModelContext?) async {
+        // Prevent concurrent processing - if already processing, schedule reprocess
+        if isProcessingQueue {
+            shouldReprocessQueue = true
+            logger.info("Queue processing already in progress, will reprocess after")
+            return
+        }
+
+        isProcessingQueue = true
+        defer {
+            isProcessingQueue = false
+            // Check if we need to reprocess (new operations were added during processing)
+            if shouldReprocessQueue {
+                shouldReprocessQueue = false
+                Task {
+                    await processPendingQueue(modelContext: modelContext)
+                }
+            }
+        }
+
         let allOperations = pendingStore.getAll()
         guard !allOperations.isEmpty else { return }
 
@@ -519,29 +578,19 @@ actor SyncService {
                     let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.id == localId })
                     if let tabs = try? context.fetch(descriptor), let tab = tabs.first {
                         tab.serverId = response.id
-                        logger.info("Updated tab \(localId) with serverId \(response.id)")
+                        try? context.save()
+                        logger.info("✅ Updated tab \(localId) with serverId \(response.id)")
+                    } else {
+                        logger.error("❌ Could not find tab \(localId) to update serverId")
                     }
                 }
+            } else {
+                logger.error("❌ No modelContext available to update tab serverId!")
             }
 
         case (.create, .message):
-            var request = try decoder.decode(CreateMessageRequest.self, from: operation.payload)
-
-            // Resolve tab server ID if we have local ID but no server ID
-            if request.tabServerId == nil, let tabLocalId = request.tabLocalId, let context = modelContext {
-                let resolvedServerId = await MainActor.run { () -> Int? in
-                    let descriptor = FetchDescriptor<Tab>(predicate: #Predicate { $0.id == tabLocalId })
-                    if let tabs = try? context.fetch(descriptor), let tab = tabs.first {
-                        return tab.serverId
-                    }
-                    return nil
-                }
-                if let serverId = resolvedServerId {
-                    request.tabServerId = serverId
-                    logger.info("Resolved tab serverId \(serverId) for message")
-                }
-            }
-
+            let request = try decoder.decode(CreateMessageRequest.self, from: operation.payload)
+            // Server resolves tab by tab_local_id - no need to resolve locally
             let response: MessageResponse = try await apiClient.request(.createMessage(request))
 
             // Update local message with server ID
@@ -551,9 +600,14 @@ actor SyncService {
                     let descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.id == localId })
                     if let messages = try? context.fetch(descriptor), let message = messages.first {
                         message.serverId = response.id
-                        logger.info("Updated message \(localId) with serverId \(response.id)")
+                        try? context.save()
+                        logger.info("✅ Updated message \(localId) with serverId \(response.id)")
+                    } else {
+                        logger.error("❌ Could not find message \(localId) to update serverId")
                     }
                 }
+            } else {
+                logger.error("❌ No modelContext available to update message serverId!")
             }
 
         case (.update, .tab):

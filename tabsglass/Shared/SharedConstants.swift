@@ -14,11 +14,10 @@ enum SharedConstants {
     // MARK: - API Configuration
 
     /// Base URL for the backend API
-    /// Use Mac's local IP for real device testing
-    static let apiBaseURL = URL(string: "http://192.168.1.105:8080")!
+    static let apiBaseURL = URL(string: "https://api.taby.app")!
 
     /// WebSocket URL for real-time updates
-    static let webSocketURL = URL(string: "ws://192.168.1.105:8080")!
+    static let webSocketURL = URL(string: "wss://api.taby.app")!
 
     /// Shared container URL for App Group
     static var containerURL: URL? {

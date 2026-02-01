@@ -11,8 +11,7 @@ import Foundation
 
 struct CreateMessageRequest: Codable {
     let content: String
-    var tabServerId: Int?
-    let tabLocalId: UUID?  // Used to resolve tabServerId at sync time
+    let tabLocalId: UUID?  // Tab reference by local_id (nil = Inbox)
     let localId: UUID
     let position: Int
     let entities: [TextEntityDTO]?
@@ -27,7 +26,6 @@ struct CreateMessageRequest: Codable {
 
     enum CodingKeys: String, CodingKey {
         case content
-        case tabServerId = "tab_server_id"
         case tabLocalId = "tab_local_id"
         case localId = "local_id"
         case position

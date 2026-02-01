@@ -31,17 +31,35 @@ actor MediaSyncService {
             do {
                 let fileURL: URL
                 let contentType: String
+                let uploadData: Data
 
                 switch uploadInfo.mediaType {
                 case "photo":
                     fileURL = Message.photosDirectory.appendingPathComponent(uploadInfo.localFileName)
                     contentType = "image/jpeg"
+                    // Compress photo before upload
+                    guard let compressedData = compressPhoto(at: fileURL) else {
+                        logger.warning("Failed to compress photo: \(uploadInfo.localFileName)")
+                        continue
+                    }
+                    uploadData = compressedData
                 case "video":
                     fileURL = Message.videosDirectory.appendingPathComponent(uploadInfo.localFileName)
                     contentType = "video/mp4"
+                    guard let videoData = try? Data(contentsOf: fileURL) else {
+                        logger.warning("Failed to read video: \(uploadInfo.localFileName)")
+                        continue
+                    }
+                    uploadData = videoData
                 case "thumbnail":
                     fileURL = Message.photosDirectory.appendingPathComponent(uploadInfo.localFileName)
                     contentType = "image/jpeg"
+                    // Compress thumbnail with smaller size
+                    guard let thumbData = compressPhoto(at: fileURL, maxDimension: 480, quality: 0.7) else {
+                        logger.warning("Failed to compress thumbnail: \(uploadInfo.localFileName)")
+                        continue
+                    }
+                    uploadData = thumbData
                 default:
                     logger.warning("Unknown media type: \(uploadInfo.mediaType)")
                     continue
@@ -57,7 +75,7 @@ actor MediaSyncService {
                     continue
                 }
 
-                try await apiClient.uploadFile(from: fileURL, to: uploadURL, contentType: contentType)
+                try await apiClient.upload(data: uploadData, to: uploadURL, contentType: contentType)
 
                 // Confirm upload with server
                 let _: ConfirmUploadResponse = try await apiClient.request(.confirmUpload(fileKey: uploadInfo.fileKey))
@@ -76,6 +94,11 @@ actor MediaSyncService {
 
     /// Upload a single file to R2
     func uploadFile(data: Data, contentType: String) async throws -> String {
+        try await uploadFile(data: data, contentType: contentType, messageId: nil, fileIndex: nil)
+    }
+
+    /// Upload a single file to R2 with progress tracking
+    func uploadFile(data: Data, contentType: String, messageId: UUID?, fileIndex: Int?) async throws -> String {
         // Get presigned URL
         let uploadResponse = try await getUploadURL(contentType: contentType, contentLength: Int64(data.count))
 
@@ -83,8 +106,35 @@ actor MediaSyncService {
             throw APIError.invalidURL
         }
 
-        // Upload to R2
-        try await apiClient.upload(data: data, to: uploadURL, contentType: contentType)
+        // Upload to R2 with progress callback
+        try await apiClient.upload(data: data, to: uploadURL, contentType: contentType) { progress in
+            if let messageId = messageId, let fileIndex = fileIndex {
+                UploadProgressTracker.shared.updateProgress(for: messageId, fileIndex: fileIndex, progress: progress)
+            }
+        }
+
+        // Confirm with server
+        let _: ConfirmUploadResponse = try await apiClient.request(.confirmUpload(fileKey: uploadResponse.fileKey))
+
+        // Mark file as complete
+        if let messageId = messageId, let fileIndex = fileIndex {
+            UploadProgressTracker.shared.completeFile(for: messageId, fileIndex: fileIndex)
+        }
+
+        return uploadResponse.fileKey
+    }
+
+    /// Upload a single file to R2 with custom progress callback
+    func uploadFileWithProgress(data: Data, contentType: String, onProgress: @escaping (Double) -> Void) async throws -> String {
+        // Get presigned URL
+        let uploadResponse = try await getUploadURL(contentType: contentType, contentLength: Int64(data.count))
+
+        guard let uploadURL = URL(string: uploadResponse.uploadUrl) else {
+            throw APIError.invalidURL
+        }
+
+        // Upload to R2 with progress callback
+        try await apiClient.upload(data: data, to: uploadURL, contentType: contentType, onProgress: onProgress)
 
         // Confirm with server
         let _: ConfirmUploadResponse = try await apiClient.request(.confirmUpload(fileKey: uploadResponse.fileKey))
@@ -216,17 +266,40 @@ actor MediaSyncService {
     /// Upload all local media for a message and return media items with metadata
     @MainActor
     func uploadAllMedia(for message: Message) async throws -> [MediaItemRequest] {
+        let messageId = message.id
         var mediaItems: [MediaItemRequest] = []
+
+        // Start tracking upload progress
+        UploadProgressTracker.shared.startUpload(for: messageId)
+
+        // Media index tracks position in the mosaic (photos first, then videos)
+        var mediaIndex = 0
 
         // Upload compressed photos
         for (index, fileName) in message.photoFileNames.enumerated() {
             let fileURL = Message.photosDirectory.appendingPathComponent(fileName)
             guard let compressedData = compressPhoto(at: fileURL) else {
                 logger.warning("Failed to compress photo: \(fileName)")
+                mediaIndex += 1
                 continue
             }
 
-            let fileKey = try await uploadFile(data: compressedData, contentType: "image/jpeg")
+            let currentIndex = mediaIndex
+
+            // Set file info for progress display
+            UploadProgressTracker.shared.setFileInfo(
+                for: messageId,
+                fileIndex: currentIndex,
+                totalBytes: Int64(compressedData.count),
+                isVideo: false
+            )
+
+            let fileKey = try await uploadFile(
+                data: compressedData,
+                contentType: "image/jpeg",
+                messageId: messageId,
+                fileIndex: currentIndex
+            )
             let aspectRatio = index < message.photoAspectRatios.count ? message.photoAspectRatios[index] : 1.0
 
             mediaItems.append(MediaItemRequest(
@@ -237,31 +310,80 @@ actor MediaSyncService {
                 thumbnailFileKey: nil
             ))
             logger.debug("Uploaded compressed photo: \(fileName) (\(compressedData.count / 1024)KB)")
+            mediaIndex += 1
         }
 
         // Upload compressed videos
+        // Progress split: 0-40% compression, 40-100% upload
+        let compressionWeight = 0.4
+        let uploadWeight = 0.6
+
         for (index, fileName) in message.videoFileNames.enumerated() {
             let fileURL = Message.videosDirectory.appendingPathComponent(fileName)
             var videoFileKey: String?
+            let currentIndex = mediaIndex
 
-            if let compressedURL = await compressVideo(at: fileURL) {
-                guard let data = try? Data(contentsOf: compressedURL) else { continue }
+            // Compression progress callback (0-40%)
+            let compressionProgress: (Double) -> Void = { progress in
+                let combinedProgress = progress * compressionWeight
+                UploadProgressTracker.shared.updateProgress(for: messageId, fileIndex: currentIndex, progress: combinedProgress)
+            }
 
-                videoFileKey = try await uploadFile(data: data, contentType: "video/mp4")
+            if let compressedURL = await compressVideo(at: fileURL, onProgress: compressionProgress) {
+                guard let data = try? Data(contentsOf: compressedURL) else {
+                    mediaIndex += 1
+                    continue
+                }
+
+                // Set file info with size for progress display (now we know the compressed size)
+                UploadProgressTracker.shared.setFileInfo(
+                    for: messageId,
+                    fileIndex: currentIndex,
+                    totalBytes: Int64(data.count),
+                    isVideo: true
+                )
+
+                // Upload progress callback (40-100%)
+                let uploadProgress: (Double) -> Void = { progress in
+                    let combinedProgress = compressionWeight + (progress * uploadWeight)
+                    UploadProgressTracker.shared.updateProgress(for: messageId, fileIndex: currentIndex, progress: combinedProgress)
+                }
+
+                videoFileKey = try await uploadFileWithProgress(
+                    data: data,
+                    contentType: "video/mp4",
+                    onProgress: uploadProgress
+                )
                 logger.debug("Uploaded compressed video: \(fileName) (\(data.count / 1024 / 1024)MB)")
+
+                // Mark as complete
+                UploadProgressTracker.shared.completeFile(for: messageId, fileIndex: currentIndex)
 
                 // Clean up temp compressed file
                 try? FileManager.default.removeItem(at: compressedURL)
             } else {
-                // Fallback: upload original if compression fails
-                guard let data = try? Data(contentsOf: fileURL) else { continue }
-                videoFileKey = try await uploadFile(data: data, contentType: "video/mp4")
+                // Fallback: upload original if compression fails (skip compression phase)
+                guard let data = try? Data(contentsOf: fileURL) else {
+                    mediaIndex += 1
+                    continue
+                }
+
+                // Upload only progress (0-100% mapped to full range since no compression)
+                videoFileKey = try await uploadFile(
+                    data: data,
+                    contentType: "video/mp4",
+                    messageId: messageId,
+                    fileIndex: currentIndex
+                )
                 logger.warning("Uploaded original video (compression failed): \(fileName)")
             }
 
-            guard let fileKey = videoFileKey else { continue }
+            guard let fileKey = videoFileKey else {
+                mediaIndex += 1
+                continue
+            }
 
-            // Upload video thumbnail
+            // Upload video thumbnail (no progress tracking for thumbnails)
             var thumbnailFileKey: String? = nil
             if index < message.videoThumbnailFileNames.count {
                 let thumbFileName = message.videoThumbnailFileNames[index]
@@ -282,7 +404,11 @@ actor MediaSyncService {
                 duration: duration,
                 thumbnailFileKey: thumbnailFileKey
             ))
+            mediaIndex += 1
         }
+
+        // Mark upload as complete
+        UploadProgressTracker.shared.completeUpload(for: messageId)
 
         return mediaItems
     }
@@ -326,11 +452,17 @@ actor MediaSyncService {
         }
     }
 
-    /// Compress video for upload
+    /// Compress video for upload (without progress tracking)
+    private func compressVideo(at url: URL) async -> URL? {
+        await compressVideo(at: url, onProgress: nil)
+    }
+
+    /// Compress video for upload with progress tracking
     /// - Parameters:
     ///   - url: Local video file URL
+    ///   - onProgress: Progress callback (0.0 to 1.0)
     /// - Returns: URL to compressed video (temp file)
-    private func compressVideo(at url: URL) async -> URL? {
+    private func compressVideo(at url: URL, onProgress: ((Double) -> Void)?) async -> URL? {
         let asset = AVURLAsset(url: url)
 
         // Check if compression is needed
@@ -349,6 +481,7 @@ actor MediaSyncService {
 
             if estimatedSize < 5_000_000 && max(size.width, size.height) <= 720 {
                 logger.debug("Video is small enough, skipping compression")
+                onProgress?(1.0)
                 return url
             }
         }
@@ -374,11 +507,23 @@ actor MediaSyncService {
         exportSession.outputFileType = .mp4
         exportSession.shouldOptimizeForNetworkUse = true
 
+        // Monitor progress with a timer
+        let progressTask = Task {
+            while !Task.isCancelled && exportSession.status == .exporting {
+                await MainActor.run {
+                    onProgress?(Double(exportSession.progress))
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+
         await exportSession.export()
+        progressTask.cancel()
 
         switch exportSession.status {
         case .completed:
             logger.info("Video compression completed")
+            onProgress?(1.0)
             return outputURL
         case .failed:
             logger.error("Video compression failed: \(exportSession.error?.localizedDescription ?? "unknown")")

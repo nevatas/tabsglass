@@ -9,6 +9,13 @@ import Foundation
 import SwiftUI
 import os.log
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    /// Posted when user successfully logs in or registers
+    static let userDidAuthenticate = Notification.Name("userDidAuthenticate")
+}
+
 /// Authentication state observable by views
 @Observable
 @MainActor
@@ -57,16 +64,37 @@ final class AuthService {
             currentUser = User(from: response)
             isAuthenticated = true
             logger.info("Session restored for user: \(response.email)")
-        } catch {
+        } catch let error as APIError {
             logger.warning("Session check failed: \(error.localizedDescription)")
-            // Token might be invalid - clear it
-            if let apiError = error as? APIError, apiError.shouldRefreshToken {
-                // Token refresh will be attempted by APIClient
-                // If it fails, tokens are cleared automatically
+
+            // Only clear tokens on actual auth errors (401/403)
+            // Network errors should preserve the session for offline use
+            switch error {
+            case .httpError(let statusCode, _) where statusCode == 401 || statusCode == 403:
+                logger.info("Auth token invalid, clearing session")
+                keychain.clearAll()
+                isAuthenticated = false
+                currentUser = nil
+            case .unauthorized:
+                logger.info("Unauthorized, clearing session")
+                keychain.clearAll()
+                isAuthenticated = false
+                currentUser = nil
+            default:
+                // Network error or other issue - keep tokens, assume still logged in
+                logger.info("Network error during session check, preserving session")
+                if let email = try? keychain.load(.userEmail) {
+                    currentUser = User(email: email)
+                }
+                isAuthenticated = true
             }
-            keychain.clearAll()
-            isAuthenticated = false
-            currentUser = nil
+        } catch {
+            // Non-API error (e.g., network) - preserve session
+            logger.warning("Session check error: \(error.localizedDescription), preserving session")
+            if let email = try? keychain.load(.userEmail) {
+                currentUser = User(email: email)
+            }
+            isAuthenticated = true
         }
     }
 
@@ -83,6 +111,9 @@ final class AuthService {
 
             try saveAuthResponse(response)
             logger.info("User registered: \(email)")
+
+            // Notify app to connect WebSocket
+            NotificationCenter.default.post(name: .userDidAuthenticate, object: nil)
         } catch {
             handleError(error)
             throw error
@@ -100,6 +131,9 @@ final class AuthService {
 
             try saveAuthResponse(response)
             logger.info("User logged in: \(email)")
+
+            // Notify app to connect WebSocket
+            NotificationCenter.default.post(name: .userDidAuthenticate, object: nil)
         } catch {
             handleError(error)
             throw error
@@ -108,6 +142,9 @@ final class AuthService {
 
     /// Logout and clear session
     func logout() async {
+        // Disconnect WebSocket first
+        await WebSocketService.shared.disconnect()
+
         // Try to notify server
         try? await apiClient.requestVoid(.logout)
 

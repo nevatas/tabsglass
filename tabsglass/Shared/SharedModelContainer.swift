@@ -12,6 +12,20 @@ import os.log
 enum SharedModelContainer {
     private static let logger = Logger(subsystem: "com.thecool.taby", category: "Migration")
 
+    /// Shared container instance (set during app initialization)
+    private(set) static var shared: ModelContainer?
+
+    /// Set the shared container (call from app initialization)
+    static func setShared(_ container: ModelContainer) {
+        shared = container
+    }
+
+    /// Get a new ModelContext from the shared container
+    @MainActor
+    static var mainContext: ModelContext? {
+        shared?.mainContext
+    }
+
     /// Legacy SwiftData store URL (in Application Support)
     private static var legacyStoreURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

@@ -408,6 +408,12 @@ struct MainContainerView: View {
                     videoDurations: videoDurations,
                     videoThumbnailFileNames: videoThumbnailFileNames
                 )
+
+                // Start upload progress tracking before inserting (so UI shows progress)
+                if message.hasMedia && AuthService.shared.isAuthenticated {
+                    UploadProgressTracker.shared.startUpload(for: message.id)
+                }
+
                 modelContext.insert(message)
                 try? modelContext.save()
 
@@ -705,17 +711,9 @@ struct MainContainerView: View {
                 }
             }
 
-            // Get tab server ID if message is in a tab
-            var tabServerId: Int? = nil
-            if let tabId = message.tabId,
-               let tab = tabs.first(where: { $0.id == tabId }) {
-                tabServerId = tab.serverId
-            }
-
             let request = CreateMessageRequest(
                 content: message.content,
-                tabServerId: tabServerId,
-                tabLocalId: message.tabId,  // Used to resolve serverId at sync time
+                tabLocalId: message.tabId,  // Tab by local_id (nil = Inbox)
                 localId: message.id,
                 position: message.position,
                 entities: message.entities?.map { TextEntityDTO(from: $0) },

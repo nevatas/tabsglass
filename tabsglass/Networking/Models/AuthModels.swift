@@ -70,4 +70,11 @@ struct User: Codable, Sendable {
         self.email = response.email
         self.hasCompletedInitialSync = response.hasCompletedInitialSync ?? false
     }
+
+    /// Create user from cached data (when offline)
+    init(email: String, hasCompletedInitialSync: Bool = true) {
+        self.id = ""
+        self.email = email
+        self.hasCompletedInitialSync = hasCompletedInitialSync
+    }
 }

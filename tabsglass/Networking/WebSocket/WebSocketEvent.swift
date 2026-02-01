@@ -46,13 +46,16 @@ enum WebSocketPayload: Decodable {
     case message(MessageResponse)
     case deletion(DeletionPayload)
     case move(MovePayload)
+    case connected(ConnectedPayload)
     case empty
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
 
         // Try to decode as different types
-        if let tab = try? container.decode(TabResponse.self) {
+        if let connected = try? container.decode(ConnectedPayload.self) {
+            self = .connected(connected)
+        } else if let tab = try? container.decode(TabResponse.self) {
             self = .tab(tab)
         } else if let message = try? container.decode(MessageResponse.self) {
             self = .message(message)
@@ -63,6 +66,14 @@ enum WebSocketPayload: Decodable {
         } else {
             self = .empty
         }
+    }
+}
+
+struct ConnectedPayload: Decodable {
+    let connectionId: String
+
+    enum CodingKeys: String, CodingKey {
+        case connectionId = "connection_id"
     }
 }
 
