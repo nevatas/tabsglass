@@ -237,6 +237,7 @@ final class AppSettings {
         static let theme = "appTheme"
         static let inboxTitle = "inboxTitle"
         static let spaceName = "spaceName"
+        static let syncTheme = "syncTheme"
     }
 
     private init() {}
@@ -270,6 +271,20 @@ final class AppSettings {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.theme)
+        }
+    }
+
+    /// Sync theme across all devices
+    var syncTheme: Bool {
+        get {
+            // Default to true if not set
+            if defaults.object(forKey: Keys.syncTheme) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Keys.syncTheme)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.syncTheme)
         }
     }
 }

@@ -105,10 +105,12 @@ struct SettingsPayload: Decodable, Sendable {
     let spaceName: String
     let theme: String
     let autoFocusInput: Bool
+    let syncTheme: Bool
 
     enum CodingKeys: String, CodingKey {
         case spaceName = "space_name"
         case theme
         case autoFocusInput = "auto_focus_input"
+        case syncTheme = "sync_theme"
     }
 }

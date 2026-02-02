@@ -647,13 +647,14 @@ actor SyncService {
             // Apply settings locally
             UserDefaults.standard.set(settings.spaceName, forKey: "spaceName")
             AppSettings.shared.autoFocusInput = settings.autoFocusInput
+            AppSettings.shared.syncTheme = settings.syncTheme
 
             // Apply theme
             if let theme = AppTheme.allCases.first(where: { $0.rawValue == settings.theme }) {
                 ThemeManager.shared.currentTheme = theme
             }
 
-            logger.info("User settings applied: spaceName=\(settings.spaceName), theme=\(settings.theme)")
+            logger.info("User settings applied: spaceName=\(settings.spaceName), theme=\(settings.theme), syncTheme=\(settings.syncTheme)")
         } catch let error as APIError {
             if case .httpError(let statusCode, _) = error, statusCode == 404 {
                 logger.warning("User settings endpoint not available")
@@ -673,11 +674,13 @@ actor SyncService {
         let spaceName = UserDefaults.standard.string(forKey: "spaceName") ?? "Taby"
         let theme = ThemeManager.shared.currentTheme.rawValue
         let autoFocusInput = AppSettings.shared.autoFocusInput
+        let syncTheme = AppSettings.shared.syncTheme
 
         let request = UpdateUserSettingsRequest(
             spaceName: spaceName,
             theme: theme,
-            autoFocusInput: autoFocusInput
+            autoFocusInput: autoFocusInput,
+            syncTheme: syncTheme
         )
 
         logger.info("Saving user settings to server")
