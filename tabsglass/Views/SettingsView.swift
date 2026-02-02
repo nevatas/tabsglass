@@ -15,7 +15,6 @@ struct SettingsView: View {
     @Query private var allMessages: [Message]
 
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
-    @State private var syncTheme = AppSettings.shared.syncTheme
     @AppStorage("spaceName") private var spaceName = "Taby"
     private var themeManager: ThemeManager { ThemeManager.shared }
     private var authService: AuthService { AuthService.shared }
@@ -111,15 +110,6 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle(isOn: $syncTheme) {
-                        Label("Sync Theme Across Devices", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    .onChange(of: syncTheme) { _, newValue in
-                        AppSettings.shared.syncTheme = newValue
-                        // Sync to server
-                        syncSettingsToServer()
-                    }
-
                     Toggle(isOn: $autoFocusInput) {
                         Label(L10n.Settings.autoFocus, systemImage: "keyboard")
                     }
@@ -564,9 +554,23 @@ struct ReorderTabsView: View {
 struct AppearanceSettingsView: View {
     private var themeManager: ThemeManager { ThemeManager.shared }
     private var authService: AuthService { AuthService.shared }
+    @State private var syncTheme = AppSettings.shared.syncTheme
 
     var body: some View {
         List {
+            // Sync toggle at the top
+            Section {
+                Toggle(isOn: $syncTheme) {
+                    Label("Sync Across Devices", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .onChange(of: syncTheme) { _, newValue in
+                    AppSettings.shared.syncTheme = newValue
+                    syncThemeToServer()
+                }
+            } footer: {
+                Text("When enabled, theme changes sync to all your devices")
+            }
+
             // Standard themes section
             Section {
                 ForEach(0..<AppTheme.standardThemes.count, id: \.self) { index in
