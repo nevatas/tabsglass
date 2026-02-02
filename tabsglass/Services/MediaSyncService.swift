@@ -233,6 +233,11 @@ actor MediaSyncService {
         message.videoThumbnailFileNames = videoThumbnailFileNames
         message.videoThumbnailBlurHashes = videoThumbnailBlurHashes
 
+        // Save to trigger UI update
+        if let context = message.modelContext {
+            try? context.save()
+        }
+
         logger.info("Downloaded media: \(photoFileNames.count) photos, \(videoFileNames.count) videos")
     }
 

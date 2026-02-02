@@ -184,7 +184,10 @@ actor SyncService {
                         // Save so UI shows placeholder
                         try modelContext.save()
 
-                        await MediaSyncService.shared.downloadMedia(for: existingMessage, media: media)
+                        // Download in background (non-blocking) so UI updates immediately
+                        Task {
+                            await MediaSyncService.shared.downloadMedia(for: existingMessage, media: media)
+                        }
                     }
                 } else {
                     // Create new local message
@@ -194,9 +197,11 @@ actor SyncService {
                     // Save immediately so UI shows message with BlurHash placeholder
                     try modelContext.save()
 
-                    // Download media if present (runs in background while placeholder is visible)
+                    // Download media in background (non-blocking) so UI updates immediately
                     if let media = msgResponse.media, !media.isEmpty {
-                        await MediaSyncService.shared.downloadMedia(for: newMessage, media: media)
+                        Task {
+                            await MediaSyncService.shared.downloadMedia(for: newMessage, media: media)
+                        }
                     }
                 }
             }

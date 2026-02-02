@@ -219,19 +219,21 @@ final class Message: Identifiable {
         // Check if has todo items
         if isTodoList { return false }
 
-        // Check if any photo files exist (without loading them)
-        let hasValidPhotos = photoFileNames.contains { fileName in
+        // Check if has media (either on disk or pending download)
+        // pending_ prefix indicates media is being downloaded - show placeholder
+        let hasPhotos = photoFileNames.contains { fileName in
+            if fileName.hasPrefix("pending_") { return true }
             let url = Message.photosDirectory.appendingPathComponent(fileName)
             return FileManager.default.fileExists(atPath: url.path)
         }
-        if hasValidPhotos { return false }
+        if hasPhotos { return false }
 
-        // Check if any video files exist (without loading them)
-        let hasValidVideos = videoFileNames.contains { fileName in
+        let hasVideos = videoFileNames.contains { fileName in
+            if fileName.hasPrefix("pending_") { return true }
             let url = Message.videosDirectory.appendingPathComponent(fileName)
             return FileManager.default.fileExists(atPath: url.path)
         }
-        return !hasValidVideos
+        return !hasVideos
     }
 
     /// Directory for storing message photos (uses shared container for extension support)
