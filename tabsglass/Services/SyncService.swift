@@ -462,6 +462,11 @@ actor SyncService {
             let photos = media.filter { $0.mediaType == "photo" }
             let videos = media.filter { $0.mediaType == "video" }
 
+            // Debug: log blurHash presence
+            for (index, photo) in photos.enumerated() {
+                logger.debug("Photo \(index): blurHash = \(photo.blurHash ?? "nil")")
+            }
+
             // Photos: store aspect ratios and blurHashes (fileNames will be filled after download)
             message.photoAspectRatios = photos.map { $0.aspectRatio }
             message.photoBlurHashes = photos.map { $0.blurHash ?? "" }
