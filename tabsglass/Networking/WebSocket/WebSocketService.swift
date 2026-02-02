@@ -99,6 +99,25 @@ actor WebSocketService {
         logger.info("WebSocket disconnected")
     }
 
+    /// Force reconnect - use when returning from background/sleep
+    /// Unlike connect(), this always creates a new connection
+    func forceReconnect() async {
+        logger.info("🔄 Force reconnecting WebSocket...")
+
+        // Close existing connection if any
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        isConnected = false
+        _connectionId = nil
+
+        // Reconnect
+        do {
+            try await connect()
+        } catch {
+            logger.error("Force reconnect failed: \(error.localizedDescription)")
+        }
+    }
+
     /// Subscribe to WebSocket events
     func events() -> AsyncStream<WebSocketEvent> {
         let id = UUID()

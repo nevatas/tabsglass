@@ -71,10 +71,11 @@ struct tabsglassApp: App {
                     // Process any pending share items when app returns to foreground
                     Self.processPendingShareItems(in: modelContainer)
 
-                    // Reconnect WebSocket and sync on foreground
+                    // Force reconnect WebSocket when returning from background
+                    // (connection may be stale after sleep)
                     Task {
                         if AuthService.shared.isAuthenticated {
-                            try? await WebSocketService.shared.connect()
+                            await WebSocketService.shared.forceReconnect()
                         }
                     }
                 }
