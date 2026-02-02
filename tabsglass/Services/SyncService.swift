@@ -167,6 +167,23 @@ actor SyncService {
                     // Download media if present and not already downloaded
                     if let media = msgResponse.media, !media.isEmpty,
                        existingMessage.photoFileNames.isEmpty && existingMessage.videoFileNames.isEmpty {
+                        // Pre-populate blurHashes and placeholder fileNames for immediate display
+                        let photos = media.filter { $0.mediaType == "photo" }
+                        let videos = media.filter { $0.mediaType == "video" }
+
+                        existingMessage.photoAspectRatios = photos.map { $0.aspectRatio }
+                        existingMessage.photoBlurHashes = photos.map { $0.blurHash ?? "" }
+                        existingMessage.photoFileNames = photos.map { "pending_\($0.fileKey)" }
+
+                        existingMessage.videoAspectRatios = videos.map { $0.aspectRatio }
+                        existingMessage.videoDurations = videos.map { $0.duration ?? 0 }
+                        existingMessage.videoThumbnailBlurHashes = videos.map { $0.blurHash ?? "" }
+                        existingMessage.videoFileNames = videos.map { "pending_\($0.fileKey)" }
+                        existingMessage.videoThumbnailFileNames = videos.map { _ in "" }
+
+                        // Save so UI shows placeholder
+                        try modelContext.save()
+
                         await MediaSyncService.shared.downloadMedia(for: existingMessage, media: media)
                     }
                 } else {
@@ -174,13 +191,17 @@ actor SyncService {
                     let newMessage = createMessage(from: msgResponse, modelContext: modelContext)
                     modelContext.insert(newMessage)
 
-                    // Download media if present
+                    // Save immediately so UI shows message with BlurHash placeholder
+                    try modelContext.save()
+
+                    // Download media if present (runs in background while placeholder is visible)
                     if let media = msgResponse.media, !media.isEmpty {
                         await MediaSyncService.shared.downloadMedia(for: newMessage, media: media)
                     }
                 }
             }
 
+            // Final save for any remaining changes
             try modelContext.save()
             logger.info("Data fetch completed successfully")
         } catch let error as APIError {
@@ -429,6 +450,27 @@ actor SyncService {
         message.todoTitle = response.todoTitle
         message.reminderDate = response.reminderDate
         message.reminderRepeatInterval = response.reminderRepeatInterval.flatMap { ReminderRepeatInterval(rawValue: $0) }
+
+        // Pre-populate media info from response for BlurHash placeholders
+        // Files will be downloaded separately, but blurHashes/aspectRatios are available immediately
+        if let media = response.media {
+            let photos = media.filter { $0.mediaType == "photo" }
+            let videos = media.filter { $0.mediaType == "video" }
+
+            // Photos: store aspect ratios and blurHashes (fileNames will be filled after download)
+            message.photoAspectRatios = photos.map { $0.aspectRatio }
+            message.photoBlurHashes = photos.map { $0.blurHash ?? "" }
+            // Use placeholder fileNames based on fileKey (will be replaced with actual local names after download)
+            message.photoFileNames = photos.map { "pending_\($0.fileKey)" }
+
+            // Videos: store aspect ratios, durations, and blurHashes
+            message.videoAspectRatios = videos.map { $0.aspectRatio }
+            message.videoDurations = videos.map { $0.duration ?? 0 }
+            message.videoThumbnailBlurHashes = videos.map { $0.blurHash ?? "" }
+            // Use placeholder fileNames
+            message.videoFileNames = videos.map { "pending_\($0.fileKey)" }
+            message.videoThumbnailFileNames = videos.map { _ in "" }
+        }
 
         return message
     }

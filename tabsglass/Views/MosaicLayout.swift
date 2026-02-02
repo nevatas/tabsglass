@@ -827,6 +827,10 @@ final class MosaicMediaView: UIView {
 
     /// Check if media file exists on disk
     private func isFileOnDisk(mediaItem: MediaItem) -> Bool {
+        // Pending files (waiting for download) are not on disk
+        if mediaItem.fileName.hasPrefix("pending_") {
+            return false
+        }
         if mediaItem.isVideo {
             let videoURL = SharedVideoStorage.videosDirectory.appendingPathComponent(mediaItem.fileName)
             return FileManager.default.fileExists(atPath: videoURL.path)

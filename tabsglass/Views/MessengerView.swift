@@ -533,7 +533,7 @@ struct EmbeddedComposerView: View {
                                 Button {
                                     state.onShowPhotoPicker?()
                                 } label: {
-                                    Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
+                                    Label(L10n.Composer.gallery, systemImage: "photo.on.rectangle.angled")
                                 }
 
                                 Button {
@@ -1029,8 +1029,9 @@ final class MessageTableCell: UITableViewCell {
 
             // Build MediaItems array (photos first, then videos)
             var mediaItems: [MediaItem] = []
-            for fileName in message.photoFileNames {
-                mediaItems.append(.photo(fileName))
+            for (index, fileName) in message.photoFileNames.enumerated() {
+                let blurHash = index < message.photoBlurHashes.count ? message.photoBlurHashes[index] : nil
+                mediaItems.append(.photo(fileName, blurHash: blurHash))
             }
             for (index, fileName) in message.videoFileNames.enumerated() {
                 let thumbnailFileName = index < message.videoThumbnailFileNames.count
@@ -1039,11 +1040,16 @@ final class MessageTableCell: UITableViewCell {
                 let duration = index < message.videoDurations.count
                     ? message.videoDurations[index]
                     : 0
-                mediaItems.append(.video(fileName, thumbnailFileName: thumbnailFileName, duration: duration))
+                let blurHash = index < message.videoThumbnailBlurHashes.count ? message.videoThumbnailBlurHashes[index] : nil
+                mediaItems.append(.video(fileName, thumbnailFileName: thumbnailFileName, duration: duration, blurHash: blurHash))
             }
 
             // isAtBottom: true only when there's no text below (media-only message)
-            mosaicView.configure(with: mediaItems, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText && !hasTodo)
+            // Pass messageId for upload/download progress tracking
+            let isUploading = UploadProgressTracker.shared.isUploading(messageId: message.id)
+            let hasPendingFiles = mediaItems.contains { $0.fileName.hasPrefix("pending_") }
+            let trackingMessageId = (isUploading || hasPendingFiles) ? message.id : nil
+            mosaicView.configure(with: mediaItems, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText && !hasTodo, messageId: trackingMessageId)
             mosaicView.isHidden = false
         } else {
             mosaicHeightConstraint.constant = 0
