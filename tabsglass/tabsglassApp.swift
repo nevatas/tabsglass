@@ -468,7 +468,9 @@ private extension tabsglassApp {
 
     @MainActor
     static func handleSettingsUpdated(_ settings: SettingsPayload) {
-        // Only apply theme if syncTheme is enabled on THIS device
+        wsLogger.info("⚙️ Settings from WS: theme=\(settings.theme), syncTheme=\(settings.syncTheme)")
+
+        // Only apply theme if syncTheme is enabled on THIS device (default true)
         if AppSettings.shared.syncTheme {
             if let theme = AppTheme(rawValue: settings.theme) {
                 ThemeManager.shared.currentTheme = theme
@@ -483,9 +485,6 @@ private extension tabsglassApp {
 
         // Update auto focus setting (always sync)
         AppSettings.shared.autoFocusInput = settings.autoFocusInput
-
-        // Update sync theme setting (so user knows current server state)
-        // Note: We don't apply it to local setting to preserve user's choice
     }
 }
 
