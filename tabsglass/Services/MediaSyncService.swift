@@ -9,6 +9,7 @@ import Foundation
 import UIKit
 import AVFoundation
 import UnifiedBlurHash
+import SwiftData
 import os.log
 
 /// Service for uploading and downloading media files to/from R2
