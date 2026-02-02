@@ -252,6 +252,12 @@ actor WebSocketService {
         case "sync_required":
             return .syncRequired
 
+        case "settings_updated":
+            guard case .settings(let settings) = message.payload else {
+                throw WebSocketError.invalidPayload
+            }
+            return .settingsUpdated(settings)
+
         default:
             logger.warning("Unknown WebSocket event type: \(message.type)")
             throw WebSocketError.unknownEventType(message.type)

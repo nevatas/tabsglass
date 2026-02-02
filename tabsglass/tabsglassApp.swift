@@ -269,6 +269,10 @@ private extension tabsglassApp {
                 wsLogger.info("🔄 Sync required")
                 await SyncService.shared.fetchDataFromServer(modelContext: context)
 
+            case .settingsUpdated(let settings):
+                wsLogger.info("⚙️ Settings updated: theme=\(settings.theme), spaceName=\(settings.spaceName)")
+                handleSettingsUpdated(settings)
+
             case .connected:
                 wsLogger.info("✅ WebSocket connected event received")
 
@@ -460,6 +464,21 @@ private extension tabsglassApp {
 
         context.delete(tab)
         try? context.save()
+    }
+
+    @MainActor
+    static func handleSettingsUpdated(_ settings: SettingsPayload) {
+        // Update theme
+        if let theme = AppTheme(rawValue: settings.theme) {
+            ThemeManager.shared.currentTheme = theme
+            wsLogger.info("🎨 Theme updated to: \(theme.rawValue)")
+        }
+
+        // Update space name
+        AppSettings.shared.spaceName = settings.spaceName
+
+        // Update auto focus setting
+        AppSettings.shared.autoFocusInput = settings.autoFocusInput
     }
 }
 

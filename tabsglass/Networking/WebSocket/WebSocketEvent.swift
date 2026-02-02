@@ -27,6 +27,9 @@ enum WebSocketEvent: Sendable {
 
     // Sync events
     case syncRequired  // Server indicates client should perform full sync
+
+    // Settings events
+    case settingsUpdated(SettingsPayload)
 }
 
 /// Raw WebSocket message from server
@@ -47,6 +50,7 @@ enum WebSocketPayload: Decodable {
     case deletion(DeletionPayload)
     case move(MovePayload)
     case connected(ConnectedPayload)
+    case settings(SettingsPayload)
     case empty
 
     init(from decoder: Decoder) throws {
@@ -55,6 +59,8 @@ enum WebSocketPayload: Decodable {
         // Try to decode as different types
         if let connected = try? container.decode(ConnectedPayload.self) {
             self = .connected(connected)
+        } else if let settings = try? container.decode(SettingsPayload.self) {
+            self = .settings(settings)
         } else if let tab = try? container.decode(TabResponse.self) {
             self = .tab(tab)
         } else if let message = try? container.decode(MessageResponse.self) {
@@ -92,5 +98,17 @@ struct MovePayload: Decodable {
     enum CodingKeys: String, CodingKey {
         case serverId = "server_id"
         case newTabServerId = "new_tab_server_id"
+    }
+}
+
+struct SettingsPayload: Decodable, Sendable {
+    let spaceName: String
+    let theme: String
+    let autoFocusInput: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case spaceName = "space_name"
+        case theme
+        case autoFocusInput = "auto_focus_input"
     }
 }
