@@ -6,6 +6,8 @@
 //
 
 import UIKit
+import Combine
+import UnifiedBlurHash
 
 // MARK: - Media Item (unified photo/video representation)
 
@@ -14,15 +16,16 @@ struct MediaItem {
     let isVideo: Bool
     let thumbnailFileName: String?  // For videos, the pre-generated thumbnail
     let duration: Double?           // For videos, duration in seconds
+    let blurHash: String?           // BlurHash placeholder string
 
     /// Create a photo media item
-    static func photo(_ fileName: String) -> MediaItem {
-        MediaItem(fileName: fileName, isVideo: false, thumbnailFileName: nil, duration: nil)
+    static func photo(_ fileName: String, blurHash: String? = nil) -> MediaItem {
+        MediaItem(fileName: fileName, isVideo: false, thumbnailFileName: nil, duration: nil, blurHash: blurHash)
     }
 
     /// Create a video media item
-    static func video(_ fileName: String, thumbnailFileName: String, duration: Double) -> MediaItem {
-        MediaItem(fileName: fileName, isVideo: true, thumbnailFileName: thumbnailFileName, duration: duration)
+    static func video(_ fileName: String, thumbnailFileName: String, duration: Double, blurHash: String? = nil) -> MediaItem {
+        MediaItem(fileName: fileName, isVideo: true, thumbnailFileName: thumbnailFileName, duration: duration, blurHash: blurHash)
     }
 }
 
@@ -481,9 +484,15 @@ final class MosaicMediaView: UIView {
     private var imageViews: [UIImageView] = []
     private var playOverlays: [UIView] = []      // Play button overlays for videos
     private var durationLabels: [UILabel] = []   // Duration badges for videos
+    private var uploadOverlays: [UploadProgressOverlay] = []  // Upload progress overlays
+    private var downloadOverlays: [DownloadProgressOverlay] = []  // Download progress overlays
     private var layoutItems: [MosaicLayoutItem] = []
     private var currentFileNames: [String] = []
     private var currentMediaItems: [MediaItem] = []
+    private var currentMessageId: UUID?
+    private var progressSubscription: AnyCancellable?
+    private var downloadProgressSubscription: AnyCancellable?
+
     /// Corner radius for outer corners (should match bubble corner radius)
     var cornerRadius: CGFloat = 18
 
@@ -502,6 +511,11 @@ final class MosaicMediaView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        progressSubscription?.cancel()
+        downloadProgressSubscription?.cancel()
+    }
+
     /// Get image view at index for transition animations
     func getImageView(at index: Int) -> UIImageView? {
         guard index >= 0 && index < imageViews.count else { return nil }
@@ -514,13 +528,20 @@ final class MosaicMediaView: UIView {
     ///   - aspectRatios: Pre-calculated aspect ratios for layout
     ///   - maxWidth: Maximum width for the mosaic
     ///   - isAtBottom: If true, bottom corners will be rounded
-    func configure(with mediaItems: [MediaItem], aspectRatios: [CGFloat], maxWidth: CGFloat, isAtBottom: Bool = true) {
+    ///   - messageId: Optional message ID for upload progress tracking
+    func configure(with mediaItems: [MediaItem], aspectRatios: [CGFloat], maxWidth: CGFloat, isAtBottom: Bool = true, messageId: UUID? = nil) {
         // Clear old views
         clearViews()
         currentMediaItems = mediaItems
         currentFileNames = mediaItems.map { $0.fileName }
+        currentMessageId = messageId
 
         guard !mediaItems.isEmpty, !aspectRatios.isEmpty else { return }
+
+        // Subscribe to upload progress if messageId provided
+        setupProgressSubscription(messageId: messageId)
+        // Subscribe to download progress if messageId provided
+        setupDownloadProgressSubscription(messageId: messageId)
 
         // Calculate layout
         let calculator = MosaicLayoutCalculator(maxWidth: maxWidth, maxHeight: 300, spacing: 2)
@@ -554,34 +575,80 @@ final class MosaicMediaView: UIView {
             addSubview(imageView)
             imageViews.append(imageView)
 
-            // Load thumbnail
+            // Check if file is on disk
+            let fileOnDisk = isFileOnDisk(mediaItem: mediaItem)
+
+            // Load thumbnail or show BlurHash placeholder
             let targetSize = item.frame.size
             if mediaItem.isVideo, let thumbnailFileName = mediaItem.thumbnailFileName {
-                // Load video thumbnail
-                ImageCache.shared.loadVideoThumbnail(
-                    videoFileName: mediaItem.fileName,
-                    thumbnailFileName: thumbnailFileName,
-                    targetSize: targetSize
-                ) { [weak imageView] image in
-                    imageView?.image = image
+                if fileOnDisk {
+                    // Load video thumbnail from disk
+                    ImageCache.shared.loadVideoThumbnail(
+                        videoFileName: mediaItem.fileName,
+                        thumbnailFileName: thumbnailFileName,
+                        targetSize: targetSize
+                    ) { [weak imageView] image in
+                        imageView?.image = image
+                    }
+                } else if let blurHash = mediaItem.blurHash, !blurHash.isEmpty {
+                    // Show BlurHash placeholder while downloading
+                    if let placeholderImage = decodeBlurHash(blurHash, size: targetSize) {
+                        imageView.image = placeholderImage
+                    }
+                    // Show download progress overlay
+                    if let messageId = messageId, DownloadProgressTracker.shared.isFileDownloading(messageId: messageId, fileIndex: index) {
+                        let overlay = DownloadProgressOverlay(frame: item.frame)
+                        overlay.layer.maskedCorners = imageView.layer.maskedCorners
+                        overlay.layer.cornerRadius = cornerRadius
+                        overlay.tag = index
+                        addSubview(overlay)
+                        downloadOverlays.append(overlay)
+                    }
                 }
 
-                // Add play overlay
+                // Add play overlay (always visible)
                 let playOverlay = createPlayOverlay(frame: item.frame)
                 addSubview(playOverlay)
                 playOverlays.append(playOverlay)
 
-                // Add duration badge
+                // Add duration badge (always visible)
                 if let duration = mediaItem.duration {
                     let durationLabel = createDurationBadge(duration: duration, frame: item.frame)
                     addSubview(durationLabel)
                     durationLabels.append(durationLabel)
                 }
             } else {
-                // Load photo thumbnail
-                ImageCache.shared.loadThumbnail(for: mediaItem.fileName, targetSize: targetSize) { [weak imageView] image in
-                    imageView?.image = image
+                if fileOnDisk {
+                    // Load photo thumbnail from disk
+                    ImageCache.shared.loadThumbnail(for: mediaItem.fileName, targetSize: targetSize) { [weak imageView] image in
+                        imageView?.image = image
+                    }
+                } else if let blurHash = mediaItem.blurHash, !blurHash.isEmpty {
+                    // Show BlurHash placeholder while downloading
+                    if let placeholderImage = decodeBlurHash(blurHash, size: targetSize) {
+                        imageView.image = placeholderImage
+                    }
+                    // Show download progress overlay
+                    if let messageId = messageId, DownloadProgressTracker.shared.isFileDownloading(messageId: messageId, fileIndex: index) {
+                        let overlay = DownloadProgressOverlay(frame: item.frame)
+                        overlay.layer.maskedCorners = imageView.layer.maskedCorners
+                        overlay.layer.cornerRadius = cornerRadius
+                        overlay.tag = index
+                        addSubview(overlay)
+                        downloadOverlays.append(overlay)
+                    }
                 }
+            }
+
+            // Create upload progress overlay if this specific file is still uploading
+            if let messageId = messageId, UploadProgressTracker.shared.isFileUploading(messageId: messageId, fileIndex: index) {
+                let isVideo = mediaItem.isVideo
+                let overlay = UploadProgressOverlay(frame: item.frame, isVideo: isVideo)
+                overlay.layer.maskedCorners = imageView.layer.maskedCorners
+                overlay.layer.cornerRadius = cornerRadius
+                overlay.tag = index  // Store index for later lookup
+                addSubview(overlay)
+                uploadOverlays.append(overlay)
             }
         }
 
@@ -644,12 +711,176 @@ final class MosaicMediaView: UIView {
     }
 
     private func clearViews() {
+        progressSubscription?.cancel()
+        progressSubscription = nil
+        downloadProgressSubscription?.cancel()
+        downloadProgressSubscription = nil
+        currentMessageId = nil
         imageViews.forEach { $0.removeFromSuperview() }
         imageViews.removeAll()
         playOverlays.forEach { $0.removeFromSuperview() }
         playOverlays.removeAll()
         durationLabels.forEach { $0.removeFromSuperview() }
         durationLabels.removeAll()
+        uploadOverlays.forEach { $0.removeFromSuperview() }
+        uploadOverlays.removeAll()
+        downloadOverlays.forEach { $0.removeFromSuperview() }
+        downloadOverlays.removeAll()
+    }
+
+    // MARK: - Upload Progress
+
+    private func setupProgressSubscription(messageId: UUID?) {
+        progressSubscription?.cancel()
+        progressSubscription = nil
+
+        guard let messageId = messageId else { return }
+
+        progressSubscription = UploadProgressTracker.shared.progressUpdated
+            .receive(on: DispatchQueue.main)
+            .filter { $0.messageId == messageId }
+            .sink { [weak self] update in
+                self?.handleProgressUpdate(update)
+            }
+    }
+
+    private func handleProgressUpdate(_ update: UploadProgressTracker.ProgressUpdate) {
+        // Find overlay by tag (file index)
+        guard let overlay = uploadOverlays.first(where: { $0.tag == update.fileIndex }) else { return }
+
+        if update.isComplete {
+            // Animate out the upload overlay and remove from array
+            UIView.animate(withDuration: 0.3) {
+                overlay.alpha = 0
+            } completion: { [weak self] _ in
+                overlay.removeFromSuperview()
+                self?.uploadOverlays.removeAll { $0 === overlay }
+            }
+        } else {
+            // Update progress
+            overlay.setProgress(update.progress, totalBytes: update.totalBytes)
+        }
+    }
+
+    // MARK: - Download Progress
+
+    private func setupDownloadProgressSubscription(messageId: UUID?) {
+        downloadProgressSubscription?.cancel()
+        downloadProgressSubscription = nil
+
+        guard let messageId = messageId else { return }
+
+        downloadProgressSubscription = DownloadProgressTracker.shared.progressUpdated
+            .receive(on: DispatchQueue.main)
+            .filter { $0.messageId == messageId }
+            .sink { [weak self] update in
+                self?.handleDownloadProgressUpdate(update)
+            }
+    }
+
+    private func handleDownloadProgressUpdate(_ update: DownloadProgressTracker.ProgressUpdate) {
+        // Find overlay by tag (file index)
+        guard let overlay = downloadOverlays.first(where: { $0.tag == update.fileIndex }) else { return }
+
+        if update.isComplete {
+            // Animate out the download overlay and crossfade to actual image
+            UIView.animate(withDuration: 0.3) {
+                overlay.alpha = 0
+            } completion: { [weak self] _ in
+                overlay.removeFromSuperview()
+                self?.downloadOverlays.removeAll { $0 === overlay }
+
+                // Reload the actual image from disk
+                guard let self = self,
+                      update.fileIndex < self.currentMediaItems.count,
+                      update.fileIndex < self.imageViews.count else { return }
+
+                let mediaItem = self.currentMediaItems[update.fileIndex]
+                let imageView = self.imageViews[update.fileIndex]
+                let targetSize = imageView.bounds.size
+
+                if mediaItem.isVideo, let thumbnailFileName = mediaItem.thumbnailFileName {
+                    ImageCache.shared.loadVideoThumbnail(
+                        videoFileName: mediaItem.fileName,
+                        thumbnailFileName: thumbnailFileName,
+                        targetSize: targetSize
+                    ) { [weak imageView] image in
+                        UIView.transition(with: imageView!, duration: 0.25, options: .transitionCrossDissolve) {
+                            imageView?.image = image
+                        }
+                    }
+                } else {
+                    ImageCache.shared.loadThumbnail(for: mediaItem.fileName, targetSize: targetSize) { [weak imageView] image in
+                        UIView.transition(with: imageView!, duration: 0.25, options: .transitionCrossDissolve) {
+                            imageView?.image = image
+                        }
+                    }
+                }
+            }
+        } else {
+            // Update progress
+            overlay.setProgress(update.progress)
+        }
+    }
+
+    // MARK: - BlurHash Helpers
+
+    /// Check if media file exists on disk
+    private func isFileOnDisk(mediaItem: MediaItem) -> Bool {
+        if mediaItem.isVideo {
+            let videoURL = SharedVideoStorage.videosDirectory.appendingPathComponent(mediaItem.fileName)
+            return FileManager.default.fileExists(atPath: videoURL.path)
+        } else {
+            return SharedPhotoStorage.photoExists(mediaItem.fileName)
+        }
+    }
+
+    /// Decode BlurHash to UIImage
+    private func decodeBlurHash(_ blurHash: String, size: CGSize) -> UIImage? {
+        // Use smaller dimensions for BlurHash decoding (it will be scaled up)
+        let width = min(32, Int(size.width))
+        let height = min(32, Int(size.height))
+        return UIImage(blurHash: blurHash, size: CGSize(width: width, height: height))
+    }
+
+    /// Show upload overlays for all items (called when upload starts)
+    func showUploadProgress(for messageId: UUID) {
+        currentMessageId = messageId
+        setupProgressSubscription(messageId: messageId)
+
+        // Create overlays only for files that are still uploading
+        for (index, item) in layoutItems.enumerated() {
+            guard index < imageViews.count else { continue }
+
+            // Skip files that have already completed
+            guard UploadProgressTracker.shared.isFileUploading(messageId: messageId, fileIndex: index) else {
+                continue
+            }
+
+            // Check if this item is a video to show size badge
+            let isVideo = index < currentMediaItems.count && currentMediaItems[index].isVideo
+
+            let overlay = UploadProgressOverlay(frame: item.frame, isVideo: isVideo)
+            overlay.layer.maskedCorners = imageViews[index].layer.maskedCorners
+            overlay.layer.cornerRadius = cornerRadius
+            overlay.tag = index
+            addSubview(overlay)
+            uploadOverlays.append(overlay)
+        }
+    }
+
+    /// Hide all upload overlays
+    func hideUploadProgress() {
+        progressSubscription?.cancel()
+        progressSubscription = nil
+        currentMessageId = nil
+
+        UIView.animate(withDuration: 0.3) {
+            self.uploadOverlays.forEach { $0.alpha = 0 }
+        } completion: { _ in
+            self.uploadOverlays.forEach { $0.removeFromSuperview() }
+            self.uploadOverlays.removeAll()
+        }
     }
 
     // MARK: - Play Overlay
@@ -785,5 +1016,252 @@ final class MosaicMediaView: UIView {
         if !isVideo {
             onPhotoTapped?(index, frameInWindow, image, currentFileNames)
         }
+    }
+}
+
+// MARK: - Upload Progress Overlay
+
+/// Compact circular progress indicator for upload (bottom-left corner)
+final class UploadProgressOverlay: UIView {
+    private let backgroundLayer = CAShapeLayer()
+    private let trackLayer = CAShapeLayer()
+    private let progressLayer = CAShapeLayer()
+    private let arrowImageView = UIImageView()
+
+    private var progress: Double = 0
+
+    /// Size of the progress indicator
+    private let indicatorSize: CGFloat = 24
+    private let lineWidth: CGFloat = 2
+    private let innerPadding: CGFloat = 2  // Padding between background and ring
+    private let padding: CGFloat = 6
+
+    init(frame: CGRect, isVideo: Bool = false) {
+        super.init(frame: frame)
+        setupView()
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupView()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupView() {
+        // Transparent background - don't darken the image
+        backgroundColor = .clear
+        clipsToBounds = false
+        isUserInteractionEnabled = false
+
+        // Calculate center for bottom-left position
+        let center = CGPoint(x: padding + indicatorSize / 2, y: bounds.height - padding - indicatorSize / 2)
+        let radius = indicatorSize / 2 - innerPadding - lineWidth / 2
+
+        // Dark circle background
+        let bgPath = UIBezierPath(
+            arcCenter: center,
+            radius: indicatorSize / 2,
+            startAngle: 0,
+            endAngle: .pi * 2,
+            clockwise: true
+        )
+        backgroundLayer.path = bgPath.cgPath
+        backgroundLayer.fillColor = UIColor.black.withAlphaComponent(0.5).cgColor
+        layer.addSublayer(backgroundLayer)
+
+        // Track layer (background ring)
+        let trackPath = UIBezierPath(
+            arcCenter: center,
+            radius: radius,
+            startAngle: -.pi / 2,
+            endAngle: .pi * 1.5,
+            clockwise: true
+        )
+        trackLayer.path = trackPath.cgPath
+        trackLayer.fillColor = UIColor.clear.cgColor
+        trackLayer.strokeColor = UIColor.white.withAlphaComponent(0.3).cgColor
+        trackLayer.lineWidth = lineWidth
+        trackLayer.lineCap = .round
+        layer.addSublayer(trackLayer)
+
+        // Progress layer (white ring)
+        progressLayer.path = trackPath.cgPath
+        progressLayer.fillColor = UIColor.clear.cgColor
+        progressLayer.strokeColor = UIColor.white.cgColor
+        progressLayer.lineWidth = lineWidth
+        progressLayer.lineCap = .round
+        progressLayer.strokeEnd = 0
+        layer.addSublayer(progressLayer)
+
+        // Arrow icon in center
+        let config = UIImage.SymbolConfiguration(pointSize: 10, weight: .heavy)
+        arrowImageView.image = UIImage(systemName: "arrow.up", withConfiguration: config)
+        arrowImageView.tintColor = .white
+        arrowImageView.contentMode = .center
+        arrowImageView.frame = CGRect(x: 0, y: 0, width: indicatorSize, height: indicatorSize)
+        arrowImageView.center = center
+        addSubview(arrowImageView)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+
+        // Position in bottom-left corner
+        let center = CGPoint(x: padding + indicatorSize / 2, y: bounds.height - padding - indicatorSize / 2)
+        let radius = indicatorSize / 2 - innerPadding - lineWidth / 2
+
+        // Update background circle
+        let bgPath = UIBezierPath(
+            arcCenter: center,
+            radius: indicatorSize / 2,
+            startAngle: 0,
+            endAngle: .pi * 2,
+            clockwise: true
+        )
+        backgroundLayer.path = bgPath.cgPath
+
+        // Update progress ring paths
+        let path = UIBezierPath(
+            arcCenter: center,
+            radius: radius,
+            startAngle: -.pi / 2,
+            endAngle: .pi * 1.5,
+            clockwise: true
+        )
+        trackLayer.path = path.cgPath
+        progressLayer.path = path.cgPath
+
+        // Update arrow position
+        arrowImageView.center = center
+    }
+
+    /// Set upload progress (0.0 to 1.0)
+    func setProgress(_ progress: Double, totalBytes: Int64? = nil) {
+        self.progress = progress
+        progressLayer.strokeEnd = CGFloat(progress)
+    }
+}
+
+// MARK: - Download Progress Overlay
+
+/// Compact circular progress indicator for download (bottom-left corner, arrow down icon)
+final class DownloadProgressOverlay: UIView {
+    private let backgroundLayer = CAShapeLayer()
+    private let trackLayer = CAShapeLayer()
+    private let progressLayer = CAShapeLayer()
+    private let arrowImageView = UIImageView()
+
+    private var progress: Double = 0
+
+    /// Size of the progress indicator
+    private let indicatorSize: CGFloat = 24
+    private let lineWidth: CGFloat = 2
+    private let innerPadding: CGFloat = 2  // Padding between background and ring
+    private let padding: CGFloat = 6
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupView()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupView() {
+        // Transparent background - don't darken the image
+        backgroundColor = .clear
+        clipsToBounds = false
+        isUserInteractionEnabled = false
+
+        // Calculate center for bottom-left position
+        let center = CGPoint(x: padding + indicatorSize / 2, y: bounds.height - padding - indicatorSize / 2)
+        let radius = indicatorSize / 2 - innerPadding - lineWidth / 2
+
+        // Dark circle background
+        let bgPath = UIBezierPath(
+            arcCenter: center,
+            radius: indicatorSize / 2,
+            startAngle: 0,
+            endAngle: .pi * 2,
+            clockwise: true
+        )
+        backgroundLayer.path = bgPath.cgPath
+        backgroundLayer.fillColor = UIColor.black.withAlphaComponent(0.5).cgColor
+        layer.addSublayer(backgroundLayer)
+
+        // Track layer (background ring)
+        let trackPath = UIBezierPath(
+            arcCenter: center,
+            radius: radius,
+            startAngle: -.pi / 2,
+            endAngle: .pi * 1.5,
+            clockwise: true
+        )
+        trackLayer.path = trackPath.cgPath
+        trackLayer.fillColor = UIColor.clear.cgColor
+        trackLayer.strokeColor = UIColor.white.withAlphaComponent(0.3).cgColor
+        trackLayer.lineWidth = lineWidth
+        trackLayer.lineCap = .round
+        layer.addSublayer(trackLayer)
+
+        // Progress layer (white ring)
+        progressLayer.path = trackPath.cgPath
+        progressLayer.fillColor = UIColor.clear.cgColor
+        progressLayer.strokeColor = UIColor.white.cgColor
+        progressLayer.lineWidth = lineWidth
+        progressLayer.lineCap = .round
+        progressLayer.strokeEnd = 0
+        layer.addSublayer(progressLayer)
+
+        // Arrow down icon in center
+        let config = UIImage.SymbolConfiguration(pointSize: 10, weight: .heavy)
+        arrowImageView.image = UIImage(systemName: "arrow.down", withConfiguration: config)
+        arrowImageView.tintColor = .white
+        arrowImageView.contentMode = .center
+        arrowImageView.frame = CGRect(x: 0, y: 0, width: indicatorSize, height: indicatorSize)
+        arrowImageView.center = center
+        addSubview(arrowImageView)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+
+        // Position in bottom-left corner
+        let center = CGPoint(x: padding + indicatorSize / 2, y: bounds.height - padding - indicatorSize / 2)
+        let radius = indicatorSize / 2 - innerPadding - lineWidth / 2
+
+        // Update background circle
+        let bgPath = UIBezierPath(
+            arcCenter: center,
+            radius: indicatorSize / 2,
+            startAngle: 0,
+            endAngle: .pi * 2,
+            clockwise: true
+        )
+        backgroundLayer.path = bgPath.cgPath
+
+        // Update progress ring paths
+        let path = UIBezierPath(
+            arcCenter: center,
+            radius: radius,
+            startAngle: -.pi / 2,
+            endAngle: .pi * 1.5,
+            clockwise: true
+        )
+        trackLayer.path = path.cgPath
+        progressLayer.path = path.cgPath
+
+        // Update arrow position
+        arrowImageView.center = center
+    }
+
+    /// Set download progress (0.0 to 1.0)
+    func setProgress(_ progress: Double) {
+        self.progress = progress
+        progressLayer.strokeEnd = CGFloat(progress)
     }
 }

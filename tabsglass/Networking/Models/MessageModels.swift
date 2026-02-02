@@ -48,6 +48,7 @@ struct MediaItemRequest: Codable {
     let aspectRatio: Double
     let duration: Double?  // Only for videos
     let thumbnailFileKey: String?  // Only for videos
+    let blurHash: String?  // BlurHash placeholder string
 
     enum CodingKeys: String, CodingKey {
         case fileKey = "file_key"
@@ -55,6 +56,7 @@ struct MediaItemRequest: Codable {
         case aspectRatio = "aspect_ratio"
         case duration
         case thumbnailFileKey = "thumbnail_file_key"
+        case blurHash = "blur_hash"
     }
 }
 
@@ -233,6 +235,7 @@ struct MediaItemResponse: Decodable, Sendable {
     let duration: Double?
     let thumbnailFileKey: String?
     let thumbnailDownloadUrl: String?
+    let blurHash: String?  // BlurHash placeholder string
 
     enum CodingKeys: String, CodingKey {
         case fileKey = "file_key"
@@ -242,6 +245,7 @@ struct MediaItemResponse: Decodable, Sendable {
         case duration
         case thumbnailFileKey = "thumbnail_file_key"
         case thumbnailDownloadUrl = "thumbnail_download_url"
+        case blurHash = "blur_hash"
     }
 }
 

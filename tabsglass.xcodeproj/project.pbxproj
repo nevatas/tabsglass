@@ -189,6 +189,7 @@
 			name = tabsglass;
 			packageProductDependencies = (
 				D6EXPORT022F000002000F3043 /* ZIPFoundation */,
+				D6EXPORT022F000004000F3043 /* UnifiedBlurHash */,
 			);
 			productName = tabsglass;
 			productReference = D63BFDEA2F217BAC00B28B56 /* Taby.app */;
@@ -303,6 +304,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D6EXPORT012F000001000F3043 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				D6EXPORT012F000003000F3043 /* XCRemoteSwiftPackageReference "UnifiedBlurHash" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D63BFDEB2F217BAC00B28B56 /* Products */;
@@ -796,6 +798,14 @@
 				minimumVersion = 0.9.19;
 			};
 		};
+		D6EXPORT012F000003000F3043 /* XCRemoteSwiftPackageReference "UnifiedBlurHash" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/iankoex/UnifiedBlurHash";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.2.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -803,6 +813,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D6EXPORT012F000001000F3043 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
+		};
+		D6EXPORT022F000004000F3043 /* UnifiedBlurHash */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D6EXPORT012F000003000F3043 /* XCRemoteSwiftPackageReference "UnifiedBlurHash" */;
+			productName = UnifiedBlurHash;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -116,10 +116,12 @@ final class Message: Identifiable {
     var mediaGroupId: String?       // Groups multiple media in same message
     var photoFileNames: [String] = []
     var photoAspectRatios: [Double] = []
+    var photoBlurHashes: [String] = []  // BlurHash placeholders for photos
     var videoFileNames: [String] = []
     var videoAspectRatios: [Double] = []
     var videoDurations: [Double] = []
     var videoThumbnailFileNames: [String] = []
+    var videoThumbnailBlurHashes: [String] = []  // BlurHash placeholders for video thumbnails
     var todoItems: [TodoItem]?      // Todo list items (nil = not a todo list)
     var todoTitle: String?          // Optional title for todo list
     var reminderDate: Date?         // When to send reminder notification

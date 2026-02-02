@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 import AVFoundation
+import UnifiedBlurHash
 import os.log
 
 /// Service for uploading and downloading media files to/from R2
@@ -144,22 +145,32 @@ actor MediaSyncService {
 
     // MARK: - Download
 
-    /// Download media files for a message
+    /// Download media files for a message with progress tracking
     @MainActor
     func downloadMedia(for message: Message, media: [MediaItemResponse]) async {
         logger.info("Downloading \(media.count) media items for message \(message.id)")
 
         var photoFileNames: [String] = []
         var photoAspectRatios: [Double] = []
+        var photoBlurHashes: [String] = []
         var videoFileNames: [String] = []
         var videoAspectRatios: [Double] = []
         var videoDurations: [Double] = []
         var videoThumbnailFileNames: [String] = []
+        var videoThumbnailBlurHashes: [String] = []
 
         // Separate videos and their thumbnails from photos
         // Thumbnails are downloaded together with their videos, not separately
         let videoItems = media.filter { $0.mediaType == "video" }
         let thumbnailFileKeys = Set(videoItems.compactMap { $0.thumbnailFileKey })
+
+        // Count downloadable items for progress tracking
+        let photoItems = media.filter { $0.mediaType == "photo" && !thumbnailFileKeys.contains($0.fileKey) }
+        let downloadableCount = photoItems.count + videoItems.count
+
+        // Start download progress tracking
+        DownloadProgressTracker.shared.startDownload(for: message.id, fileCount: downloadableCount)
+        var fileIndex = 0
 
         for item in media {
             logger.debug("Downloading \(item.mediaType): \(item.fileKey)")
@@ -171,24 +182,34 @@ actor MediaSyncService {
                     logger.debug("Skipping photo \(item.fileKey) - it's a video thumbnail")
                     continue
                 }
-                if let fileName = await downloadPhoto(from: item.downloadUrl) {
+
+                let currentIndex = fileIndex
+                if let fileName = await downloadPhotoWithProgress(from: item.downloadUrl, messageId: message.id, fileIndex: currentIndex) {
                     photoFileNames.append(fileName)
                     photoAspectRatios.append(item.aspectRatio)
+                    photoBlurHashes.append(item.blurHash ?? "")
+                    DownloadProgressTracker.shared.completeFile(for: message.id, fileIndex: currentIndex)
                 }
+                fileIndex += 1
 
             case "video":
                 logger.info("Video item - thumbnailUrl: \(item.thumbnailDownloadUrl ?? "nil"), thumbnailKey: \(item.thumbnailFileKey ?? "nil")")
-                if let result = await downloadVideo(from: item.downloadUrl, thumbnailUrl: item.thumbnailDownloadUrl) {
+
+                let currentIndex = fileIndex
+                if let result = await downloadVideoWithProgress(from: item.downloadUrl, thumbnailUrl: item.thumbnailDownloadUrl, messageId: message.id, fileIndex: currentIndex) {
                     videoFileNames.append(result.fileName)
                     videoAspectRatios.append(item.aspectRatio)
                     videoDurations.append(item.duration ?? 0)
+                    videoThumbnailBlurHashes.append(item.blurHash ?? "")
                     if let thumbnailFileName = result.thumbnailFileName {
                         videoThumbnailFileNames.append(thumbnailFileName)
                         logger.info("Downloaded video thumbnail: \(thumbnailFileName)")
                     } else {
                         logger.warning("Video has no thumbnail!")
                     }
+                    DownloadProgressTracker.shared.completeFile(for: message.id, fileIndex: currentIndex)
                 }
+                fileIndex += 1
 
             case "thumbnail":
                 // Thumbnails are downloaded with their videos, skip standalone
@@ -199,19 +220,29 @@ actor MediaSyncService {
             }
         }
 
+        // Mark download as complete
+        DownloadProgressTracker.shared.completeDownload(for: message.id)
+
         // Update message with downloaded media
         message.photoFileNames = photoFileNames
         message.photoAspectRatios = photoAspectRatios
+        message.photoBlurHashes = photoBlurHashes
         message.videoFileNames = videoFileNames
         message.videoAspectRatios = videoAspectRatios
         message.videoDurations = videoDurations
         message.videoThumbnailFileNames = videoThumbnailFileNames
+        message.videoThumbnailBlurHashes = videoThumbnailBlurHashes
 
         logger.info("Downloaded media: \(photoFileNames.count) photos, \(videoFileNames.count) videos")
     }
 
-    /// Download a single photo
+    /// Download a single photo (legacy, no progress tracking)
     private func downloadPhoto(from urlString: String) async -> String? {
+        await downloadPhotoWithProgress(from: urlString, messageId: nil, fileIndex: nil)
+    }
+
+    /// Download a single photo with progress tracking
+    private func downloadPhotoWithProgress(from urlString: String, messageId: UUID?, fileIndex: Int?) async -> String? {
         guard let url = URL(string: urlString) else {
             logger.error("Invalid photo URL: \(urlString)")
             return nil
@@ -232,8 +263,13 @@ actor MediaSyncService {
         }
     }
 
-    /// Download a video and its thumbnail
+    /// Download a video and its thumbnail (legacy, no progress tracking)
     private func downloadVideo(from urlString: String, thumbnailUrl: String?) async -> (fileName: String, thumbnailFileName: String?)? {
+        await downloadVideoWithProgress(from: urlString, thumbnailUrl: thumbnailUrl, messageId: nil, fileIndex: nil)
+    }
+
+    /// Download a video and its thumbnail with progress tracking
+    private func downloadVideoWithProgress(from urlString: String, thumbnailUrl: String?, messageId: UUID?, fileIndex: Int?) async -> (fileName: String, thumbnailFileName: String?)? {
         guard let url = URL(string: urlString) else {
             logger.error("Invalid video URL: \(urlString)")
             return nil
@@ -302,12 +338,16 @@ actor MediaSyncService {
             )
             let aspectRatio = index < message.photoAspectRatios.count ? message.photoAspectRatios[index] : 1.0
 
+            // Calculate BlurHash from image
+            let blurHash = calculateBlurHash(from: compressedData)
+
             mediaItems.append(MediaItemRequest(
                 fileKey: fileKey,
                 mediaType: "photo",
                 aspectRatio: aspectRatio,
                 duration: nil,
-                thumbnailFileKey: nil
+                thumbnailFileKey: nil,
+                blurHash: blurHash
             ))
             logger.debug("Uploaded compressed photo: \(fileName) (\(compressedData.count / 1024)KB)")
             mediaIndex += 1
@@ -397,12 +437,23 @@ actor MediaSyncService {
             let aspectRatio = index < message.videoAspectRatios.count ? message.videoAspectRatios[index] : 1.78
             let duration = index < message.videoDurations.count ? message.videoDurations[index] : nil
 
+            // Calculate BlurHash from video thumbnail
+            var thumbnailBlurHash: String? = nil
+            if index < message.videoThumbnailFileNames.count {
+                let thumbFileName = message.videoThumbnailFileNames[index]
+                let thumbURL = Message.photosDirectory.appendingPathComponent(thumbFileName)
+                if let thumbData = try? Data(contentsOf: thumbURL) {
+                    thumbnailBlurHash = calculateBlurHash(from: thumbData)
+                }
+            }
+
             mediaItems.append(MediaItemRequest(
                 fileKey: fileKey,
                 mediaType: "video",
                 aspectRatio: aspectRatio,
                 duration: duration,
-                thumbnailFileKey: thumbnailFileKey
+                thumbnailFileKey: thumbnailFileKey,
+                blurHash: thumbnailBlurHash
             ))
             mediaIndex += 1
         }
@@ -534,5 +585,16 @@ actor MediaSyncService {
         default:
             return nil
         }
+    }
+
+    // MARK: - BlurHash
+
+    /// Calculate BlurHash from image data
+    /// - Parameter data: JPEG image data
+    /// - Returns: BlurHash string (approx 30 chars) or nil if calculation fails
+    nonisolated private func calculateBlurHash(from data: Data) -> String? {
+        guard let image = UIImage(data: data) else { return nil }
+        // Scale down for performance then encode with 4x3 components (~30 chars)
+        return image.small?.blurHash(numberOfComponents: (4, 3))
     }
 }
