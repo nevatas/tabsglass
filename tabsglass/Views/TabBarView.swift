@@ -161,7 +161,7 @@ struct TabBarView: View {
         .padding(.top, 4)
         .padding(.bottom, 16)
         .background {
-            // Gradient blur - extends below header
+            // Gradient blur - extends below header, fades out on Search
             GeometryReader { geo in
                 Rectangle()
                     .fill(.ultraThinMaterial)
@@ -177,6 +177,7 @@ struct TabBarView: View {
                             endPoint: .bottom
                         )
                     }
+                    .opacity(1 - searchProgress)
             }
             .allowsHitTesting(false)
             .ignoresSafeArea()

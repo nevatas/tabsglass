@@ -142,7 +142,6 @@ struct MainContainerView: View {
                 }
             )
             .ignoresSafeArea(.keyboard)
-            .scrollEdgeEffectStyle(.soft, for: .top)
 
             // Header layer (floating on top) - hidden in selection mode
             if !isSelectionMode {
