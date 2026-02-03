@@ -533,7 +533,7 @@ struct EmbeddedComposerView: View {
                                 Button {
                                     state.onShowPhotoPicker?()
                                 } label: {
-                                    Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
+                                    Label(L10n.Composer.gallery, systemImage: "photo.on.rectangle")
                                 }
 
                                 Button {

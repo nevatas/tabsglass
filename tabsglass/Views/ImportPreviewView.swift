@@ -103,7 +103,7 @@ struct ImportPreviewView: View {
 
 #Preview {
     ImportPreviewView(
-        manifest: ExportManifest(tabCount: 5, messageCount: 42, photoCount: 15, videoCount: 3),
+        manifest: ExportManifest(tabCount: 5, messageCount: 42, photoCount: 15, videoCount: 3, deviceName: "iPhone"),
         onImport: { _ in },
         onCancel: {}
     )

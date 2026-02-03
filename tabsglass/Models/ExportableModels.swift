@@ -11,7 +11,7 @@ import UIKit
 // MARK: - Export Manifest
 
 /// Metadata about the exported archive
-struct ExportManifest: Codable, Sendable {
+struct ExportManifest: Sendable {
     let version: Int
     let exportDate: Date
     let appVersion: String
@@ -23,16 +23,33 @@ struct ExportManifest: Codable, Sendable {
 
     static nonisolated let currentVersion = 1
 
-    @MainActor
-    init(tabCount: Int, messageCount: Int, photoCount: Int, videoCount: Int) {
+    init(tabCount: Int, messageCount: Int, photoCount: Int, videoCount: Int, deviceName: String) {
         self.version = Self.currentVersion
         self.exportDate = Date()
         self.appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        self.deviceName = UIDevice.current.name
+        self.deviceName = deviceName
         self.tabCount = tabCount
         self.messageCount = messageCount
         self.photoCount = photoCount
         self.videoCount = videoCount
+    }
+}
+
+extension ExportManifest: Codable {
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        exportDate = try container.decode(Date.self, forKey: .exportDate)
+        appVersion = try container.decode(String.self, forKey: .appVersion)
+        deviceName = try container.decode(String.self, forKey: .deviceName)
+        tabCount = try container.decode(Int.self, forKey: .tabCount)
+        messageCount = try container.decode(Int.self, forKey: .messageCount)
+        photoCount = try container.decode(Int.self, forKey: .photoCount)
+        videoCount = try container.decode(Int.self, forKey: .videoCount)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, exportDate, appVersion, deviceName, tabCount, messageCount, photoCount, videoCount
     }
 }
 

@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import UIKit
 import ZIPFoundation
 import os.log
 
@@ -150,7 +151,8 @@ final class ExportImportService {
             tabCount: tabs.count,
             messageCount: messages.count,
             photoCount: allPhotoFiles.count + allThumbnailFiles.count,
-            videoCount: allVideoFiles.count
+            videoCount: allVideoFiles.count,
+            deviceName: UIDevice.current.name
         )
 
         // Write manifest.json
@@ -225,9 +227,7 @@ final class ExportImportService {
 
         // Use ZIPFoundation Archive API to add files without wrapper folder
         do {
-            guard let archive = Archive(url: archiveURL, accessMode: .create) else {
-                throw ExportImportError.compressionFailed
-            }
+            let archive = try Archive(url: archiveURL, accessMode: .create)
 
             // Add all items from temp directory without the parent folder
             let contents = try fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)

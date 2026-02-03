@@ -165,7 +165,7 @@ struct EditMessageSheet: View {
                     Button {
                         showPhotoPicker = true
                     } label: {
-                        Label(L10n.Composer.photo, systemImage: "photo.on.rectangle")
+                        Label(L10n.Composer.gallery, systemImage: "photo.on.rectangle")
                     }
                 } label: {
                     Image(systemName: "plus")
