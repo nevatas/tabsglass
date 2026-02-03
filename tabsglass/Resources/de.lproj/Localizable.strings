@@ -14,6 +14,7 @@
 "settings.contact" = "Entwickler kontaktieren";
 "settings.done" = "Fertig";
 "settings.space_name" = "Titel";
+"settings.auto_focus_footer" = "Die Tastatur öffnet sich automatisch beim Start der App";
 
 // MARK: - Reorder
 

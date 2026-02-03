@@ -21,6 +21,7 @@ enum L10n {
         static var contact: String { NSLocalizedString("settings.contact", comment: "Contact developer link") }
         static var done: String { NSLocalizedString("settings.done", comment: "Done button") }
         static var spaceName: String { NSLocalizedString("settings.space_name", comment: "Space name setting") }
+        static var autoFocusFooter: String { NSLocalizedString("settings.auto_focus_footer", comment: "Auto-focus explanation") }
     }
 
     // MARK: - Reorder

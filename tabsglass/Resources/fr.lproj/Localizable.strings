@@ -14,6 +14,7 @@
 "settings.contact" = "Contacter le développeur";
 "settings.done" = "Terminé";
 "settings.space_name" = "Titre";
+"settings.auto_focus_footer" = "Le clavier s'ouvre automatiquement au lancement de l'app, prêt à écrire";
 
 // MARK: - Reorder
 

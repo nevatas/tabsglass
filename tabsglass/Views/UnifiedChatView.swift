@@ -698,6 +698,7 @@ final class MessageListViewController: UIViewController {
     private var hasAppearedBefore = false
     /// IDs of messages that should animate appearance (scale + fade in)
     private var pendingAppearAnimationIds: Set<UUID> = []
+    private var isAnimatingFirstMessage = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -775,6 +776,9 @@ final class MessageListViewController: UIViewController {
     }
 
     func reloadMessages() {
+        // Skip if first message animation is in progress
+        if isAnimatingFirstMessage { return }
+
         let oldMessages = sortedMessages
         let newMessages = messages
             .filter { !$0.isEmpty }
@@ -839,6 +843,40 @@ final class MessageListViewController: UIViewController {
                             cell.transform = originalTransform
                             cell.alpha = 1
                         }
+                    }
+                }
+            } else if isSimpleInsertion && oldMessages.isEmpty {
+                // First message in empty tab - fade out empty cell, then show message cell
+                isAnimatingFirstMessage = true
+                let emptyCell = tableView.cellForRow(at: IndexPath(row: 0, section: 0))
+
+                // Phase 1: Fade out empty cell
+                UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseOut]) {
+                    emptyCell?.alpha = 0
+                } completion: { _ in
+                    // Phase 2: Replace with message cell
+                    self.sortedMessages = newMessages
+                    UIView.performWithoutAnimation {
+                        self.tableView.reloadData()
+                    }
+
+                    // Phase 3: Animate message cell appearance
+                    guard let cell = self.tableView.cellForRow(at: IndexPath(row: 0, section: 0)) else {
+                        self.isAnimatingFirstMessage = false
+                        return
+                    }
+                    let originalTransform = CGAffineTransform(scaleX: 1, y: -1)
+
+                    // Set initial state: small and transparent
+                    cell.transform = originalTransform.scaledBy(x: 0.85, y: 0.85)
+                    cell.alpha = 0
+
+                    // Animate to normal state
+                    UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseOut]) {
+                        cell.transform = originalTransform
+                        cell.alpha = 1
+                    } completion: { _ in
+                        self.isAnimatingFirstMessage = false
                     }
                 }
             } else {

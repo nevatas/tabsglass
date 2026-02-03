@@ -16,7 +16,7 @@ struct SettingsView: View {
 
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
     @AppStorage("spaceName") private var spaceName = "Taby"
-    private var themeManager: ThemeManager { ThemeManager.shared }
+    @State private var themeManager = ThemeManager.shared
 
     // Export/Import state
     @State private var isExporting = false
@@ -73,9 +73,10 @@ struct SettingsView: View {
                     .onChange(of: autoFocusInput) { _, newValue in
                         AppSettings.shared.autoFocusInput = newValue
                     }
+                } footer: {
+                    Text(L10n.Settings.autoFocusFooter)
                 }
 
-                // Data section
                 Section {
                     Button {
                         startExport()
@@ -90,8 +91,6 @@ struct SettingsView: View {
                         Label(L10n.Data.importData, systemImage: "square.and.arrow.down")
                     }
                     .disabled(isExporting || isImporting)
-                } header: {
-                    Text(L10n.Data.title)
                 }
 
                 Section {
@@ -387,7 +386,7 @@ struct ReorderTabsView: View {
 // MARK: - Appearance Settings View
 
 struct AppearanceSettingsView: View {
-    private var themeManager: ThemeManager { ThemeManager.shared }
+    @State private var themeManager = ThemeManager.shared
 
     var body: some View {
         List {

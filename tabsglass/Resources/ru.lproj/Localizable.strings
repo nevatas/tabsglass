@@ -14,6 +14,7 @@
 "settings.contact" = "Связь с разработчиком";
 "settings.done" = "Готово";
 "settings.space_name" = "Заголовок";
+"settings.auto_focus_footer" = "Клавиатура откроется сразу при запуске, готовая к вводу";
 
 // MARK: - Reorder
 

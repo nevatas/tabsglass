@@ -14,6 +14,7 @@
 "settings.contact" = "Contactar al desarrollador";
 "settings.done" = "Listo";
 "settings.space_name" = "Título";
+"settings.auto_focus_footer" = "El teclado se abre automáticamente al iniciar la app, listo para escribir";
 
 // MARK: - Reorder
 
