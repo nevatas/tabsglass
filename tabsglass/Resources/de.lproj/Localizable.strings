@@ -127,6 +127,14 @@
 "share.inbox_info" = "Wird im Eingang gespeichert. Öffne Taby, um es in einen anderen Tab zu verschieben.";
 "share.where_to_save" = "Wo speichern?";
 
+// MARK: - Selection
+
+"selection.select" = "Auswählen";
+"selection.move" = "Verschieben";
+"selection.delete" = "Löschen";
+"selection.move_to" = "Verschieben nach";
+"selection.count" = "%d ausgewählt";
+
 // MARK: - Data (Export/Import)
 
 "data.title" = "Daten";

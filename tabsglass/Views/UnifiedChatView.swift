@@ -30,6 +30,12 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
 
+    // Selection mode
+    @Binding var isSelectionMode: Bool
+    @Binding var selectedMessageIds: Set<UUID>
+    var onEnterSelectionMode: ((Message) -> Void)?
+    var onToggleMessageSelection: ((UUID, Bool) -> Void)?
+
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
         vc.tabs = tabs
@@ -61,6 +67,11 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onEntitiesExtracted = { entities in
             formattingEntities = entities
         }
+        // Selection mode
+        vc.isSelectionMode = isSelectionMode
+        vc.selectedMessageIds = selectedMessageIds
+        vc.onEnterSelectionMode = onEnterSelectionMode
+        vc.onToggleMessageSelection = onToggleMessageSelection
         return vc
     }
 
@@ -74,6 +85,15 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onShowTaskList = onShowTaskList
         uiViewController.onToggleTodoItem = onToggleTodoItem
         uiViewController.onToggleReminder = onToggleReminder
+        // Selection mode
+        uiViewController.onEnterSelectionMode = onEnterSelectionMode
+        uiViewController.onToggleMessageSelection = onToggleMessageSelection
+        if uiViewController.isSelectionMode != isSelectionMode {
+            uiViewController.isSelectionMode = isSelectionMode
+            uiViewController.selectedMessageIds = selectedMessageIds
+        } else if uiViewController.selectedMessageIds != selectedMessageIds {
+            uiViewController.updateSelectedMessageIds(selectedMessageIds)
+        }
         if uiViewController.selectedIndex != selectedIndex {
             uiViewController.selectedIndex = selectedIndex
             uiViewController.updatePageSelection(animated: true)
@@ -105,6 +125,18 @@ final class UnifiedChatViewController: UIViewController {
     var onShowTaskList: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
+
+    // Selection mode
+    var isSelectionMode: Bool = false {
+        didSet {
+            if oldValue != isSelectionMode {
+                updateSelectionModeUI()
+            }
+        }
+    }
+    var selectedMessageIds: Set<UUID> = []
+    var onEnterSelectionMode: ((Message) -> Void)?
+    var onToggleMessageSelection: ((UUID, Bool) -> Void)?
 
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
@@ -339,6 +371,11 @@ final class UnifiedChatViewController: UIViewController {
         vc.onToggleReminder = { [weak self] message in
             self?.onToggleReminder?(message)
         }
+        // Selection mode
+        vc.isSelectionMode = isSelectionMode
+        vc.selectedMessageIds = selectedMessageIds
+        vc.onEnterSelectionMode = onEnterSelectionMode
+        vc.onToggleMessageSelection = onToggleMessageSelection
         messageControllers[index] = vc
         return vc
     }
@@ -365,6 +402,35 @@ final class UnifiedChatViewController: UIViewController {
                 currentVC.messages = messages(for: currentVC.currentTabId)
                 currentVC.reloadMessages()
             }
+        }
+    }
+
+    // MARK: - Selection Mode
+
+    private func updateSelectionModeUI() {
+        // Hide/show composer
+        UIView.animate(withDuration: 0.25) {
+            self.inputContainer.alpha = self.isSelectionMode ? 0 : 1
+            self.inputContainer.isUserInteractionEnabled = !self.isSelectionMode
+        }
+
+        // Block/unblock page swiping
+        pageScrollView?.isScrollEnabled = !isSelectionMode
+
+        // Update all visible message controllers
+        for (_, vc) in messageControllers {
+            vc.isSelectionMode = isSelectionMode
+            vc.selectedMessageIds = selectedMessageIds
+            vc.onEnterSelectionMode = onEnterSelectionMode
+            vc.onToggleMessageSelection = onToggleMessageSelection
+            vc.updateSelectionMode(isSelectionMode)
+        }
+    }
+
+    func updateSelectedMessageIds(_ ids: Set<UUID>) {
+        selectedMessageIds = ids
+        for (_, vc) in messageControllers {
+            vc.updateSelectedMessageIds(ids)
         }
     }
 
@@ -692,9 +758,16 @@ final class MessageListViewController: UIViewController {
     /// Callback when reminder is toggled on a message
     var onToggleReminder: ((Message) -> Void)?
 
+    // Selection mode
+    var isSelectionMode: Bool = false
+    var selectedMessageIds: Set<UUID> = []
+    var onEnterSelectionMode: ((Message) -> Void)?
+    var onToggleMessageSelection: ((UUID, Bool) -> Void)?
+
     private let tableView = UITableView()
     private var sortedMessages: [Message] = []
     private var longPressGesture: UILongPressGestureRecognizer!
+    private var dismissKeyboardTapGesture: UITapGestureRecognizer!
     private var hasAppearedBefore = false
     /// IDs of messages that should animate appearance (scale + fade in)
     private var pendingAppearAnimationIds: Set<UUID> = []
@@ -729,9 +802,9 @@ final class MessageListViewController: UIViewController {
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
 
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
-        tap.cancelsTouchesInView = false
-        tableView.addGestureRecognizer(tap)
+        dismissKeyboardTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        dismissKeyboardTapGesture.cancelsTouchesInView = false
+        tableView.addGestureRecognizer(dismissKeyboardTapGesture)
 
         // Dismiss keyboard early on long press (before context menu appears)
         longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
@@ -1002,6 +1075,39 @@ final class MessageListViewController: UIViewController {
         // Use .top because the table is flipped - .top in flipped coordinates = visual bottom
         tableView.scrollToRow(at: IndexPath(row: 0, section: 0), at: .top, animated: animated)
     }
+
+    // MARK: - Selection Mode
+
+    func updateSelectionMode(_ enabled: Bool) {
+        isSelectionMode = enabled
+        // Disable keyboard dismiss tap in selection mode so cell taps work
+        dismissKeyboardTapGesture.isEnabled = !enabled
+
+        for cell in tableView.visibleCells {
+            if let messageCell = cell as? MessageTableCell {
+                messageCell.setSelectionMode(enabled, animated: true)
+                // Update selection state for visible cells
+                if let indexPath = tableView.indexPath(for: cell),
+                   indexPath.row < sortedMessages.count {
+                    let message = sortedMessages[indexPath.row]
+                    messageCell.setSelected(selectedMessageIds.contains(message.id))
+                }
+            }
+        }
+    }
+
+    func updateSelectedMessageIds(_ ids: Set<UUID>) {
+        selectedMessageIds = ids
+        // Update selection state for visible cells
+        for cell in tableView.visibleCells {
+            if let messageCell = cell as? MessageTableCell,
+               let indexPath = tableView.indexPath(for: cell),
+               indexPath.row < sortedMessages.count {
+                let message = sortedMessages[indexPath.row]
+                messageCell.setSelected(selectedMessageIds.contains(message.id))
+            }
+        }
+    }
 }
 
 // MARK: - UITableViewDataSource & Delegate
@@ -1027,6 +1133,13 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
         cell.onTodoToggle = { [weak self] itemId, isCompleted in
             self?.onToggleTodoItem?(message, itemId, isCompleted)
+        }
+
+        // Selection mode
+        cell.setSelectionMode(isSelectionMode, animated: false)
+        cell.setSelected(selectedMessageIds.contains(message.id))
+        cell.onSelectionToggle = { [weak self] selected in
+            self?.onToggleMessageSelection?(message.id, selected)
         }
 
         // Check if this message needs appear animation
@@ -1117,6 +1230,15 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 UIPasteboard.general.string = message.content
             }
             actions.append(copyAction)
+
+            // Select action (enters bulk selection mode)
+            let selectAction = UIAction(
+                title: L10n.Selection.select,
+                image: UIImage(systemName: "checkmark.circle")
+            ) { [weak self] _ in
+                self?.onEnterSelectionMode?(message)
+            }
+            actions.append(selectAction)
 
             // Edit action
             let editAction = UIAction(

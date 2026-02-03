@@ -127,6 +127,14 @@
 "share.inbox_info" = "Sera enregistré dans Reçus. Ouvre Taby pour le déplacer vers un autre onglet.";
 "share.where_to_save" = "Où enregistrer ?";
 
+// MARK: - Selection
+
+"selection.select" = "Sélectionner";
+"selection.move" = "Déplacer";
+"selection.delete" = "Supprimer";
+"selection.move_to" = "Déplacer vers";
+"selection.count" = "%d sélectionnés";
+
 // MARK: - Data (Export/Import)
 
 "data.title" = "Données";

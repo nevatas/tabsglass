@@ -572,7 +572,7 @@ struct EmbeddedComposerView: View {
             .padding(.bottom, 14)
             .clipShape(.rect(cornerRadius: 24))
             .glassEffect(
-                .regular.tint(composerTint),
+                .regular.tint(composerTint).interactive(),
                 in: .rect(cornerRadius: 24)
             )
         }
@@ -687,6 +687,15 @@ final class MessageTableCell: UITableViewCell {
 
     /// Public access to bubble container (includes reminder badge) for context menu
     var bubbleViewForContextMenu: UIView { bubbleContainer }
+
+    // Selection mode
+    private let checkboxView = UIImageView()
+    private var bubbleContainerLeadingNormal: NSLayoutConstraint!
+    private var bubbleContainerLeadingSelection: NSLayoutConstraint!
+    var onSelectionToggle: ((Bool) -> Void)?
+    private var isInSelectionMode = false
+    private var isMessageSelected = false
+    private var selectionTapGesture: UITapGestureRecognizer?
     private let mosaicView = MosaicMediaView()
     private let messageTextView = UITextView()
     private let todoView = TodoBubbleView()
@@ -739,6 +748,28 @@ final class MessageTableCell: UITableViewCell {
         selectionStyle = .none
         clipsToBounds = false
         contentView.clipsToBounds = false
+
+        // Checkbox for selection mode (hidden by default)
+        checkboxView.translatesAutoresizingMaskIntoConstraints = false
+        checkboxView.contentMode = .scaleAspectFit
+        if let accentColor = ThemeManager.shared.currentTheme.accentColor {
+            checkboxView.tintColor = UIColor(accentColor)
+        } else {
+            checkboxView.tintColor = .systemBlue
+        }
+        checkboxView.isHidden = true
+        checkboxView.alpha = 0
+        checkboxView.isUserInteractionEnabled = true
+        checkboxView.image = UIImage(systemName: "circle")
+        contentView.addSubview(checkboxView)
+
+        let checkboxTap = UITapGestureRecognizer(target: self, action: #selector(checkboxTapped))
+        checkboxView.addGestureRecognizer(checkboxTap)
+
+        // Tap gesture for whole cell in selection mode
+        selectionTapGesture = UITapGestureRecognizer(target: self, action: #selector(cellTappedInSelectionMode))
+        selectionTapGesture?.isEnabled = false
+        contentView.addGestureRecognizer(selectionTapGesture!)
 
         // Container for bubble + reminder badge (used for context menu preview)
         bubbleContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -821,7 +852,17 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewBottomToBubble = messageTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
         mosaicBottomToBubble = mosaicView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
 
+        // Two variants of leading constraint for bubble container
+        bubbleContainerLeadingNormal = bubbleContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8)
+        bubbleContainerLeadingSelection = bubbleContainer.leadingAnchor.constraint(equalTo: checkboxView.trailingAnchor, constant: 4)
+
         NSLayoutConstraint.activate([
+            // Checkbox constraints
+            checkboxView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            checkboxView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            checkboxView.widthAnchor.constraint(equalToConstant: 28),
+            checkboxView.heightAnchor.constraint(equalToConstant: 28),
+
             // Container positioned to keep bubble in same place as before (with symmetric 8pt padding)
             // bubble.top = container.top + 8, so container.top = contentView.top + 4 - 8 = -4
             bubbleContainer.topAnchor.constraint(equalTo: contentView.topAnchor, constant: -4),
@@ -829,8 +870,6 @@ final class MessageTableCell: UITableViewCell {
             bubbleContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: 4),
             // bubble.trailing = container.trailing - 8, so container.trailing = contentView.trailing - 16 + 8 = -8
             bubbleContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
-            // bubble.leading = container.leading + 8, so container.leading = contentView.leading + 16 - 8 = +8
-            bubbleContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
 
             // Mosaic view
             mosaicView.topAnchor.constraint(equalTo: bubbleView.topAnchor),
@@ -848,6 +887,9 @@ final class MessageTableCell: UITableViewCell {
             todoView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
             todoViewHeightConstraint,
         ])
+
+        // Activate normal leading constraint by default
+        bubbleContainerLeadingNormal.isActive = true
 
         updateBubbleColor()
         if #available(iOS 17.0, *) {
@@ -867,6 +909,53 @@ final class MessageTableCell: UITableViewCell {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func checkboxTapped() {
+        toggleSelection()
+    }
+
+    @objc private func cellTappedInSelectionMode() {
+        toggleSelection()
+    }
+
+    private func toggleSelection() {
+        isMessageSelected.toggle()
+        setSelected(isMessageSelected)
+        onSelectionToggle?(isMessageSelected)
+    }
+
+    // MARK: - Selection Mode
+
+    func setSelectionMode(_ enabled: Bool, animated: Bool) {
+        isInSelectionMode = enabled
+        selectionTapGesture?.isEnabled = enabled
+
+        // Disable interaction on inner views so taps pass through to cell
+        bubbleContainer.isUserInteractionEnabled = !enabled
+        messageTextView.isUserInteractionEnabled = !enabled
+        mosaicView.isUserInteractionEnabled = !enabled
+        todoView.isUserInteractionEnabled = !enabled
+
+        let changes = {
+            self.checkboxView.isHidden = !enabled
+            self.checkboxView.alpha = enabled ? 1 : 0
+            self.bubbleContainerLeadingNormal.isActive = !enabled
+            self.bubbleContainerLeadingSelection.isActive = enabled
+            self.contentView.layoutIfNeeded()
+        }
+
+        if animated {
+            UIView.animate(withDuration: 0.25, animations: changes)
+        } else {
+            changes()
+        }
+    }
+
+    func setSelected(_ selected: Bool) {
+        isMessageSelected = selected
+        let imageName = selected ? "checkmark.circle.fill" : "circle"
+        checkboxView.image = UIImage(systemName: imageName)
     }
 
     @objc private func handleThemeChange() {
@@ -910,6 +999,10 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
         todoViewBottomToBubble.isActive = false
+        // Reset selection state
+        isMessageSelected = false
+        checkboxView.image = UIImage(systemName: "circle")
+        onSelectionToggle = nil
     }
 
     func configure(with message: Message) {

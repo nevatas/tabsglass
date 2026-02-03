@@ -127,6 +127,14 @@
 "share.inbox_info" = "Сохранится во Входящие. Откройте Taby чтобы переместить в другой таб.";
 "share.where_to_save" = "Куда сохранить?";
 
+// MARK: - Selection
+
+"selection.select" = "Выбрать";
+"selection.move" = "Переместить";
+"selection.delete" = "Удалить";
+"selection.move_to" = "Переместить в";
+"selection.count" = "Выбрано: %d";
+
 // MARK: - Data (Export/Import)
 
 "data.title" = "Данные";

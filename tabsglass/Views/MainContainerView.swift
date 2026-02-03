@@ -35,6 +35,11 @@ struct MainContainerView: View {
     @State private var attachedVideos: [AttachedVideo] = []
     @State private var formattingEntities: [TextEntity] = []
 
+    // Selection mode
+    @State private var isSelectionMode = false
+    @State private var selectedMessageIds: Set<UUID> = []
+    @State private var showMoveSheet = false
+
     /// Total number of tabs including virtual Inbox
     private var totalTabCount: Int {
         1 + tabs.count  // Inbox + real tabs
@@ -49,6 +54,16 @@ struct MainContainerView: View {
     /// Check if currently on Inbox
     private var isOnInbox: Bool {
         selectedTabIndex == 0
+    }
+
+    /// Check if messages can be moved (there are other destinations)
+    private var canMoveMessages: Bool {
+        // Can move if: we're in a tab (can move to Inbox) OR there are other tabs to move to
+        if isOnInbox {
+            return !tabs.isEmpty  // From Inbox, can move to any tab
+        } else {
+            return true  // From any tab, can at least move to Inbox
+        }
     }
 
     var body: some View {
@@ -89,13 +104,29 @@ struct MainContainerView: View {
                 },
                 onToggleReminder: { message in
                     messageForReminder = message
+                },
+                isSelectionMode: $isSelectionMode,
+                selectedMessageIds: $selectedMessageIds,
+                onEnterSelectionMode: { message in
+                    selectedMessageIds = [message.id]
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        isSelectionMode = true
+                    }
+                },
+                onToggleMessageSelection: { messageId, selected in
+                    if selected {
+                        selectedMessageIds.insert(messageId)
+                    } else {
+                        selectedMessageIds.remove(messageId)
+                    }
                 }
             )
             .ignoresSafeArea(.keyboard)
             .scrollEdgeEffectStyle(.soft, for: .top)
 
-            // Header layer (floating on top)
-            TabBarView(
+            // Header layer (floating on top) - hidden in selection mode
+            if !isSelectionMode {
+                TabBarView(
                 tabs: tabs,
                 selectedIndex: $selectedTabIndex,
                 switchFraction: $switchFraction,
@@ -121,6 +152,39 @@ struct MainContainerView: View {
                     showDeleteAlert = true
                 }
             )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            // Selection UI - shown in selection mode
+            if isSelectionMode {
+                // Cancel bar at top
+                VStack {
+                    SelectionCancelBar(
+                        selectedCount: selectedMessageIds.count,
+                        onCancel: { exitSelectionMode() }
+                    )
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+
+                // Action bar at bottom
+                VStack {
+                    Spacer()
+                    SelectionActionBar(
+                        selectedCount: selectedMessageIds.count,
+                        canMove: canMoveMessages,
+                        onMove: { showMoveSheet = true },
+                        onDelete: { deleteSelectedMessages() }
+                    )
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: isSelectionMode)
+        .sheet(isPresented: $showMoveSheet) {
+            MoveMessagesSheet(tabs: tabs, currentTabId: currentTabId) { targetTabId in
+                moveSelectedMessages(to: targetTabId)
+            }
         }
         .alert(L10n.Tab.new, isPresented: $showNewTabAlert) {
             TextField(L10n.Tab.titlePlaceholder, text: $newTabTitle)
@@ -623,6 +687,30 @@ struct MainContainerView: View {
         }
 
         syncTabsToExtension()
+    }
+
+    // MARK: - Selection Mode
+
+    private func exitSelectionMode() {
+        withAnimation(.easeOut(duration: 0.25)) {
+            isSelectionMode = false
+            selectedMessageIds.removeAll()
+        }
+    }
+
+    private func deleteSelectedMessages() {
+        for message in allMessages where selectedMessageIds.contains(message.id) {
+            deleteMessage(message)
+        }
+        exitSelectionMode()
+    }
+
+    private func moveSelectedMessages(to targetTabId: UUID?) {
+        for message in allMessages where selectedMessageIds.contains(message.id) {
+            message.tabId = targetTabId
+        }
+        try? modelContext.save()
+        exitSelectionMode()
     }
 
     /// Sync tabs list to App Group for Share Extension

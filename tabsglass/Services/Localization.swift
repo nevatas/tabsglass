@@ -156,6 +156,17 @@ enum L10n {
         static var whereToSave: String { NSLocalizedString("share.where_to_save", comment: "Where to save title") }
     }
 
+    // MARK: - Selection
+    enum Selection {
+        static var select: String { NSLocalizedString("selection.select", comment: "Select action") }
+        static var move: String { NSLocalizedString("selection.move", comment: "Move action") }
+        static var delete: String { NSLocalizedString("selection.delete", comment: "Delete action") }
+        static var moveTo: String { NSLocalizedString("selection.move_to", comment: "Move to title") }
+        static func count(_ n: Int) -> String {
+            String(format: NSLocalizedString("selection.count", comment: "Selected count"), n)
+        }
+    }
+
     // MARK: - Data (Export/Import)
     enum Data {
         static var title: String { NSLocalizedString("data.title", comment: "Data section title") }
