@@ -127,6 +127,11 @@
 "share.inbox_info" = "Se guardará en Entrada. Abre Taby para moverlo a otra pestaña.";
 "share.where_to_save" = "¿Dónde guardar?";
 
+// MARK: - Search
+
+"search.title" = "Búsqueda";
+"search.placeholder" = "Buscar...";
+
 // MARK: - Selection
 
 "selection.select" = "Seleccionar";

@@ -107,12 +107,15 @@ struct UnifiedChatView: UIViewControllerRepresentable {
 final class UnifiedChatViewController: UIViewController {
     var tabs: [Tab] = []  // Real tabs only (Inbox is virtual)
     var allMessages: [Message] = []  // All messages from SwiftUI
-    var selectedIndex: Int = 0  // 0 = Inbox, 1+ = real tabs
+    var selectedIndex: Int = 1  // 0 = Search, 1 = Inbox, 2+ = real tabs
     var onSend: (() -> Void)?
     var onEntitiesExtracted: (([TextEntity]) -> Void)?
 
-    /// Total tab count including virtual Inbox
-    private var totalTabCount: Int { 1 + tabs.count }
+    /// Total tab count including Search and virtual Inbox
+    private var totalTabCount: Int { 2 + tabs.count }
+
+    /// Check if currently on Search tab
+    private var isOnSearch: Bool { selectedIndex == 0 }
     var onIndexChange: ((Int) -> Void)?
     var onTextChange: ((String) -> Void)?
     var onSwitchFraction: ((CGFloat) -> Void)?  // -1.0 to 1.0
@@ -141,6 +144,8 @@ final class UnifiedChatViewController: UIViewController {
     private var pageViewController: UIPageViewController!
     private var messageControllers: [Int: MessageListViewController] = [:]
     let inputContainer = SwiftUIComposerContainer()
+    private var searchInputHostingController: UIHostingController<SearchInputWrapper>?
+    private var searchText: String = ""
     private var pageScrollView: UIScrollView?
     private var isUserSwiping: Bool = false
 
@@ -152,11 +157,24 @@ final class UnifiedChatViewController: UIViewController {
     private var fadeBottomToKeyboard: NSLayoutConstraint?
     private var fadeBottomToScreen: NSLayoutConstraint?
 
+    private let searchInputState = SearchInputState()
+    private var searchInputContainer: UIView?
+    private var searchBottomToKeyboard: NSLayoutConstraint?
+    private var searchBottomToSafeArea: NSLayoutConstraint?
+
+    // Track focus state for keyboard constraint switching
+    private var isComposerFocused: Bool = false
+    private var isSearchFocused: Bool = false
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
         setupPageViewController()
         setupInputView()
+        setupSearchInput()
+        // Search tabs are now embedded in MessageListViewController for the search tab
+        // This allows swipe gestures to work properly
+        updateInputVisibility(animated: false)
     }
 
     private func setupPageViewController() {
@@ -189,8 +207,8 @@ final class UnifiedChatViewController: UIViewController {
             }
         }
 
-        // Set initial page (always show Inbox at index 0)
-        let initialVC = getMessageController(for: 0)
+        // Set initial page (always show Inbox at index 1, Search is at index 0)
+        let initialVC = getMessageController(for: selectedIndex)
         pageViewController.setViewControllers([initialVC], direction: .forward, animated: false)
     }
 
@@ -220,6 +238,7 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onFocusChange = { [weak self] isFocused in
             guard let self = self else { return }
+            self.isComposerFocused = isFocused
             self.updateKeyboardConstraint(followKeyboard: isFocused)
         }
 
@@ -287,6 +306,160 @@ final class UnifiedChatViewController: UIViewController {
         }
     }
 
+    private func setupSearchInput() {
+        let searchInputView = SearchInputWrapper(state: searchInputState)
+        let hostingController = UIHostingController(rootView: searchInputView)
+        hostingController.view.backgroundColor = .clear
+
+        addChild(hostingController)
+
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.backgroundColor = .clear
+        container.addSubview(hostingController.view)
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+
+        view.addSubview(container)
+
+        // Create bottom constraints (similar to composer)
+        searchBottomToKeyboard = container.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        searchBottomToSafeArea = container.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+
+        NSLayoutConstraint.activate([
+            hostingController.view.topAnchor.constraint(equalTo: container.topAnchor),
+            hostingController.view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+
+            container.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+        searchBottomToSafeArea?.isActive = true
+
+        hostingController.didMove(toParent: self)
+
+        searchInputHostingController = hostingController
+        searchInputContainer = container
+
+        // Track focus changes to follow keyboard
+        searchInputState.onFocusChange = { [weak self] isFocused in
+            guard let self = self else { return }
+            self.isSearchFocused = isFocused
+            self.updateSearchKeyboardConstraint(followKeyboard: isFocused)
+        }
+
+        // Search input starts with interaction disabled - updateInputVisibility will enable when on Search
+        container.isUserInteractionEnabled = false
+        hostingController.view.isUserInteractionEnabled = false
+    }
+
+    /// Switch search input between keyboard-following and safe-area-anchored modes
+    private func updateSearchKeyboardConstraint(followKeyboard: Bool) {
+        if followKeyboard {
+            searchBottomToSafeArea?.isActive = false
+            searchBottomToKeyboard?.isActive = true
+        } else {
+            searchBottomToKeyboard?.isActive = false
+            searchBottomToSafeArea?.isActive = true
+        }
+        // Update embedded search tabs visibility (hide when keyboard is focused)
+        if let searchVC = messageControllers[0] {
+            searchVC.setSearchTabsVisible(!followKeyboard, animated: true)
+        }
+    }
+
+    /// Update input positions based on swipe fraction (-1 to 1)
+    /// Called during page swipe to sync input sliding with page transition
+    func updateInputPositions(fraction: CGFloat) {
+        guard !isSelectionMode else { return }
+
+        let screenWidth = view.bounds.width
+        guard screenWidth > 0 else { return }
+
+        // Calculate positions based on current tab and swipe direction
+        // selectedIndex: 0 = Search, 1 = Inbox, 2+ = tabs
+        // fraction: negative = swiping toward previous (lower index), positive = toward next (higher index)
+        // Search is LEFT of Inbox, so:
+        //   - Swiping from Search to Inbox: search slides left, composer slides in from right
+        //   - Swiping from Inbox to Search: composer slides right, search slides in from left
+
+        let composerOffset: CGFloat
+        let searchOffset: CGFloat
+
+        if selectedIndex == 0 {
+            // On Search tab, swiping right (fraction > 0) → to Inbox
+            // Search slides left (off-screen), composer comes from right
+            composerOffset = (1 - fraction) * screenWidth  // screenWidth → 0
+            searchOffset = -fraction * screenWidth         // 0 → -screenWidth
+        } else if selectedIndex == 1 && fraction < 0 {
+            // On Inbox, swiping left (fraction < 0) → to Search
+            // Composer slides right (off-screen), search comes from left
+            composerOffset = -fraction * screenWidth              // 0 → screenWidth
+            searchOffset = -(1 + fraction) * screenWidth          // -screenWidth → 0
+        } else {
+            // On Inbox swiping right (to real tabs) OR on real tabs
+            // Composer doesn't move, search stays off-screen left
+            composerOffset = 0
+            searchOffset = -screenWidth
+        }
+
+        inputContainer.transform = CGAffineTransform(translationX: composerOffset, y: 0)
+        searchInputContainer?.transform = CGAffineTransform(translationX: searchOffset, y: 0)
+        searchInputContainer?.alpha = 1  // Always visible, position determines visibility
+    }
+
+    /// Finalize input visibility after swipe completes
+    private func updateInputVisibility(animated: Bool) {
+        guard !isSelectionMode else {
+            // In selection mode, hide both inputs immediately
+            inputContainer.isUserInteractionEnabled = false
+            searchInputContainer?.isUserInteractionEnabled = false
+            searchInputHostingController?.view.isUserInteractionEnabled = false
+
+            let changes = {
+                self.inputContainer.alpha = 0
+                self.searchInputContainer?.alpha = 0
+            }
+            if animated {
+                UIView.animate(withDuration: 0.25, animations: changes)
+            } else {
+                changes()
+            }
+            return
+        }
+
+        // Use screen width as fallback if view hasn't laid out yet
+        let screenWidth = view.bounds.width > 0 ? view.bounds.width : UIScreen.main.bounds.width
+        let showSearch = isOnSearch
+
+        // Set interaction state immediately (not in animation block)
+        inputContainer.isUserInteractionEnabled = !showSearch
+        searchInputContainer?.isUserInteractionEnabled = showSearch
+        searchInputHostingController?.view.isUserInteractionEnabled = showSearch
+
+        let changes = {
+            // Composer slides off-screen right when on Search, otherwise stays in place
+            self.inputContainer.transform = showSearch
+                ? CGAffineTransform(translationX: screenWidth, y: 0)
+                : .identity
+
+            // Search input slides off-screen left when not on Search, otherwise stays in place
+            self.searchInputContainer?.transform = showSearch
+                ? .identity
+                : CGAffineTransform(translationX: -screenWidth, y: 0)
+
+            // Both stay visible (alpha = 1), position determines visibility
+            self.inputContainer.alpha = 1
+            self.searchInputContainer?.alpha = 1
+        }
+
+        if animated {
+            UIView.animate(withDuration: 0.25, animations: changes)
+        } else {
+            changes()
+        }
+    }
+
     private func updateAllContentInsets(animated: Bool = false) {
         // Calculate bottom padding from actual input container position
         view.layoutIfNeeded() // Ensure layout is up to date
@@ -311,10 +484,10 @@ final class UnifiedChatViewController: UIViewController {
         }
     }
 
-    /// Calculate tabId for given index: 0 = nil (Inbox), 1+ = real tab ID
+    /// Calculate tabId for given index: 0 = Search (nil), 1 = Inbox (nil), 2+ = real tab ID
     private func tabId(for index: Int) -> UUID? {
-        guard index > 0 && index <= tabs.count else { return nil }
-        return tabs[index - 1].id
+        guard index > 1 && index <= tabs.count + 1 else { return nil }
+        return tabs[index - 2].id
     }
 
     /// Filter messages for a given tabId
@@ -324,22 +497,29 @@ final class UnifiedChatViewController: UIViewController {
 
     private func getMessageController(for index: Int) -> MessageListViewController {
         let currentTabId = tabId(for: index)
+        // Search tab (index 0) shows empty for now
+        let tabMessages = index == 0 ? [] : messages(for: currentTabId)
 
         if let existing = messageControllers[index] {
             existing.allTabs = tabs
             existing.currentTabId = currentTabId
-            existing.messages = messages(for: currentTabId)
+            existing.messages = tabMessages
             existing.onContextMenuWillShow = { [weak self] in
                 self?.resetComposerPosition()
+            }
+            // Update search tabs if this is the search tab
+            if index == 0 {
+                existing.updateSearchTabs(tabs: tabs)
             }
             return existing
         }
 
         let vc = MessageListViewController()
         vc.pageIndex = index
+        vc.isSearchTab = (index == 0)
         vc.currentTabId = currentTabId
         vc.allTabs = tabs
-        vc.messages = messages(for: currentTabId)
+        vc.messages = tabMessages
         vc.onTap = { [weak self] in
             self?.view.endEditing(true)
         }
@@ -376,6 +556,17 @@ final class UnifiedChatViewController: UIViewController {
         vc.selectedMessageIds = selectedMessageIds
         vc.onEnterSelectionMode = onEnterSelectionMode
         vc.onToggleMessageSelection = onToggleMessageSelection
+
+        // Search tab: callback for when a tab button is tapped
+        if index == 0 {
+            vc.onTabSelected = { [weak self] tabIndex in
+                guard let self = self else { return }
+                self.selectedIndex = tabIndex
+                self.onIndexChange?(tabIndex)
+                self.updatePageSelection(animated: true)
+            }
+        }
+
         messageControllers[index] = vc
         return vc
     }
@@ -386,10 +577,23 @@ final class UnifiedChatViewController: UIViewController {
 
         // Determine direction based on current position
         if let currentVC = pageViewController.viewControllers?.first as? MessageListViewController {
-            let direction: UIPageViewController.NavigationDirection = selectedIndex > currentVC.pageIndex ? .forward : .reverse
+            let previousIndex = currentVC.pageIndex
+            let direction: UIPageViewController.NavigationDirection = selectedIndex > previousIndex ? .forward : .reverse
+
+            // For programmatic changes, animate input positions in sync with page transition
+            if animated && (previousIndex <= 1 || selectedIndex <= 1) {
+                // Animate inputs when transitioning to/from Search or Inbox
+                UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseInOut) {
+                    self.updateInputVisibility(animated: false)
+                }
+            } else {
+                updateInputVisibility(animated: animated)
+            }
+
             pageViewController.setViewControllers([vc], direction: direction, animated: animated)
         } else {
             pageViewController.setViewControllers([vc], direction: .forward, animated: false)
+            updateInputVisibility(animated: false)
         }
     }
 
@@ -399,7 +603,8 @@ final class UnifiedChatViewController: UIViewController {
             if index < totalTabCount {
                 currentVC.currentTabId = tabId(for: index)
                 currentVC.allTabs = tabs
-                currentVC.messages = messages(for: currentVC.currentTabId)
+                // Search tab (index 0) shows empty for now
+                currentVC.messages = index == 0 ? [] : messages(for: currentVC.currentTabId)
                 currentVC.reloadMessages()
             }
         }
@@ -408,11 +613,8 @@ final class UnifiedChatViewController: UIViewController {
     // MARK: - Selection Mode
 
     private func updateSelectionModeUI() {
-        // Hide/show composer
-        UIView.animate(withDuration: 0.25) {
-            self.inputContainer.alpha = self.isSelectionMode ? 0 : 1
-            self.inputContainer.isUserInteractionEnabled = !self.isSelectionMode
-        }
+        // Update composer/search input visibility
+        updateInputVisibility(animated: true)
 
         // Block/unblock page swiping
         pageScrollView?.isScrollEnabled = !isSelectionMode
@@ -695,6 +897,7 @@ extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewC
               let currentVC = pageViewController.viewControllers?.first as? MessageListViewController else { return }
         selectedIndex = currentVC.pageIndex
         onIndexChange?(selectedIndex)
+        updateInputVisibility(animated: true)
     }
 }
 
@@ -720,6 +923,9 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
         // fraction: -1 = fully swiped to previous, 0 = center, +1 = fully swiped to next
         let clampedFraction = max(-1, min(1, fraction))
         onSwitchFraction?(clampedFraction)
+
+        // Sync input sliding with page swipe
+        updateInputPositions(fraction: clampedFraction)
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
@@ -740,8 +946,9 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
 // MARK: - Message List View Controller
 
 final class MessageListViewController: UIViewController {
-    var pageIndex: Int = 0  // 0 = Inbox, 1+ = real tabs
-    var currentTabId: UUID?  // nil = Inbox
+    var pageIndex: Int = 0  // 0 = Search, 1 = Inbox, 2+ = real tabs
+    var isSearchTab: Bool = false  // True for Search tab (index 0)
+    var currentTabId: UUID?  // nil = Inbox or Search
     var allTabs: [Tab] = []  // Real tabs only
     var messages: [Message] = []  // Messages passed from SwiftUI
     var onTap: (() -> Void)?
@@ -764,6 +971,9 @@ final class MessageListViewController: UIViewController {
     var onEnterSelectionMode: ((Message) -> Void)?
     var onToggleMessageSelection: ((UUID, Bool) -> Void)?
 
+    // Search tabs (for search tab only)
+    var onTabSelected: ((Int) -> Void)?  // Callback when a tab button is tapped
+
     private let tableView = UITableView()
     private var sortedMessages: [Message] = []
     private var longPressGesture: UILongPressGestureRecognizer!
@@ -773,10 +983,18 @@ final class MessageListViewController: UIViewController {
     private var pendingAppearAnimationIds: Set<UUID> = []
     private var isAnimatingFirstMessage = false
 
+    // Embedded search tabs for search tab
+    private var searchTabsHostingController: UIHostingController<SearchTabsView>?
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
         setupTableView()
+
+        // Setup embedded search tabs if this is the search tab
+        if isSearchTab {
+            setupSearchTabs()
+        }
     }
 
     private func setupTableView() {
@@ -812,6 +1030,50 @@ final class MessageListViewController: UIViewController {
         longPressGesture.cancelsTouchesInView = false
         longPressGesture.delegate = self
         tableView.addGestureRecognizer(longPressGesture)
+    }
+
+    private func setupSearchTabs() {
+        let searchTabsView = SearchTabsView(tabs: allTabs) { [weak self] index in
+            self?.onTabSelected?(index)
+        }
+
+        let hostingController = UIHostingController(rootView: searchTabsView)
+        hostingController.view.backgroundColor = .clear
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+
+        addChild(hostingController)
+        view.addSubview(hostingController.view)
+
+        NSLayoutConstraint.activate([
+            hostingController.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 120),
+            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -80)
+        ])
+
+        hostingController.didMove(toParent: self)
+        searchTabsHostingController = hostingController
+    }
+
+    /// Update the search tabs with new data
+    func updateSearchTabs(tabs: [Tab]) {
+        guard isSearchTab, let hostingController = searchTabsHostingController else { return }
+        hostingController.rootView = SearchTabsView(tabs: tabs) { [weak self] index in
+            self?.onTabSelected?(index)
+        }
+    }
+
+    /// Show or hide embedded search tabs (for keyboard focus state)
+    func setSearchTabsVisible(_ visible: Bool, animated: Bool) {
+        guard isSearchTab, let hostingController = searchTabsHostingController else { return }
+
+        if animated {
+            UIView.animate(withDuration: 0.25) {
+                hostingController.view.alpha = visible ? 1 : 0
+            }
+        } else {
+            hostingController.view.alpha = visible ? 1 : 0
+        }
     }
 
     @objc private func handleTap() {
@@ -1114,11 +1376,13 @@ final class MessageListViewController: UIViewController {
 
 extension MessageListViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        sortedMessages.isEmpty ? 1 : sortedMessages.count
+        // Search tab shows no cells (tabs overlay handles empty state)
+        if isSearchTab { return 0 }
+        return sortedMessages.isEmpty ? 1 : sortedMessages.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        if sortedMessages.isEmpty {
+        if sortedMessages.isEmpty && !isSearchTab {
             let cell = tableView.dequeueReusableCell(withIdentifier: "EmptyCell", for: indexPath) as! EmptyTableCell
             cell.transform = CGAffineTransform(scaleX: 1, y: -1)
             return cell
@@ -1426,5 +1690,17 @@ final class BottomFadeGradientView: UIView {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+}
+
+// MARK: - Pass-Through View
+
+/// A view that passes through touches that don't hit any subview
+final class PassThroughView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hitView = super.hitTest(point, with: event)
+        // If hit view is self, pass through (return nil)
+        // Otherwise return the hit subview
+        return hitView === self ? nil : hitView
     }
 }

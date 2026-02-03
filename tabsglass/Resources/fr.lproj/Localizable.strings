@@ -127,6 +127,11 @@
 "share.inbox_info" = "Sera enregistré dans Reçus. Ouvre Taby pour le déplacer vers un autre onglet.";
 "share.where_to_save" = "Où enregistrer ?";
 
+// MARK: - Search
+
+"search.title" = "Recherche";
+"search.placeholder" = "Rechercher...";
+
 // MARK: - Selection
 
 "selection.select" = "Sélectionner";

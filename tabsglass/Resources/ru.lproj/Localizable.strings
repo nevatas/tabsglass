@@ -127,6 +127,11 @@
 "share.inbox_info" = "Сохранится во Входящие. Откройте Taby чтобы переместить в другой таб.";
 "share.where_to_save" = "Куда сохранить?";
 
+// MARK: - Search
+
+"search.title" = "Поиск";
+"search.placeholder" = "Поиск...";
+
 // MARK: - Selection
 
 "selection.select" = "Выбрать";

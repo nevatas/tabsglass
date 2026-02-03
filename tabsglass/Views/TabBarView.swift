@@ -13,13 +13,15 @@ import SwiftUI
 /// Type alias to avoid conflict with SwiftUI.Tab
 typealias AppTab = Tab
 
-/// Represents either the virtual Inbox or a real Tab for display in tab bar
+/// Represents Search, virtual Inbox, or a real Tab for display in tab bar
 enum TabDisplayItem: Identifiable {
+    case search
     case inbox
     case realTab(AppTab)
 
     var id: String {
         switch self {
+        case .search: return "search"
         case .inbox: return "inbox"
         case .realTab(let tab): return tab.id.uuidString
         }
@@ -27,9 +29,15 @@ enum TabDisplayItem: Identifiable {
 
     var title: String {
         switch self {
+        case .search: return ""  // Icon only
         case .inbox: return AppSettings.shared.inboxTitle
         case .realTab(let tab): return tab.title
         }
+    }
+
+    var isSearch: Bool {
+        if case .search = self { return true }
+        return false
     }
 
     var isInbox: Bool {
@@ -49,19 +57,36 @@ struct TabBarView: View {
     let tabs: [Tab]
     @Binding var selectedIndex: Int
     @Binding var switchFraction: CGFloat  // -1.0 ... 0 ... 1.0 при свайпе
+    var tabsOffset: CGFloat = 0  // Offset for tabs row only (for Search transition)
     let onAddTap: () -> Void
     let onMenuTap: () -> Void
     let onRenameTab: (Tab) -> Void
     let onRenameInbox: () -> Void
     let onReorderTabs: () -> Void
     let onDeleteTab: (Tab) -> Void
+    var onGoToInbox: (() -> Void)? = nil  // Called when arrow button tapped on Search
 
     private var themeManager: ThemeManager { ThemeManager.shared }
     @AppStorage("spaceName") private var spaceName = "Taby"
 
+    private var isOnSearch: Bool { selectedIndex == 0 }
+
+    /// Progress toward Search screen (0 = not on Search, 1 = fully on Search)
+    /// Interpolates during swipe for smooth title/button transition
+    private var searchProgress: CGFloat {
+        if selectedIndex == 0 {
+            // On Search, swiping right toward Inbox: 1 → 0
+            return max(0, 1 - switchFraction)
+        } else if selectedIndex == 1 && switchFraction < 0 {
+            // On Inbox, swiping left toward Search: 0 → 1
+            return min(1, -switchFraction)
+        }
+        return 0
+    }
+
     var body: some View {
         VStack(spacing: 10) {
-            // Header buttons row
+            // Header buttons row - stays in place
             HStack {
                 // Settings button (left) - circular liquid glass
                 Button(action: onMenuTap) {
@@ -76,18 +101,42 @@ struct TabBarView: View {
 
                 Spacer()
 
-                // Title
-                Text(spaceName)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                // Title - changes to "Search" during swipe
+                ZStack {
+                    Text(spaceName)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .opacity(1 - searchProgress)
+                        .scaleEffect(1 - searchProgress * 0.2)
+
+                    Text(L10n.Search.title)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .opacity(searchProgress)
+                        .scaleEffect(0.8 + searchProgress * 0.2)
+                }
 
                 Spacer()
 
-                // Plus button (right) - circular liquid glass
-                Button(action: onAddTap) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .medium))
-                        .frame(width: 32, height: 32)
+                // Right button - icon morphs between plus and arrow during swipe
+                Button {
+                    if searchProgress >= 0.5 {
+                        onGoToInbox?()
+                    } else {
+                        onAddTap()
+                    }
+                } label: {
+                    ZStack {
+                        Image(systemName: "plus")
+                            .opacity(1 - searchProgress)
+                            .scaleEffect(1 - searchProgress * 0.5)
+
+                        Image(systemName: "chevron.right")
+                            .opacity(searchProgress)
+                            .scaleEffect(0.5 + searchProgress * 0.5)
+                    }
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 32, height: 32)
                 }
                 .tint(themeManager.currentTheme.accentColor)
                 .buttonStyle(.glass)
@@ -96,7 +145,7 @@ struct TabBarView: View {
             }
             .padding(.horizontal, 8)
 
-            // Telegram-style unified tab bar
+            // Telegram-style unified tab bar - slides during Search transition
             TelegramTabBar(
                 tabs: tabs,
                 selectedIndex: $selectedIndex,
@@ -107,6 +156,7 @@ struct TabBarView: View {
                 onDeleteTab: onDeleteTab
             )
             .padding(.horizontal, 12)
+            .offset(x: tabsOffset)
         }
         .padding(.top, 4)
         .padding(.bottom, 16)
@@ -158,9 +208,9 @@ struct TelegramTabBar: View {
     // Track frames of each tab for selection indicator positioning
     @State private var tabFrames: [Int: CGRect] = [:]
 
-    /// Combined list: Inbox (virtual) + real tabs
+    /// Combined list: Search + Inbox (virtual) + real tabs
     private var allItems: [TabDisplayItem] {
-        var items: [TabDisplayItem] = [.inbox]
+        var items: [TabDisplayItem] = [.search, .inbox]
         items.append(contentsOf: tabs.map { TabDisplayItem.realTab($0) })
         return items
     }
@@ -334,43 +384,53 @@ struct TabLabelView: View {
 
     var body: some View {
         Button(action: onTap) {
-            Text(item.title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(textColor)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+            if item.isSearch {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(textColor)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+            } else {
+                Text(item.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(textColor)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+            }
         }
         .buttonStyle(TabPressStyle())
-        .contextMenu {
-            // Rename available for all tabs (including Inbox)
-            Button {
-                onRename()
-            } label: {
-                Label(L10n.Tab.rename, systemImage: "pencil")
-            }
+        .if(!item.isSearch) { view in
+            view.contextMenu {
+                // Rename available for Inbox and real tabs
+                Button {
+                    onRename()
+                } label: {
+                    Label(L10n.Tab.rename, systemImage: "pencil")
+                }
 
-            // Reorder and Delete only for real tabs (not Inbox)
-            if !item.isInbox {
-                if showReorder {
-                    Button {
-                        onReorder()
+                // Reorder and Delete only for real tabs (not Inbox)
+                if !item.isInbox {
+                    if showReorder {
+                        Button {
+                            onReorder()
+                        } label: {
+                            Label(L10n.Tab.move, systemImage: "arrow.up.arrow.down")
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        onDelete()
                     } label: {
-                        Label(L10n.Tab.move, systemImage: "arrow.up.arrow.down")
+                        Label(L10n.Tab.delete, systemImage: "trash")
                     }
                 }
-
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label(L10n.Tab.delete, systemImage: "trash")
-                }
+            } preview: {
+                // Fixed-size preview to prevent scaling animation
+                Text(item.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
             }
-        } preview: {
-            // Fixed-size preview to prevent scaling animation
-            Text(item.title)
-                .font(.system(size: 15, weight: .medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
         }
     }
 }
@@ -382,6 +442,19 @@ struct TabPressStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .animation(.spring(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Conditional View Modifier
+
+extension View {
+    @ViewBuilder
+    func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
     }
 }
 

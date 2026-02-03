@@ -127,6 +127,11 @@
 "share.inbox_info" = "Will be saved to Inbox. Open Taby to move to another tab.";
 "share.where_to_save" = "Where to save?";
 
+// MARK: - Search
+
+"search.title" = "Search";
+"search.placeholder" = "Search...";
+
 // MARK: - Selection
 
 "selection.select" = "Select";

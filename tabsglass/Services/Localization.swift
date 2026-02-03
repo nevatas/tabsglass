@@ -156,6 +156,12 @@ enum L10n {
         static var whereToSave: String { NSLocalizedString("share.where_to_save", comment: "Where to save title") }
     }
 
+    // MARK: - Search
+    enum Search {
+        static var title: String { NSLocalizedString("search.title", comment: "Search screen title") }
+        static var placeholder: String { NSLocalizedString("search.placeholder", comment: "Search placeholder") }
+    }
+
     // MARK: - Selection
     enum Selection {
         static var select: String { NSLocalizedString("selection.select", comment: "Select action") }

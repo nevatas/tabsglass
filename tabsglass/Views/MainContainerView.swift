@@ -13,7 +13,7 @@ struct MainContainerView: View {
     @Environment(\.requestReview) private var requestReview
     @Query(sort: \Tab.position) private var tabs: [Tab]
     @Query(sort: \Message.createdAt) private var allMessages: [Message]
-    @State private var selectedTabIndex = 0  // 0 = Inbox (virtual), 1+ = real tabs
+    @State private var selectedTabIndex = 1  // 0 = Search, 1 = Inbox (virtual), 2+ = real tabs
     @State private var showNewTabAlert = false
     @State private var showRenameAlert = false
     @State private var showRenameInboxAlert = false
@@ -40,20 +40,40 @@ struct MainContainerView: View {
     @State private var selectedMessageIds: Set<UUID> = []
     @State private var showMoveSheet = false
 
-    /// Total number of tabs including virtual Inbox
+    /// Total number of tabs including Search and virtual Inbox
     private var totalTabCount: Int {
-        1 + tabs.count  // Inbox + real tabs
+        2 + tabs.count  // Search + Inbox + real tabs
     }
 
-    /// Get tabId for current selection (nil = Inbox)
+    /// Get tabId for current selection (nil = Inbox or Search)
     private var currentTabId: UUID? {
-        guard selectedTabIndex > 0 && selectedTabIndex <= tabs.count else { return nil }
-        return tabs[selectedTabIndex - 1].id
+        guard selectedTabIndex > 1 && selectedTabIndex <= tabs.count + 1 else { return nil }
+        return tabs[selectedTabIndex - 2].id
+    }
+
+    /// Check if currently on Search
+    private var isOnSearch: Bool {
+        selectedTabIndex == 0
+    }
+
+    /// Calculate TabBar offset for Search ↔ Inbox transition
+    private var tabBarOffset: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        if selectedTabIndex == 0 {
+            // On Search: TabBar is off-screen right, but slides in when swiping back to Inbox
+            // switchFraction > 0 means swiping toward Inbox
+            return screenWidth * (1 - switchFraction)
+        } else if selectedTabIndex == 1 && switchFraction < 0 {
+            // On Inbox, swiping toward Search: TabBar slides out to the right
+            // switchFraction: 0 → -1
+            return -switchFraction * screenWidth
+        }
+        return 0  // On other tabs, TabBar stays in place
     }
 
     /// Check if currently on Inbox
     private var isOnInbox: Bool {
-        selectedTabIndex == 0
+        selectedTabIndex == 1
     }
 
     /// Check if messages can be moved (there are other destinations)
@@ -127,31 +147,37 @@ struct MainContainerView: View {
             // Header layer (floating on top) - hidden in selection mode
             if !isSelectionMode {
                 TabBarView(
-                tabs: tabs,
-                selectedIndex: $selectedTabIndex,
-                switchFraction: $switchFraction,
-                onAddTap: {
-                    newTabTitle = ""
-                    showNewTabAlert = true
-                },
-                onMenuTap: { showSettings = true },
-                onRenameTab: { tab in
-                    tabToRename = tab
-                    renameTabTitle = tab.title
-                    showRenameAlert = true
-                },
-                onRenameInbox: {
-                    renameInboxTitle = AppSettings.shared.inboxTitle
-                    showRenameInboxAlert = true
-                },
-                onReorderTabs: {
-                    showReorderTabs = true
-                },
-                onDeleteTab: { tab in
-                    tabToDelete = tab
-                    showDeleteAlert = true
-                }
-            )
+                    tabs: tabs,
+                    selectedIndex: $selectedTabIndex,
+                    switchFraction: $switchFraction,
+                    tabsOffset: tabBarOffset,
+                    onAddTap: {
+                        newTabTitle = ""
+                        showNewTabAlert = true
+                    },
+                    onMenuTap: { showSettings = true },
+                    onRenameTab: { tab in
+                        tabToRename = tab
+                        renameTabTitle = tab.title
+                        showRenameAlert = true
+                    },
+                    onRenameInbox: {
+                        renameInboxTitle = AppSettings.shared.inboxTitle
+                        showRenameInboxAlert = true
+                    },
+                    onReorderTabs: {
+                        showReorderTabs = true
+                    },
+                    onDeleteTab: { tab in
+                        tabToDelete = tab
+                        showDeleteAlert = true
+                    },
+                    onGoToInbox: {
+                        withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                            selectedTabIndex = 1  // Go to Inbox
+                        }
+                    }
+                )
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D62F85B92F322E4000186C77 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = D6EXPORT022F000002000F3043 /* ZIPFoundation */; };
 		D6C2B1552F2B909B000F3043 /* share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D6C2B14B2F2B909B000F3043 /* share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -107,6 +108,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D62F85B92F322E4000186C77 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
