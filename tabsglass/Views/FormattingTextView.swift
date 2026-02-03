@@ -54,7 +54,7 @@ final class FormattingTextView: UITextView {
         // Placeholder
         placeholderLabel.text = placeholder
         placeholderLabel.font = font
-        placeholderLabel.textColor = .placeholderText
+        placeholderLabel.textColor = ThemeManager.shared.currentTheme.placeholderColor
         placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(placeholderLabel)
 
@@ -92,6 +92,7 @@ final class FormattingTextView: UITextView {
 
     @objc private func themeDidChange() {
         updateLinkTextAttributes()
+        placeholderLabel.textColor = ThemeManager.shared.currentTheme.placeholderColor
     }
 
     deinit {

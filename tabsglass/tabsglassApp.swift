@@ -14,8 +14,16 @@ struct tabsglassApp: App {
     let modelContainer: ModelContainer
 
     init() {
+        // Pre-warm singletons to avoid lazy initialization delays on first use
+        _ = AppSettings.shared
+        _ = ThemeManager.shared
+        _ = ImageCache.shared
+
         // Warm up keyboard on app launch to avoid delay on first use
         KeyboardWarmer.shared.warmUp()
+
+        // Warm up Liquid Glass effects to avoid delay on first render
+        GlassEffectWarmer.shared.warmUp()
 
         // Migrate photos to shared container (for Share Extension support)
         // Note: Database migration happens automatically in SharedModelContainer.create()
@@ -106,18 +114,19 @@ private extension tabsglassApp {
 
 // MARK: - Keyboard Warmer
 
-/// Pre-loads keyboard resources to avoid delay on first text field focus
-final class KeyboardWarmer {
-    static let shared = KeyboardWarmer()
+// MARK: - Glass Effect Warmer
 
-    private var warmUpTextField: UITextField?
+/// Pre-loads Liquid Glass rendering pipeline to avoid delay on first use
+final class GlassEffectWarmer {
+    static let shared = GlassEffectWarmer()
+
     private var warmUpWindow: UIWindow?
+    private var warmUpHostingController: UIHostingController<AnyView>?
 
     private init() {}
 
     func warmUp() {
-        // Delay slightly to ensure window scene is ready
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.performWarmUp()
         }
     }
@@ -126,33 +135,123 @@ final class KeyboardWarmer {
         guard let windowScene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first else {
+            // Retry if not ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.performWarmUp()
+            }
+            return
+        }
+
+        // Create off-screen window with GlassEffect view
+        let window = UIWindow(windowScene: windowScene)
+        window.frame = CGRect(x: -500, y: -500, width: 100, height: 100)
+        window.windowLevel = .init(rawValue: -1000)
+        window.isHidden = false
+
+        // Create a SwiftUI view with GlassEffect to trigger pipeline initialization
+        let glassView = AnyView(
+            GlassEffectContainer {
+                Color.clear
+                    .frame(width: 50, height: 50)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 12))
+            }
+        )
+
+        let hostingController = UIHostingController(rootView: glassView)
+        hostingController.view.frame = window.bounds
+        window.rootViewController = hostingController
+
+        self.warmUpWindow = window
+        self.warmUpHostingController = hostingController
+
+        // Force layout to trigger glass effect rendering
+        hostingController.view.layoutIfNeeded()
+
+        // Clean up after rendering is complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.warmUpHostingController?.view.removeFromSuperview()
+            self?.warmUpHostingController = nil
+            self?.warmUpWindow?.isHidden = true
+            self?.warmUpWindow = nil
+        }
+    }
+}
+
+/// Pre-loads keyboard resources to avoid delay on first text field focus
+final class KeyboardWarmer {
+    static let shared = KeyboardWarmer()
+
+    private var warmUpTextView: FormattingTextView?
+    private var warmUpTextField: UITextField?
+    private var warmUpWindow: UIWindow?
+    private var retryCount = 0
+    private let maxRetries = 5
+
+    private init() {}
+
+    func warmUp() {
+        // Start immediately, retry if window scene not ready yet
+        performWarmUp()
+    }
+
+    private func performWarmUp() {
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first else {
+            // Retry with small delay if window scene not ready
+            retryCount += 1
+            if retryCount < maxRetries {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    self?.performWarmUp()
+                }
+            }
             return
         }
 
         // Create an off-screen window
         let window = UIWindow(windowScene: windowScene)
-        window.frame = CGRect(x: -100, y: -100, width: 10, height: 10)
+        window.frame = CGRect(x: -100, y: -100, width: 200, height: 100)
         window.windowLevel = .init(rawValue: -1000)
         window.isHidden = false
 
+        // Use FormattingTextView (actual composer class) for accurate warmup
+        // This ensures all FormattingTextView initialization code runs:
+        // - setup() method with observers and UIEditMenuInteraction
+        // - ThemeManager access and link text attributes
+        let textView = FormattingTextView()
+        textView.frame = CGRect(x: 0, y: 0, width: 100, height: 50)
+        window.addSubview(textView)
+
+        // Also warm up UITextField for search input
         let textField = UITextField()
-        textField.autocorrectionType = .no
-        textField.spellCheckingType = .no
+        textField.frame = CGRect(x: 100, y: 0, width: 100, height: 50)
+        textField.autocorrectionType = .default
+        textField.spellCheckingType = .default
+        textField.font = .systemFont(ofSize: 16)
         window.addSubview(textField)
 
         // Keep references to prevent deallocation
         self.warmUpWindow = window
+        self.warmUpTextView = textView
         self.warmUpTextField = textField
 
-        // Briefly become first responder to load keyboard
-        textField.becomeFirstResponder()
+        // Briefly become first responder to load keyboard (use FormattingTextView first)
+        textView.becomeFirstResponder()
 
-        // Resign after keyboard is loaded (longer delay for full preload)
+        // After a short time, switch to TextField to warm it up too
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.warmUpTextView?.resignFirstResponder()
+            self?.warmUpTextField?.becomeFirstResponder()
+        }
+
+        // Keep keyboard up for full preload (including autocomplete, emoji keyboard, etc.)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.warmUpTextField?.resignFirstResponder()
 
-            // Clean up
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            // Clean up after keyboard is fully dismissed
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.warmUpTextView?.removeFromSuperview()
+                self?.warmUpTextView = nil
                 self?.warmUpTextField?.removeFromSuperview()
                 self?.warmUpTextField = nil
                 self?.warmUpWindow?.isHidden = true

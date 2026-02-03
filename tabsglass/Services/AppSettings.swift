@@ -199,6 +199,26 @@ enum AppTheme: String, CaseIterable, Identifiable {
             return Color(red: 0x1C/255, green: 0x2C/255, blue: 0x40/255).opacity(0.95)
         }
     }
+
+    /// Placeholder text color - tinted for colored themes
+    var placeholderColor: UIColor {
+        switch self {
+        case .system, .light, .dark:
+            return .placeholderText
+        case .pink:
+            // Desaturated pink, darker for better visibility
+            return UIColor(red: 0xA0/255, green: 0x70/255, blue: 0x85/255, alpha: 1)
+        case .beige:
+            // Warm brown-gray
+            return UIColor(red: 0x9A/255, green: 0x88/255, blue: 0x70/255, alpha: 1)
+        case .green:
+            // Muted green-gray
+            return UIColor(red: 0x60/255, green: 0x85/255, blue: 0x60/255, alpha: 1)
+        case .blue:
+            // Soft blue-gray
+            return UIColor(red: 0x60/255, green: 0x7A/255, blue: 0x98/255, alpha: 1)
+        }
+    }
 }
 
 // MARK: - Theme Manager

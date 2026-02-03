@@ -205,6 +205,8 @@ struct TelegramTabBar: View {
     let onReorderTabs: () -> Void
     let onDeleteTab: (Tab) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
     // Track frames of each tab for selection indicator positioning
     @State private var tabFrames: [Int: CGRect] = [:]
 
@@ -290,6 +292,7 @@ struct TelegramTabBar: View {
             Capsule()
                 .fill(.clear)
                 .glassEffect(.regular, in: .capsule)
+                .id("tabbar-glass-\(colorScheme)")  // Force recreation when theme changes
         }
         .clipShape(Capsule())
     }
@@ -348,6 +351,7 @@ struct TelegramTabBar: View {
 
 struct SelectionIndicatorView: View {
     let frame: CGRect
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Capsule()
@@ -356,6 +360,7 @@ struct SelectionIndicatorView: View {
             .frame(width: max(frame.width, 0), height: max(frame.height, 0))
             .offset(x: frame.minX, y: frame.minY)
             .animation(.interactiveSpring, value: frame)
+            .id("indicator-glass-\(colorScheme)")  // Force recreation when theme changes
     }
 }
 

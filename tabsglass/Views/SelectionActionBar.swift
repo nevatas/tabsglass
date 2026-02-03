@@ -25,6 +25,16 @@ struct SelectionActionBar: View {
         selectedCount == 0 || !canMove
     }
 
+    /// Accent color for icons and text (uses theme color or falls back to primary)
+    private var accentColor: Color {
+        themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .primary)
+    }
+
+    /// Unique ID that changes with theme to force glassEffect refresh
+    private var glassId: String {
+        "\(themeManager.currentTheme.rawValue)-\(colorScheme == .dark ? "dark" : "light")"
+    }
+
     var body: some View {
         GlassEffectContainer {
             HStack(spacing: 12) {
@@ -32,10 +42,12 @@ struct SelectionActionBar: View {
                 Button(action: onMove) {
                     Label(L10n.Selection.move, systemImage: "folder")
                         .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(accentColor)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                 }
                 .glassEffect(.regular.tint(composerTint), in: .capsule)
+                .id("\(glassId)-move")  // Force recreation when theme changes
                 .disabled(isMoveDisabled)
                 .opacity(isMoveDisabled ? 0.5 : 1)
 
@@ -48,6 +60,7 @@ struct SelectionActionBar: View {
                         .padding(.vertical, 14)
                 }
                 .glassEffect(.regular.tint(composerTint), in: .capsule)
+                .id("\(glassId)-delete")  // Force recreation when theme changes
                 .disabled(selectedCount == 0)
                 .opacity(selectedCount == 0 ? 0.5 : 1)
             }
@@ -71,15 +84,27 @@ struct SelectionCancelBar: View {
         return colorScheme == .dark ? theme.composerTintColorDark : theme.composerTintColor
     }
 
+    /// Accent color for icons (uses theme color or falls back to primary)
+    private var accentColor: Color {
+        themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .primary)
+    }
+
+    /// Unique ID that changes with theme to force glassEffect refresh
+    private var glassId: String {
+        "\(themeManager.currentTheme.rawValue)-\(colorScheme == .dark ? "dark" : "light")"
+    }
+
     var body: some View {
         GlassEffectContainer {
             HStack {
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
                         .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(accentColor)
                         .padding(12)
                 }
                 .glassEffect(.regular.tint(composerTint), in: .circle)
+                .id(glassId)  // Force recreation when theme changes
 
                 Spacer()
 

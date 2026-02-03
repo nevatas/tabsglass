@@ -11,8 +11,8 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query private var allTabs: [Tab]
-    @Query private var allMessages: [Message]
+    // Note: Removed @Query to avoid loading all data on view creation (causes UI freeze)
+    // Data is fetched lazily in startExport() when actually needed
 
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
     @AppStorage("spaceName") private var spaceName = "Taby"
@@ -181,11 +181,17 @@ struct SettingsView: View {
         showExportProgress = true
         exportProgress = ExportImportProgress(phase: .preparing, current: 0, total: 1)
 
+        // Fetch data lazily only when export is requested (not on view creation)
+        let tabsDescriptor = FetchDescriptor<Tab>(sortBy: [SortDescriptor(\.position)])
+        let messagesDescriptor = FetchDescriptor<Message>()
+        let tabs = (try? modelContext.fetch(tabsDescriptor)) ?? []
+        let messages = (try? modelContext.fetch(messagesDescriptor)) ?? []
+
         Task {
             do {
                 let archiveURL = try await exportImportService.exportData(
-                    tabs: allTabs,
-                    messages: allMessages
+                    tabs: tabs,
+                    messages: messages
                 ) { progress in
                     exportProgress = progress
                 }

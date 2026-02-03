@@ -44,6 +44,11 @@ struct TabChipButton: View {
         return colorScheme == .dark ? theme.composerTintColorDark : theme.composerTintColor
     }
 
+    /// Unique ID that changes with theme to force glassEffect refresh
+    private var glassId: String {
+        "\(themeManager.currentTheme.rawValue)-\(colorScheme == .dark ? "dark" : "light")"
+    }
+
     var body: some View {
         Button(action: action) {
             Text(title)
@@ -57,6 +62,7 @@ struct TabChipButton: View {
             .regular.tint(chipTint).interactive(),
             in: .capsule
         )
+        .id(glassId)  // Force recreation when theme changes
     }
 }
 

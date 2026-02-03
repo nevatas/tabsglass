@@ -477,6 +477,11 @@ struct EmbeddedComposerView: View {
         return colorScheme == .dark ? theme.composerTintColorDark : theme.composerTintColor
     }
 
+    /// Unique ID that changes with theme to force glassEffect refresh
+    private var glassId: String {
+        "\(themeManager.currentTheme.rawValue)-\(colorScheme == .dark ? "dark" : "light")"
+    }
+
     var body: some View {
         GlassEffectContainer {
             VStack(spacing: 0) {
@@ -575,6 +580,7 @@ struct EmbeddedComposerView: View {
                 .regular.tint(composerTint).interactive(),
                 in: .rect(cornerRadius: 24)
             )
+            .id(glassId)  // Force recreation when theme changes
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
@@ -960,6 +966,15 @@ final class MessageTableCell: UITableViewCell {
 
     @objc private func handleThemeChange() {
         updateBubbleColor()
+        updateCheckboxColor()
+    }
+
+    private func updateCheckboxColor() {
+        if let accentColor = ThemeManager.shared.currentTheme.accentColor {
+            checkboxView.tintColor = UIColor(accentColor)
+        } else {
+            checkboxView.tintColor = .systemBlue
+        }
     }
 
     private func updateBubbleColor() {

@@ -19,6 +19,11 @@ struct SearchInputView: View {
         return colorScheme == .dark ? theme.composerTintColorDark : theme.composerTintColor
     }
 
+    /// Unique ID that changes with theme to force glassEffect refresh
+    private var glassId: String {
+        "\(themeManager.currentTheme.rawValue)-\(colorScheme == .dark ? "dark" : "light")"
+    }
+
     var body: some View {
         GlassEffectContainer {
             HStack(spacing: 12) {
@@ -47,6 +52,7 @@ struct SearchInputView: View {
                 .regular.tint(composerTint).interactive(),
                 in: .capsule
             )
+            .id(glassId)  // Force recreation when theme changes
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
