@@ -1163,7 +1163,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
         let bubbleView = cell.bubbleViewForContextMenu
         let bubbleFrame = bubbleView.convert(bubbleView.bounds, to: nil)
-        let screenHeight = view.window?.windowScene?.screen.bounds.height ?? UIScreen.main.bounds.height
+        let screenHeight = view.window?.windowScene?.screen.bounds.height ?? view.bounds.height
         let maxPreviewHeight = screenHeight * 0.4
 
         // For short cells, use standard preview (container includes bubble + reminder badge)

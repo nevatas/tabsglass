@@ -522,8 +522,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Taby;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "To add photos to your notes";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To select photos from your library";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Taby uses the camera to take photos that you can attach to your notes. Photos are stored locally on your device.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Taby accesses your photo library to select photos that you can attach to your notes. Photos are stored locally on your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -559,8 +559,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Taby;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "To add photos to your notes";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To select photos from your library";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Taby uses the camera to take photos that you can attach to your notes. Photos are stored locally on your device.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Taby accesses your photo library to select photos that you can attach to your notes. Photos are stored locally on your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

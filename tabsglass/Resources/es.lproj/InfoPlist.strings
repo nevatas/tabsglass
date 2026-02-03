@@ -1,2 +1,2 @@
-"NSCameraUsageDescription" = "Para añadir fotos a tus notas";
-"NSPhotoLibraryUsageDescription" = "Para seleccionar fotos de tu biblioteca";
+"NSCameraUsageDescription" = "Taby usa la cámara para tomar fotos que puedes adjuntar a tus notas. Las fotos se almacenan localmente en tu dispositivo.";
+"NSPhotoLibraryUsageDescription" = "Taby accede a tu biblioteca de fotos para seleccionar imágenes que puedes adjuntar a tus notas. Las fotos se almacenan localmente en tu dispositivo.";
