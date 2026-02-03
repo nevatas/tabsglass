@@ -124,7 +124,8 @@ actor SyncService {
             let messagesResponse: MessagesResponse = try await apiClient.request(.getMessages(tabServerId: nil, since: nil))
             logger.info("Fetched \(messagesResponse.messages.count) messages from server")
 
-            for msgResponse in messagesResponse.messages {
+            // Process messages newest first (reversed) so newer messages' media downloads start first
+            for msgResponse in messagesResponse.messages.reversed() {
                 // Log media info for debugging
                 if let media = msgResponse.media, !media.isEmpty {
                     logger.info("Message \(msgResponse.id) has \(media.count) media items:")
@@ -464,7 +465,7 @@ actor SyncService {
 
             // Debug: log blurHash presence
             for (index, photo) in photos.enumerated() {
-                logger.debug("Photo \(index): blurHash = \(photo.blurHash ?? "nil")")
+                logger.info("Photo \(index): blurHash = \(photo.blurHash ?? "nil")")
             }
 
             // Photos: store aspect ratios and blurHashes (fileNames will be filled after download)

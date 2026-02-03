@@ -14,6 +14,8 @@
 "settings.contact" = "Contactar al desarrollador";
 "settings.done" = "Listo";
 "settings.space_name" = "Título";
+"settings.sync_across_devices" = "Sincronizar entre dispositivos";
+"settings.sync_across_devices_footer" = "Cuando está activado, los cambios de tema se sincronizan en todos tus dispositivos";
 
 // MARK: - Reorder
 

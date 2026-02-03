@@ -218,13 +218,22 @@ struct SettingsView: View {
             }
             .alert(L10n.Auth.signOutConfirmTitle, isPresented: $showSignOutConfirm) {
                 Button(L10n.Auth.cancel, role: .cancel) {}
-                Button(L10n.Auth.signOut, role: .destructive) {
+                Button(L10n.Auth.signOutKeepData) {
                     Task {
                         // Process pending operations before logout
                         await SyncService.shared.processQueuedOperations(modelContext: modelContext)
                         try? modelContext.save()
-                        await authService.logout()
-                        // Always clear local data on logout
+                        // Logout without clearing local data (quick re-login)
+                        await authService.logout(clearFiles: false)
+                    }
+                }
+                Button(L10n.Auth.signOutClearData, role: .destructive) {
+                    Task {
+                        // Process pending operations before logout
+                        await SyncService.shared.processQueuedOperations(modelContext: modelContext)
+                        try? modelContext.save()
+                        // Logout and clear all local data
+                        await authService.logout(clearFiles: true)
                         clearAllLocalData()
                     }
                 }
@@ -561,14 +570,14 @@ struct AppearanceSettingsView: View {
             // Sync toggle at the top
             Section {
                 Toggle(isOn: $syncTheme) {
-                    Label("Sync Across Devices", systemImage: "arrow.triangle.2.circlepath")
+                    Label(String(localized: "settings.sync_across_devices"), systemImage: "arrow.triangle.2.circlepath")
                 }
                 .onChange(of: syncTheme) { _, newValue in
                     AppSettings.shared.syncTheme = newValue
                     syncThemeToServer()
                 }
             } footer: {
-                Text("When enabled, theme changes sync to all your devices")
+                Text("settings.sync_across_devices_footer")
             }
 
             // Standard themes section

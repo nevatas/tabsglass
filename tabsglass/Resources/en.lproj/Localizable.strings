@@ -14,6 +14,8 @@
 "settings.contact" = "Contact Developer";
 "settings.done" = "Done";
 "settings.space_name" = "Title";
+"settings.sync_across_devices" = "Sync Across Devices";
+"settings.sync_across_devices_footer" = "When enabled, theme changes sync to all your devices";
 
 // MARK: - Reorder
 
@@ -159,7 +161,9 @@
 "auth.sign_in" = "Sign In";
 "auth.sign_out" = "Sign Out";
 "auth.sign_out_confirm_title" = "Sign Out?";
-"auth.sign_out_confirm_message" = "Your data will remain on this device but won't sync until you sign in again.";
+"auth.sign_out_confirm_message" = "Your data will remain on the server. You can keep a local copy for quick re-login or free up space on this device.";
+"auth.sign_out_keep_data" = "Keep Data & Sign Out";
+"auth.sign_out_clear_data" = "Delete Data & Sign Out";
 
 "auth.sync_status" = "Sync Status";
 "auth.synced" = "Synced";

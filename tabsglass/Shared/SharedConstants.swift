@@ -54,6 +54,12 @@ enum SharedConstants {
         return videosPath
     }
 
+    /// Legacy videos directory in Documents (for migration)
+    static var legacyVideosDirectory: URL {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documentsPath.appendingPathComponent("MessageVideos", isDirectory: true)
+    }
+
     /// SwiftData store URL in shared container
     static var sharedStoreURL: URL? {
         containerURL?.appendingPathComponent("default.store")

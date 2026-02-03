@@ -190,6 +190,8 @@ enum L10n {
         static var signOut: String { NSLocalizedString("auth.sign_out", comment: "Sign out button") }
         static var signOutConfirmTitle: String { NSLocalizedString("auth.sign_out_confirm_title", comment: "Sign out confirm title") }
         static var signOutConfirmMessage: String { NSLocalizedString("auth.sign_out_confirm_message", comment: "Sign out confirm message") }
+        static var signOutKeepData: String { NSLocalizedString("auth.sign_out_keep_data", comment: "Sign out but keep data") }
+        static var signOutClearData: String { NSLocalizedString("auth.sign_out_clear_data", comment: "Sign out and clear data") }
 
         // Sync status
         static var syncStatus: String { NSLocalizedString("auth.sync_status", comment: "Sync status label") }

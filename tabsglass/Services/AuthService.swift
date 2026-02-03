@@ -141,7 +141,8 @@ final class AuthService {
     }
 
     /// Logout and clear session
-    func logout() async {
+    /// - Parameter clearFiles: If true, delete all cached media files. If false, keep them for quick re-login.
+    func logout(clearFiles: Bool = true) async {
         // Disconnect WebSocket first
         await WebSocketService.shared.disconnect()
 
@@ -160,7 +161,47 @@ final class AuthService {
         // Clear pending operations
         await SyncService.shared.clearSyncState()
 
-        logger.info("User logged out")
+        // Optionally clear all cached media files
+        if clearFiles {
+            clearMediaFiles()
+            logger.info("User logged out with data cleared")
+        } else {
+            logger.info("User logged out, data preserved for quick re-login")
+        }
+    }
+
+    /// Delete all cached photo and video files from all possible locations
+    private func clearMediaFiles() {
+        let fileManager = FileManager.default
+
+        // Clear photos from shared container
+        if let sharedPhotosDir = SharedConstants.photosDirectory {
+            clearDirectory(sharedPhotosDir, label: "shared photos")
+        }
+
+        // Clear photos from legacy Documents directory
+        clearDirectory(SharedConstants.legacyPhotosDirectory, label: "legacy photos")
+
+        // Clear videos from shared container
+        if let sharedVideosDir = SharedConstants.videosDirectory {
+            clearDirectory(sharedVideosDir, label: "shared videos")
+        }
+
+        // Clear videos from legacy Documents directory
+        clearDirectory(SharedConstants.legacyVideosDirectory, label: "legacy videos")
+    }
+
+    private func clearDirectory(_ directory: URL, label: String) {
+        let fileManager = FileManager.default
+        guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
+            return
+        }
+        for file in files {
+            try? fileManager.removeItem(at: file)
+        }
+        if !files.isEmpty {
+            logger.info("Cleared \(files.count) \(label) files")
+        }
     }
 
     /// Update user's initial sync completion status

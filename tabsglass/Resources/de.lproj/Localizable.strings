@@ -14,6 +14,8 @@
 "settings.contact" = "Entwickler kontaktieren";
 "settings.done" = "Fertig";
 "settings.space_name" = "Titel";
+"settings.sync_across_devices" = "Geräteübergreifend synchronisieren";
+"settings.sync_across_devices_footer" = "Wenn aktiviert, werden Designänderungen auf allen deinen Geräten synchronisiert";
 
 // MARK: - Reorder
 

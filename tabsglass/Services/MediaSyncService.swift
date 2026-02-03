@@ -151,27 +151,19 @@ actor MediaSyncService {
     func downloadMedia(for message: Message, media: [MediaItemResponse]) async {
         logger.info("Downloading \(media.count) media items for message \(message.id)")
 
-        var photoFileNames: [String] = []
-        var photoAspectRatios: [Double] = []
-        var photoBlurHashes: [String] = []
-        var videoFileNames: [String] = []
-        var videoAspectRatios: [Double] = []
-        var videoDurations: [Double] = []
-        var videoThumbnailFileNames: [String] = []
-        var videoThumbnailBlurHashes: [String] = []
-
         // Separate videos and their thumbnails from photos
-        // Thumbnails are downloaded together with their videos, not separately
         let videoItems = media.filter { $0.mediaType == "video" }
         let thumbnailFileKeys = Set(videoItems.compactMap { $0.thumbnailFileKey })
-
-        // Count downloadable items for progress tracking
         let photoItems = media.filter { $0.mediaType == "photo" && !thumbnailFileKeys.contains($0.fileKey) }
         let downloadableCount = photoItems.count + videoItems.count
 
         // Start download progress tracking
         DownloadProgressTracker.shared.startDownload(for: message.id, fileCount: downloadableCount)
-        var fileIndex = 0
+
+        // Track indices for updating message arrays incrementally
+        var photoIndex = 0
+        var videoIndex = 0
+        var combinedIndex = 0  // For progress tracking (photos + videos)
 
         for item in media {
             logger.debug("Downloading \(item.mediaType): \(item.fileKey)")
@@ -184,33 +176,45 @@ actor MediaSyncService {
                     continue
                 }
 
-                let currentIndex = fileIndex
-                if let fileName = await downloadPhotoWithProgress(from: item.downloadUrl, messageId: message.id, fileIndex: currentIndex) {
-                    photoFileNames.append(fileName)
-                    photoAspectRatios.append(item.aspectRatio)
-                    photoBlurHashes.append(item.blurHash ?? "")
-                    DownloadProgressTracker.shared.completeFile(for: message.id, fileIndex: currentIndex)
+                let currentCombinedIndex = combinedIndex
+                let currentPhotoIndex = photoIndex
+
+                if let fileName = await downloadPhotoWithProgress(from: item.downloadUrl, messageId: message.id, fileIndex: currentCombinedIndex) {
+                    // Update message array at this specific index and save immediately
+                    await MainActor.run {
+                        if currentPhotoIndex < message.photoFileNames.count {
+                            message.photoFileNames[currentPhotoIndex] = fileName
+                        }
+                        // Save to trigger UI update for this specific image
+                        try? message.modelContext?.save()
+                    }
+                    DownloadProgressTracker.shared.completeFile(for: message.id, fileIndex: currentCombinedIndex)
                 }
-                fileIndex += 1
+                photoIndex += 1
+                combinedIndex += 1
 
             case "video":
                 logger.info("Video item - thumbnailUrl: \(item.thumbnailDownloadUrl ?? "nil"), thumbnailKey: \(item.thumbnailFileKey ?? "nil")")
 
-                let currentIndex = fileIndex
-                if let result = await downloadVideoWithProgress(from: item.downloadUrl, thumbnailUrl: item.thumbnailDownloadUrl, messageId: message.id, fileIndex: currentIndex) {
-                    videoFileNames.append(result.fileName)
-                    videoAspectRatios.append(item.aspectRatio)
-                    videoDurations.append(item.duration ?? 0)
-                    videoThumbnailBlurHashes.append(item.blurHash ?? "")
-                    if let thumbnailFileName = result.thumbnailFileName {
-                        videoThumbnailFileNames.append(thumbnailFileName)
-                        logger.info("Downloaded video thumbnail: \(thumbnailFileName)")
-                    } else {
-                        logger.warning("Video has no thumbnail!")
+                let currentCombinedIndex = combinedIndex
+                let currentVideoIndex = videoIndex
+
+                if let result = await downloadVideoWithProgress(from: item.downloadUrl, thumbnailUrl: item.thumbnailDownloadUrl, messageId: message.id, fileIndex: currentCombinedIndex) {
+                    // Update message arrays at this specific index and save immediately
+                    await MainActor.run {
+                        if currentVideoIndex < message.videoFileNames.count {
+                            message.videoFileNames[currentVideoIndex] = result.fileName
+                        }
+                        if let thumbnailFileName = result.thumbnailFileName, currentVideoIndex < message.videoThumbnailFileNames.count {
+                            message.videoThumbnailFileNames[currentVideoIndex] = thumbnailFileName
+                        }
+                        // Save to trigger UI update for this specific video
+                        try? message.modelContext?.save()
                     }
-                    DownloadProgressTracker.shared.completeFile(for: message.id, fileIndex: currentIndex)
+                    DownloadProgressTracker.shared.completeFile(for: message.id, fileIndex: currentCombinedIndex)
                 }
-                fileIndex += 1
+                videoIndex += 1
+                combinedIndex += 1
 
             case "thumbnail":
                 // Thumbnails are downloaded with their videos, skip standalone
@@ -223,23 +227,7 @@ actor MediaSyncService {
 
         // Mark download as complete
         DownloadProgressTracker.shared.completeDownload(for: message.id)
-
-        // Update message with downloaded media
-        message.photoFileNames = photoFileNames
-        message.photoAspectRatios = photoAspectRatios
-        message.photoBlurHashes = photoBlurHashes
-        message.videoFileNames = videoFileNames
-        message.videoAspectRatios = videoAspectRatios
-        message.videoDurations = videoDurations
-        message.videoThumbnailFileNames = videoThumbnailFileNames
-        message.videoThumbnailBlurHashes = videoThumbnailBlurHashes
-
-        // Save to trigger UI update
-        if let context = message.modelContext {
-            try? context.save()
-        }
-
-        logger.info("Downloaded media: \(photoFileNames.count) photos, \(videoFileNames.count) videos")
+        logger.info("Downloaded media: \(photoIndex) photos, \(videoIndex) videos")
     }
 
     /// Download a single photo (legacy, no progress tracking)
@@ -346,6 +334,7 @@ actor MediaSyncService {
 
             // Calculate BlurHash from image
             let blurHash = calculateBlurHash(from: compressedData)
+            logger.info("Calculated blurHash for \(fileName): \(blurHash ?? "nil")")
 
             mediaItems.append(MediaItemRequest(
                 fileKey: fileKey,
@@ -355,7 +344,7 @@ actor MediaSyncService {
                 thumbnailFileKey: nil,
                 blurHash: blurHash
             ))
-            logger.debug("Uploaded compressed photo: \(fileName) (\(compressedData.count / 1024)KB)")
+            logger.info("Uploaded compressed photo: \(fileName) (\(compressedData.count / 1024)KB)")
             mediaIndex += 1
         }
 
@@ -600,7 +589,8 @@ actor MediaSyncService {
     /// - Returns: BlurHash string (approx 30 chars) or nil if calculation fails
     nonisolated private func calculateBlurHash(from data: Data) -> String? {
         guard let image = UIImage(data: data) else { return nil }
-        // Scale down for performance then encode with 4x3 components (~30 chars)
-        return image.small?.blurHash(numberOfComponents: (4, 3))
+        // Scale down for performance (BlurHash doesn't need full resolution)
+        let smallImage = image.preparingThumbnail(of: CGSize(width: 100, height: 100)) ?? image
+        return smallImage.blurHash(numberOfComponents: (4, 3))
     }
 }

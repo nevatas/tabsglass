@@ -1046,9 +1046,11 @@ final class MessageTableCell: UITableViewCell {
 
             // isAtBottom: true only when there's no text below (media-only message)
             // Pass messageId for upload/download progress tracking
+            // Show indicators if: uploading, has pending downloads, or local message not yet synced
             let isUploading = UploadProgressTracker.shared.isUploading(messageId: message.id)
             let hasPendingFiles = mediaItems.contains { $0.fileName.hasPrefix("pending_") }
-            let trackingMessageId = (isUploading || hasPendingFiles) ? message.id : nil
+            let isLocalUnsent = message.serverId == nil && !mediaItems.isEmpty
+            let trackingMessageId = (isUploading || hasPendingFiles || isLocalUnsent) ? message.id : nil
             mosaicView.configure(with: mediaItems, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText && !hasTodo, messageId: trackingMessageId)
             mosaicView.isHidden = false
         } else {
