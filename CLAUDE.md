@@ -1,110 +1,275 @@
-# TabsGlass Project Notes
+# Taby — iOS Notes App
 
-## Project Overview
-iOS notes app with messenger-like UI/UX and tabs. SwiftUI + UIKit hybrid, SwiftData, iOS 26+.
+## Overview
+Messenger-style notes app with tabs. SwiftUI + UIKit hybrid, SwiftData, iOS 26+.
 
-## Architecture
+**Bundle ID:** `company.thecool.taby`
 
-### Data Models (`Models/`)
-- **Tab** — вкладка с `title`, `position`, cascade delete сообщений
-- **Message** — сообщение с полями:
-  - `content`, `tabId` (nil = Inbox), `position`
-  - `entities: [TextEntity]?` — Telegram-style форматирование
-  - `linkPreview: LinkPreview?` — превью ссылок
-  - `photoFileNames: [String]`, `photoAspectRatios: [Double]` — фото
-  - `todoItems: [TodoItem]?`, `todoTitle: String?` — чеклисты
-- **Inbox** — виртуальная вкладка (сообщения с `tabId = nil`)
+## Project Structure
 
-### View Hierarchy (`Views/`)
 ```
-ContentView
-└── MainContainerView (оркестратор состояния)
-    ├── TabBarView (Telegram-style навигация, Liquid Glass)
-    └── UnifiedChatView (UIViewControllerRepresentable)
-        └── UnifiedChatViewController
-            ├── UIPageViewController (свайп между вкладками)
-            │   └── MessageListViewController (инвертированный UITableView)
-            │       └── MessageTableCell
-            │           ├── MosaicMediaView (сетка фото)
-            │           ├── UITextView (форматированный текст)
-            │           └── TodoBubbleView (чекбоксы)
-            └── SwiftUIComposerContainer
-                └── EmbeddedComposerView (ввод + фото)
+tabsglass/
+├── tabsglassApp.swift      # App entry, warmup (keyboard, glass)
+├── ContentView.swift       # Root view
+├── Models/
+│   ├── Tab.swift           # Tab model (SwiftData)
+│   ├── Message.swift       # Message model (SwiftData)
+│   └── ExportableModels.swift  # Codable versions for export
+├── Views/
+│   ├── MainContainerView.swift     # State orchestrator, CRUD
+│   ├── TabBarView.swift            # Telegram-style tab bar (Liquid Glass)
+│   ├── UnifiedChatView.swift       # UIPageViewController + composer
+│   ├── MessengerView.swift         # Message cells, composer UI
+│   ├── SearchInputView.swift       # Search field
+│   ├── SearchTabsView.swift        # Tab buttons on Search screen
+│   ├── FormattingTextView.swift    # Rich text editing (UITextView)
+│   ├── TodoBubbleView.swift        # Checklist rendering
+│   ├── MosaicLayout.swift          # Photo grid calculations
+│   ├── SettingsView.swift          # Settings screen
+│   ├── TaskListSheet.swift         # Create/edit task list
+│   ├── EditMessageSheet.swift      # Edit message
+│   ├── ReminderSheet.swift         # Set reminder
+│   ├── MoveMessagesSheet.swift     # Move messages between tabs
+│   ├── SelectionActionBar.swift    # Bulk selection toolbar
+│   ├── GalleryViewController.swift # Full-screen photo viewer
+│   └── VideoPlayerViewController.swift  # Video player
+├── Services/
+│   ├── AppSettings.swift           # ThemeManager, AppTheme enum
+│   ├── ImageCache.swift            # NSCache + downsampling
+│   ├── DeletedMessageStore.swift   # Shake-to-undo (30 sec)
+│   ├── ExportImportService.swift   # Backup/restore (.taby files)
+│   ├── NotificationService.swift   # Reminders
+│   ├── SharedVideoStorage.swift    # Video file management
+│   └── Localization.swift          # L10n helper
+├── Shared/                 # Shared with Share Extension
+│   ├── SharedConstants.swift
+│   ├── SharedPhotoStorage.swift
+│   ├── SharedVideoStorage.swift
+│   ├── SharedModelContainer.swift
+│   ├── TabsSync.swift
+│   └── PendingShareItem.swift
+└── Resources/
+    ├── en.lproj/Localizable.strings
+    ├── ru.lproj/Localizable.strings
+    ├── de.lproj/Localizable.strings
+    ├── es.lproj/Localizable.strings
+    └── fr.lproj/Localizable.strings
 ```
 
-### Services (`Services/`)
-- **ThemeManager** — 8 тем (system, light, dark, pink, beige, green, blue)
-- **ImageCache** — NSCache + downsampling, async loading
-- **DeletedMessageStore** — shake-to-undo (30 сек)
+## Data Models
 
-### Key Files
-| File | Purpose |
-|------|---------|
-| `MainContainerView.swift` | State management, CRUD operations |
-| `TabBarView.swift` | Tab navigation with swipe tracking |
-| `UnifiedChatViewController.swift` | Page controller + composer |
-| `MessageListViewController.swift` | Message list, context menu |
-| `MessengerView.swift` | Composer UI, ComposerState |
-| `FormattingTextView.swift` | Rich text editing |
-| `MosaicLayout.swift` | Photo grid calculations |
-| `TodoBubbleView.swift` | Todo list rendering |
-
-### Features
-- До 10 фото на сообщение (хранятся в `Documents/MessagePhotos/`)
-- Telegram-style форматирование (bold, italic, links, code, spoiler)
-- Todo-списки с опциональным заголовком
-- Link previews
-- Локализация: en, de, es, fr, ru
-
-## Liquid Glass (iOS 26+)
-
-### Basic Usage
+### Tab
 ```swift
-import SwiftUI
-
-// Wrap content in GlassEffectContainer for morphing animations
-GlassEffectContainer {
-    YourContent()
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+@Model class Tab {
+    var id: UUID
+    var title: String
+    var position: Int
+    @Relationship(deleteRule: .cascade) var messages: [Message]
 }
 ```
 
-### Glass Variants
-- `.regular` - standard Liquid Glass
-- `.clear` - transparent glass
-- `.identity` - no effect (passthrough)
-
-### Customization with .tint()
-Control opacity/color of the glass:
+### Message
 ```swift
-.glassEffect(.regular.tint(.white.opacity(0.9)), in: .rect(cornerRadius: 24))  // less transparent, white
-.glassEffect(.regular.tint(.white.opacity(0.5)), in: .rect(cornerRadius: 24))  // more transparent
-.glassEffect(.regular.tint(.blue.opacity(0.3)), in: .rect(cornerRadius: 24))   // blue tinted
+@Model class Message {
+    var id: UUID
+    var content: String
+    var tabId: UUID?              // nil = Inbox
+    var position: Int
+    var createdAt: Date
+
+    // Formatting
+    var entities: [TextEntity]?   // bold, italic, links, code, spoiler
+    var linkPreview: LinkPreview?
+
+    // Media
+    var photoFileNames: [String]
+    var photoAspectRatios: [Double]
+    var videoFileNames: [String]
+    var videoAspectRatios: [Double]
+    var videoDurations: [Double]
+    var videoThumbnailFileNames: [String]
+
+    // Tasks
+    var todoItems: [TodoItem]?
+    var todoTitle: String?
+    var isTodoList: Bool { todoItems != nil && !todoItems!.isEmpty }
+
+    // Reminders
+    var reminderDate: Date?
+    var reminderRepeatInterval: ReminderRepeatInterval?
+    var notificationId: String?
+}
 ```
 
-### Interactivity
-Make glass respond to touch/pointer:
-```swift
-.glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
-.glassEffect(.regular.tint(.orange).interactive(), in: .rect(cornerRadius: 24))
+### Inbox
+Virtual tab — messages with `tabId = nil`.
+
+## View Architecture
+
+```
+ContentView
+└── MainContainerView (state, CRUD)
+    ├── TabBarView (Liquid Glass tabs)
+    │   └── TelegramTabBar (horizontal scroll, selection indicator)
+    └── UnifiedChatView (UIViewControllerRepresentable)
+        └── UnifiedChatViewController
+            ├── UIPageViewController (swipe between tabs)
+            │   └── MessageListViewController
+            │       ├── UITableView (inverted for chat, normal for search)
+            │       ├── MessageTableCell / SearchResultCell
+            │       └── SearchTabsView (embedded, for search tab only)
+            ├── SwiftUIComposerContainer (message input)
+            └── SearchInputContainer (search input)
 ```
 
-### Shapes
+## Tab Navigation
+
+**Index mapping:**
+- `0` = Search screen
+- `1` = Inbox (virtual)
+- `2+` = Real tabs
+
+**switchFraction:** `-1.0` to `1.0` during swipe for smooth animations.
+
+## Key Features
+
+### Search
+- Full-text search across all messages and tabs
+- Searches in: content, todo titles, todo items
+- Custom `SearchResultCell` with minimal design
+- Shows tab name, text (3 lines), media thumbnails
+- Task lists shown with round checkboxes (○/●)
+- Tap result → navigate to tab + scroll to message
+- Edge swipe from left → go to Search
+
+### Messages
+- Up to 10 photos per message (`Documents/MessagePhotos/`)
+- Videos with thumbnails
+- Telegram-style formatting (bold, italic, underline, strikethrough, links, code, spoiler)
+- Link previews
+- Task lists with optional title
+- Reminders with repeat intervals
+
+### Themes (AppTheme)
+`system`, `light`, `dark`, `pink`, `beige`, `green`, `blue`
+
+Each theme provides:
+- `backgroundColor` / `backgroundColorDark`
+- `accentColor`
+- `composerTintColor` / `composerTintColorDark`
+- `placeholderColor`
+
+### Selection Mode
+- Long press to enter
+- Bulk move/delete
+- `SelectionActionBar` at bottom
+
+### Export/Import
+- `.taby` archive (ZIP with JSON + media)
+- Modes: Replace all / Merge
+
+## UIKit Components
+
+### MessageListViewController
+- Inverted `UITableView` for chat (bottom-to-top)
+- Normal layout for search results (top-to-bottom)
+- Context menu with preview
+- Swipe actions
+
+### FormattingTextView
+- `UITextView` subclass
+- Entity-based formatting
+- Placeholder support
+- Theme-aware link colors
+
+### UnifiedChatViewController
+- `UIPageViewController` for tab swiping
+- Manages composer and search input visibility
+- Edge swipe gesture to Search
+- Keyboard handling with constraints
+
+## Liquid Glass (iOS 26+)
+
 ```swift
-.glassEffect(.regular, in: .rect(cornerRadius: 24))  // rounded rectangle
-.glassEffect(.regular, in: .capsule)                  // capsule (default)
-.glassEffect(.regular, in: .circle)                   // circle
+// Basic usage
+.glassEffect(.regular, in: .capsule)
+
+// With tint (control opacity)
+.glassEffect(.regular.tint(.white.opacity(0.9)), in: .rect(cornerRadius: 24))
+
+// Interactive (responds to touch)
+.glassEffect(.regular.interactive(), in: .capsule)
+
+// Morphing animations - use GlassEffectContainer
+GlassEffectContainer {
+    content.glassEffectID("id", in: namespace)
+}
 ```
 
-### Animation with glassEffectID
-```swift
-@Namespace var namespace
+**Note:** `.prominent` does NOT exist — use `.regular.tint()` for less transparency.
 
-view1.glassEffectID("myEffect", in: namespace)
-view2.glassEffectID("myEffect", in: namespace)  // will morph between them
+## Localization
+
+5 languages: English, Russian, German, Spanish, French
+
+```swift
+// Usage
+L10n.Search.placeholder  // "Find..."
+L10n.Tab.delete          // "Delete"
+
+// In code
+NSLocalizedString("search.tasks_more", comment: "")  // "+%d more"
 ```
 
-### Important Notes
-- Always use `GlassEffectContainer` as parent for morphing animations
-- `.prominent` does NOT exist - use `.regular.tint()` for less transparency
-- For thick/ultraThick presets, consider UniversalGlass library (backports to iOS 18+)
+## File Storage
+
+- **Photos:** `Documents/MessagePhotos/{uuid}.jpg`
+- **Videos:** `Documents/MessageVideos/{uuid}.mov`
+- **Thumbnails:** `Documents/MessagePhotos/{uuid}_thumb.jpg`
+- **Exports:** `Documents/Exports/taby_backup_{date}.taby`
+
+## Share Extension
+
+Located in `share/` directory. Shares App Group with main app for:
+- SwiftData container
+- Photo/video storage
+- Pending items sync
+
+## Performance
+
+### Warmup (tabsglassApp.swift)
+- `KeyboardWarmer` — pre-initializes keyboard
+- `GlassEffectWarmer` — pre-renders glass effects
+
+### ImageCache
+- `NSCache` with size limit
+- Downsampling for thumbnails
+- Async loading with callbacks
+
+## Common Patterns
+
+### Theme Change Notification
+```swift
+NotificationCenter.default.addObserver(
+    self,
+    selector: #selector(themeDidChange),
+    name: .themeDidChange,
+    object: nil
+)
+```
+
+### Constraint Animation
+```swift
+UIView.animate(withDuration: 0.25) {
+    self.bottomConstraint?.constant = newValue
+    self.view.layoutIfNeeded()
+}
+```
+
+### SwiftUI in UIKit
+```swift
+let hostingController = UIHostingController(rootView: SomeView())
+addChild(hostingController)
+view.addSubview(hostingController.view)
+hostingController.didMove(toParent: self)
+```
