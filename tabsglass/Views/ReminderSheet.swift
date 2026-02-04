@@ -15,6 +15,9 @@ struct ReminderSheet: View {
     @State private var repeatInterval: ReminderRepeatInterval
     @State private var isReminderActive: Bool
 
+    private let originalDate: Date?
+    private let originalRepeatInterval: ReminderRepeatInterval?
+
     let message: Message
     let onSave: (Date, ReminderRepeatInterval) -> Void
     let onRemove: (() -> Void)?
@@ -36,6 +39,24 @@ struct ReminderSheet: View {
         _selectedTime = State(initialValue: initialDate)
         _repeatInterval = State(initialValue: message.reminderRepeatInterval ?? .never)
         _isReminderActive = State(initialValue: message.reminderDate != nil)
+
+        // Store original values to detect changes
+        self.originalDate = message.reminderDate
+        self.originalRepeatInterval = message.reminderRepeatInterval
+    }
+
+    /// Check if user has modified the date/time/repeat from the original reminder
+    private var hasChangedFromOriginal: Bool {
+        guard let original = originalDate else { return false }
+
+        let calendar = Calendar.current
+        let originalComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: original)
+        let currentComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: combinedDateTime)
+
+        let dateChanged = originalComponents != currentComponents
+        let repeatChanged = repeatInterval != (originalRepeatInterval ?? .never)
+
+        return dateChanged || repeatChanged
     }
 
     private var combinedDateTime: Date {
@@ -147,8 +168,8 @@ struct ReminderSheet: View {
 
                 // Bottom button
                 VStack(spacing: 12) {
-                    if isReminderActive {
-                        // Red button to remove reminder
+                    if isReminderActive && !hasChangedFromOriginal {
+                        // Red button to remove reminder (only if nothing changed)
                         Button {
                             onRemove?()
                             isReminderActive = false
@@ -162,7 +183,7 @@ struct ReminderSheet: View {
                         .tint(.red)
                         .padding(.horizontal)
                     } else {
-                        // Blue button to set reminder
+                        // Blue button to set/update reminder
                         Button {
                             onSave(combinedDateTime, repeatInterval)
                             dismiss()
