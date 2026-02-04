@@ -1265,6 +1265,8 @@ final class SearchResultCell: UITableViewCell {
     private var labelBottomWithoutMedia: NSLayoutConstraint!
     private var labelBottomWithMedia: NSLayoutConstraint!
     private var thumbnailStackHeight: NSLayoutConstraint!
+    private var labelTopNormal: NSLayoutConstraint!
+    private var labelTopCompact: NSLayoutConstraint!
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -1317,7 +1319,7 @@ final class SearchResultCell: UITableViewCell {
         contentView.addSubview(thumbnailStack)
 
         // Bottom divider
-        dividerView.backgroundColor = .separator.withAlphaComponent(0.3)
+        dividerView.backgroundColor = .separator.withAlphaComponent(0.15)
         dividerView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(dividerView)
 
@@ -1325,13 +1327,15 @@ final class SearchResultCell: UITableViewCell {
         labelBottomWithoutMedia = messageLabel.bottomAnchor.constraint(equalTo: dividerView.topAnchor, constant: -12)
         labelBottomWithMedia = thumbnailStack.topAnchor.constraint(equalTo: messageLabel.bottomAnchor, constant: 8)
         thumbnailStackHeight = thumbnailStack.heightAnchor.constraint(equalToConstant: Self.thumbnailSize)
+        labelTopNormal = messageLabel.topAnchor.constraint(equalTo: tabNameLabel.bottomAnchor, constant: 4)
+        labelTopCompact = messageLabel.topAnchor.constraint(equalTo: tabNameLabel.bottomAnchor, constant: 0)
 
         NSLayoutConstraint.activate([
             tabNameLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
             tabNameLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             tabNameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
 
-            messageLabel.topAnchor.constraint(equalTo: tabNameLabel.bottomAnchor, constant: 4),
+            labelTopNormal,
             messageLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             messageLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
 
@@ -1358,15 +1362,40 @@ final class SearchResultCell: UITableViewCell {
         tabNameLabel.text = tabName
         tabNameLabel.textColor = ThemeManager.shared.currentTheme.placeholderColor
 
-        // Set text
-        if message.content.isEmpty {
-            messageLabel.text = message.hasMedia ? "📷 \(L10n.Composer.gallery)" : ""
-        } else {
-            messageLabel.text = message.content
-        }
-
         // Clear old thumbnails
         thumbnailStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        // Handle task lists
+        if message.isTodoList, let todoItems = message.todoItems {
+            // Allow more lines for todo lists (title + 3 items + "+N more")
+            messageLabel.numberOfLines = 5
+            messageLabel.attributedText = formatTodoList(title: message.todoTitle, items: todoItems)
+
+            // Compact spacing for todo lists
+            labelTopNormal.isActive = false
+            labelTopCompact.isActive = true
+
+            // No thumbnails for task lists
+            labelBottomWithMedia.isActive = false
+            thumbnailStackHeight.isActive = false
+            labelBottomWithoutMedia.isActive = true
+            thumbnailStack.isHidden = true
+            return
+        }
+
+        // Normal spacing and line limit for regular messages
+        labelTopCompact.isActive = false
+        labelTopNormal.isActive = true
+        messageLabel.numberOfLines = 3
+
+        // Set text for regular messages
+        if message.content.isEmpty {
+            messageLabel.attributedText = nil
+            messageLabel.text = message.hasMedia ? "📷 \(L10n.Composer.gallery)" : ""
+        } else {
+            messageLabel.attributedText = nil
+            messageLabel.text = message.content
+        }
 
         // Check if message has media
         let totalMedia = message.photoFileNames.count + message.videoFileNames.count
@@ -1491,6 +1520,74 @@ final class SearchResultCell: UITableViewCell {
         return container
     }
 
+    /// Format todo list as attributed string for search results
+    private func formatTodoList(title: String?, items: [TodoItem]) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+
+        // Tight paragraph style
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 0
+        paragraphStyle.paragraphSpacing = 0
+        paragraphStyle.lineHeightMultiple = 1.0
+
+        // Add title if present
+        if let title = title, !title.isEmpty {
+            let titleAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 16, weight: .medium),
+                .foregroundColor: UIColor.label,
+                .paragraphStyle: paragraphStyle
+            ]
+            result.append(NSAttributedString(string: title + "\n", attributes: titleAttrs))
+        }
+
+        // Show up to 2 items
+        let maxItems = 2
+        let itemsToShow = Array(items.prefix(maxItems))
+        let itemAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 15),
+            .foregroundColor: UIColor.label,
+            .paragraphStyle: paragraphStyle
+        ]
+        let completedAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 15),
+            .foregroundColor: UIColor.secondaryLabel,
+            .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        for (index, item) in itemsToShow.enumerated() {
+            let checkbox = item.isCompleted ? "● " : "○ "
+            let attrs = item.isCompleted ? completedAttrs : itemAttrs
+
+            // Add checkbox
+            let checkboxAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 14),
+                .foregroundColor: item.isCompleted ? UIColor.secondaryLabel : UIColor.tertiaryLabel,
+                .paragraphStyle: paragraphStyle
+            ]
+            result.append(NSAttributedString(string: checkbox, attributes: checkboxAttrs))
+            result.append(NSAttributedString(string: item.text, attributes: attrs))
+
+            if index < itemsToShow.count - 1 || items.count > maxItems {
+                result.append(NSAttributedString(string: "\n", attributes: itemAttrs))
+            }
+        }
+
+        // Show remaining count if needed
+        if items.count > maxItems {
+            let remaining = items.count - maxItems
+            let moreText = String(format: NSLocalizedString("search.tasks_more", comment: ""), remaining)
+            let moreAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 14),
+                .foregroundColor: ThemeManager.shared.currentTheme.placeholderColor,
+                .paragraphStyle: paragraphStyle
+            ]
+            result.append(NSAttributedString(string: moreText, attributes: moreAttrs))
+        }
+
+        return result
+    }
+
     /// Calculate cell height for a message
     static func calculateHeight(for message: Message, maxWidth: CGFloat) -> CGFloat {
         let textWidth = maxWidth - 32 // 16px padding on each side
@@ -1500,20 +1597,40 @@ final class SearchResultCell: UITableViewCell {
         height += 16 // ~13pt font + some padding
         height += 4 // spacing between tab name and message
 
-        // Text height (max 3 lines)
-        let text = message.content.isEmpty && message.hasMedia ? "📷 \(L10n.Composer.gallery)" : message.content
-        let textHeight = text.boundingRect(
-            with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: UIFont.systemFont(ofSize: 16)],
-            context: nil
-        ).height
-        height += min(ceil(textHeight), 60) // max 3 lines ~60pt
+        // Handle task lists
+        if message.isTodoList, let todoItems = message.todoItems {
+            var lines = 0
 
-        // Thumbnails height if has media
-        let totalMedia = message.photoFileNames.count + message.videoFileNames.count
-        if totalMedia > 0 {
-            height += 8 + thumbnailSize // spacing + thumbnail height
+            // Title line
+            if let title = message.todoTitle, !title.isEmpty {
+                lines += 1
+            }
+
+            // Task items (max 2)
+            lines += min(todoItems.count, 2)
+
+            // "+N more" line
+            if todoItems.count > 2 {
+                lines += 1
+            }
+
+            height += CGFloat(lines) * 20 // ~20pt per line
+        } else {
+            // Text height (max 3 lines)
+            let text = message.content.isEmpty && message.hasMedia ? "📷 \(L10n.Composer.gallery)" : message.content
+            let textHeight = text.boundingRect(
+                with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: UIFont.systemFont(ofSize: 16)],
+                context: nil
+            ).height
+            height += min(ceil(textHeight), 60) // max 3 lines ~60pt
+
+            // Thumbnails height if has media
+            let totalMedia = message.photoFileNames.count + message.videoFileNames.count
+            if totalMedia > 0 {
+                height += 8 + thumbnailSize // spacing + thumbnail height
+            }
         }
 
         height += 12 // bottom padding before divider

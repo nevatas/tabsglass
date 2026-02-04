@@ -176,7 +176,26 @@ final class UnifiedChatViewController: UIViewController {
     private var filteredMessages: [Message] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
-        return allMessages.filter { $0.content.localizedCaseInsensitiveContains(query) }
+        return allMessages.filter { message in
+            // Search in text content
+            if message.content.localizedCaseInsensitiveContains(query) {
+                return true
+            }
+            // Search in todo title
+            if let todoTitle = message.todoTitle,
+               todoTitle.localizedCaseInsensitiveContains(query) {
+                return true
+            }
+            // Search in todo items
+            if let todoItems = message.todoItems {
+                for item in todoItems {
+                    if item.text.localizedCaseInsensitiveContains(query) {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
     }
 
     /// Update search tab with filtered messages
@@ -1145,10 +1164,10 @@ final class MessageListViewController: UIViewController {
         view.addSubview(hostingController.view)
 
         NSLayoutConstraint.activate([
-            hostingController.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 120),
+            hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
             hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            hostingController.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -80)
+            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
 
         hostingController.didMove(toParent: self)
@@ -1159,8 +1178,8 @@ final class MessageListViewController: UIViewController {
         let gradientView = TopFadeGradientView()
         gradientView.translatesAutoresizingMaskIntoConstraints = false
         gradientView.isUserInteractionEnabled = false
-        // Insert below tableView so it's under the header but above messages
-        view.insertSubview(gradientView, aboveSubview: tableView)
+        // Add gradient on top of all content (search tabs and table)
+        view.addSubview(gradientView)
 
         NSLayoutConstraint.activate([
             gradientView.topAnchor.constraint(equalTo: view.topAnchor),

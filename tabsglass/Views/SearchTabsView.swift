@@ -11,20 +11,62 @@ struct SearchTabsView: View {
     let tabs: [Tab]
     let onTabSelected: (Int) -> Void  // Index to navigate to (2+ = real tabs)
 
+    private var themeManager: ThemeManager { ThemeManager.shared }
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var backgroundColor: Color {
+        colorScheme == .dark
+            ? themeManager.currentTheme.backgroundColorDark
+            : themeManager.currentTheme.backgroundColor
+    }
+
+    @State private var contentHeight: CGFloat = 0
+
     var body: some View {
-        // Centered buttons - only the button shapes are interactive
         GeometryReader { geometry in
-            if !tabs.isEmpty {
-                FlowLayout(spacing: 12) {
-                    ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
-                        TabChipButton(title: tab.title) {
-                            onTabSelected(index + 2)  // +2 because 0=Search, 1=Inbox
+            let availableHeight = geometry.size.height - 80 - 120  // minus top and bottom padding
+            let shouldCenter = contentHeight > 0 && contentHeight < availableHeight
+
+            ZStack(alignment: .bottom) {
+                // Scrollable content
+                ScrollView {
+                    if !tabs.isEmpty {
+                        FlowLayout(spacing: 12) {
+                            ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                                TabChipButton(title: tab.title) {
+                                    onTabSelected(index + 2)  // +2 because 0=Search, 1=Inbox
+                                }
+                            }
                         }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 20)
+                        .background(
+                            GeometryReader { contentGeo in
+                                Color.clear.onAppear {
+                                    contentHeight = contentGeo.size.height
+                                }
+                                .onChange(of: tabs.count) { _, _ in
+                                    contentHeight = contentGeo.size.height
+                                }
+                            }
+                        )
+                        .padding(.top, shouldCenter ? (availableHeight - contentHeight) / 2 + 80 : 80)
+                        .padding(.bottom, 120)  // Space for search input + bottom gradient
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 20)
-                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                .scrollIndicators(.hidden)
+
+                // Bottom fade gradient overlay (like under composer)
+                LinearGradient(
+                    stops: [
+                        .init(color: backgroundColor.opacity(0), location: 0),
+                        .init(color: backgroundColor, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 100)
+                .allowsHitTesting(false)
             }
         }
     }

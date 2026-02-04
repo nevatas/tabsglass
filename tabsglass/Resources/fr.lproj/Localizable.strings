@@ -131,6 +131,7 @@
 
 "search.title" = "Recherche";
 "search.placeholder" = "Trouver...";
+"search.tasks_more" = "+%d de plus";
 
 // MARK: - Selection
 

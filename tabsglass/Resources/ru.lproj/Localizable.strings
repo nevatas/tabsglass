@@ -131,6 +131,7 @@
 
 "search.title" = "Поиск";
 "search.placeholder" = "Найти...";
+"search.tasks_more" = "+%d ещё";
 
 // MARK: - Selection
 
