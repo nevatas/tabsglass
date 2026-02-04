@@ -73,27 +73,31 @@ struct EditMessageSheet: View {
                 Spacer()
 
                 Button {
-                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        // Calculate leading whitespace offset for entity adjustment
-                        let leadingWhitespace = text.prefix(while: { $0.isWhitespace || $0.isNewline }).count
+                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            // Calculate leading whitespace offset for entity adjustment
+                            let leadingWhitespaceUTF16 = text
+                                .prefix(while: { $0.isWhitespace || $0.isNewline })
+                                .utf16
+                                .count
+                            let trimmedUTF16Count = trimmed.utf16.count
 
-                        // Get entities and adjust offsets for trimmed text
-                        let rawEntities = holder.textView?.extractEntities() ?? []
-                        var adjustedEntities: [TextEntity] = []
+                            // Get entities and adjust offsets for trimmed text
+                            let rawEntities = holder.textView?.extractEntities() ?? []
+                            var adjustedEntities: [TextEntity] = []
 
-                        for entity in rawEntities {
-                            let newOffset = entity.offset - leadingWhitespace
-                            // Only include entities that are within the trimmed text bounds
-                            if newOffset >= 0 && newOffset + entity.length <= trimmed.count {
-                                adjustedEntities.append(TextEntity(
-                                    type: entity.type,
-                                    offset: newOffset,
-                                    length: entity.length,
-                                    url: entity.url
-                                ))
+                            for entity in rawEntities {
+                                let newOffset = entity.offset - leadingWhitespaceUTF16
+                                // Only include entities that are within the trimmed text bounds
+                                if newOffset >= 0 && newOffset + entity.length <= trimmedUTF16Count {
+                                    adjustedEntities.append(TextEntity(
+                                        type: entity.type,
+                                        offset: newOffset,
+                                        length: entity.length,
+                                        url: entity.url
+                                    ))
+                                }
                             }
-                        }
 
                         // Also detect URLs
                         adjustedEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))

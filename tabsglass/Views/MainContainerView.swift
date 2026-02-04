@@ -257,15 +257,17 @@ struct MainContainerView: View {
         }
         .onChange(of: tabs.count) { oldValue, newValue in
             if newValue > oldValue {
-                // New tab created - select it with animation (index = newValue because of Inbox at 0)
+                // New tab created - select it with animation
+                // Index model: 0 = Search, 1 = Inbox, 2+ = real tabs
                 withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
-                    selectedTabIndex = newValue  // Last real tab index
+                    selectedTabIndex = newValue + 1  // Last real tab index
                     switchFraction = 0
                 }
             }
             // Ensure selected index is valid
-            if selectedTabIndex > newValue {
-                selectedTabIndex = max(0, newValue)
+            let maxValidIndex = newValue + 1
+            if selectedTabIndex > maxValidIndex {
+                selectedTabIndex = maxValidIndex
             }
         }
         .onChange(of: selectedTabIndex) { _, _ in
@@ -464,14 +466,18 @@ struct MainContainerView: View {
 
             await MainActor.run {
                 // Calculate leading whitespace offset for entity adjustment
-                let leadingWhitespace = originalText.prefix(while: { $0.isWhitespace || $0.isNewline }).count
+                let leadingWhitespaceUTF16 = originalText
+                    .prefix(while: { $0.isWhitespace || $0.isNewline })
+                    .utf16
+                    .count
+                let trimmedTextUTF16Count = trimmedText.utf16.count
 
                 // Adjust formatting entity offsets for trimmed text
                 var allEntities: [TextEntity] = []
                 for entity in entitiesToSave {
-                    let newOffset = entity.offset - leadingWhitespace
+                    let newOffset = entity.offset - leadingWhitespaceUTF16
                     // Only include entities that are within the trimmed text bounds
-                    if newOffset >= 0 && newOffset + entity.length <= trimmedText.count {
+                    if newOffset >= 0 && newOffset + entity.length <= trimmedTextUTF16Count {
                         allEntities.append(TextEntity(
                             type: entity.type,
                             offset: newOffset,
@@ -679,9 +685,9 @@ struct MainContainerView: View {
 
             // Adjust selected index if needed (account for Inbox at index 0)
             if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
-                let tabIndex = index + 1  // +1 because Inbox is at 0
+                let tabIndex = index + 2  // +2 because 0=Search, 1=Inbox
                 if selectedTabIndex >= tabIndex {
-                    selectedTabIndex = max(0, selectedTabIndex - 1)
+                    selectedTabIndex = max(1, selectedTabIndex - 1)
                 }
             }
 
@@ -702,9 +708,9 @@ struct MainContainerView: View {
         } else {
             // No messages, just delete the tab
             if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
-                let tabIndex = index + 1
+                let tabIndex = index + 2
                 if selectedTabIndex >= tabIndex {
-                    selectedTabIndex = max(0, selectedTabIndex - 1)
+                    selectedTabIndex = max(1, selectedTabIndex - 1)
                 }
             }
             modelContext.delete(tab)

@@ -386,6 +386,8 @@ struct ReorderTabsView: View {
         for (index, tab) in reorderableTabs.enumerated() {
             tab.position = index
         }
+        try? modelContext.save()
+        TabsSync.saveTabs(reorderableTabs)
     }
 }
 

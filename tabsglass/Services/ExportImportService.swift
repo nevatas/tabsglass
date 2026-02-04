@@ -187,7 +187,12 @@ final class ExportImportService {
                 let sourceURL = SharedPhotoStorage.photoURL(for: fileName)
                 if fileManager.fileExists(atPath: sourceURL.path) {
                     let destURL = photosDir.appendingPathComponent(fileName)
-                    try? fileManager.copyItem(at: sourceURL, to: destURL)
+                    do {
+                        try fileManager.copyItem(at: sourceURL, to: destURL)
+                    } catch {
+                        logger.error("Failed to copy photo \(fileName): \(error.localizedDescription)")
+                        throw ExportImportError.fileAccessDenied
+                    }
                 }
                 photosCopied += 1
             }
@@ -207,7 +212,12 @@ final class ExportImportService {
                 let sourceURL = SharedVideoStorage.videoURL(for: fileName)
                 if fileManager.fileExists(atPath: sourceURL.path) {
                     let destURL = videosDir.appendingPathComponent(fileName)
-                    try? fileManager.copyItem(at: sourceURL, to: destURL)
+                    do {
+                        try fileManager.copyItem(at: sourceURL, to: destURL)
+                    } catch {
+                        logger.error("Failed to copy video \(fileName): \(error.localizedDescription)")
+                        throw ExportImportError.fileAccessDenied
+                    }
                 }
                 videosCopied += 1
             }
@@ -465,7 +475,15 @@ final class ExportImportService {
                     continue
                 }
 
-                try? fileManager.copyItem(at: sourceURL, to: destURL)
+                if fileManager.fileExists(atPath: destURL.path) {
+                    try fileManager.removeItem(at: destURL)
+                }
+                do {
+                    try fileManager.copyItem(at: sourceURL, to: destURL)
+                } catch {
+                    logger.error("Failed to import photo \(fileName): \(error.localizedDescription)")
+                    throw ExportImportError.fileAccessDenied
+                }
                 mediaFilesCopied += 1
             }
         }
@@ -485,7 +503,15 @@ final class ExportImportService {
                     continue
                 }
 
-                try? fileManager.copyItem(at: sourceURL, to: destURL)
+                if fileManager.fileExists(atPath: destURL.path) {
+                    try fileManager.removeItem(at: destURL)
+                }
+                do {
+                    try fileManager.copyItem(at: sourceURL, to: destURL)
+                } catch {
+                    logger.error("Failed to import video \(fileName): \(error.localizedDescription)")
+                    throw ExportImportError.fileAccessDenied
+                }
                 mediaFilesCopied += 1
             }
         }

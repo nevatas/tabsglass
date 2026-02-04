@@ -153,7 +153,8 @@ final class GlassEffectWarmer {
             GlassEffectContainer {
                 Color.clear
                     .frame(width: 50, height: 50)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                    // Warm interactive+tinted glass as it's used throughout the app.
+                    .glassEffect(.regular.tint(.white.opacity(0.9)).interactive(), in: .rect(cornerRadius: 12))
             }
         )
 
@@ -181,82 +182,140 @@ final class GlassEffectWarmer {
 final class KeyboardWarmer {
     static let shared = KeyboardWarmer()
 
-    private var warmUpTextView: FormattingTextView?
-    private var warmUpTextField: UITextField?
-    private var warmUpWindow: UIWindow?
-    private var retryCount = 0
-    private let maxRetries = 5
+    private var didWarmUp = false
+    private var isWarmingUp = false
+    private var attemptCount = 0
+    private let maxAttempts = 60
+
+    private weak var dummyTextField: UITextField?
+    private var keyboardWillShowObserver: NSObjectProtocol?
+    private var fallbackWorkItem: DispatchWorkItem?
 
     private init() {}
 
     func warmUp() {
-        // Start immediately, retry if window scene not ready yet
-        performWarmUp()
+        guard !didWarmUp else { return }
+        // Start shortly after launch; retry until app is active and a key window exists.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.performWarmUp()
+        }
     }
 
     private func performWarmUp() {
-        guard let windowScene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first else {
-            // Retry with small delay if window scene not ready
-            retryCount += 1
-            if retryCount < maxRetries {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                    self?.performWarmUp()
-                }
+        guard !didWarmUp, !isWarmingUp else { return }
+        attemptCount += 1
+        guard attemptCount <= maxAttempts else { return }
+
+        // Only warm while app is active; otherwise the first responder / keyboard subsystem is flaky.
+        guard UIApplication.shared.applicationState == .active else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.performWarmUp()
             }
             return
         }
 
-        // Create an off-screen window
-        let window = UIWindow(windowScene: windowScene)
-        window.frame = CGRect(x: -100, y: -100, width: 200, height: 100)
-        window.windowLevel = .init(rawValue: -1000)
-        window.isHidden = false
+        // If something is already focused, keyboard path is already warm.
+        if UIResponder.currentFirstResponder() != nil {
+            didWarmUp = true
+            return
+        }
 
-        // Use FormattingTextView (actual composer class) for accurate warmup
-        // This ensures all FormattingTextView initialization code runs:
-        // - setup() method with observers and UIEditMenuInteraction
-        // - ThemeManager access and link text attributes
-        let textView = FormattingTextView()
-        textView.frame = CGRect(x: 0, y: 0, width: 100, height: 50)
-        window.addSubview(textView)
+        guard let keyWindow = Self.keyWindow() else {
+            // Retry with small delay until we have a key window.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.performWarmUp()
+            }
+            return
+        }
 
-        // Also warm up UITextField for search input
-        let textField = UITextField()
-        textField.frame = CGRect(x: 100, y: 0, width: 100, height: 50)
+        isWarmingUp = true
+
+        // IMPORTANT: warming in an off-screen, non-key window often does not trigger the full
+        // keyboard initialization. We attach to the real key window, but keep the view invisible.
+        let textField = UITextField(frame: CGRect(x: -2000, y: -2000, width: 1, height: 1))
         textField.autocorrectionType = .default
         textField.spellCheckingType = .default
+        textField.keyboardType = .default
+        textField.returnKeyType = .default
+        textField.textContentType = .none
         textField.font = .systemFont(ofSize: 16)
-        window.addSubview(textField)
+        textField.isUserInteractionEnabled = false
+        textField.alpha = 0.01
+        textField.backgroundColor = .clear
+        keyWindow.addSubview(textField)
+        dummyTextField = textField
 
-        // Keep references to prevent deallocation
-        self.warmUpWindow = window
-        self.warmUpTextView = textView
-        self.warmUpTextField = textField
-
-        // Briefly become first responder to load keyboard (use FormattingTextView first)
-        textView.becomeFirstResponder()
-
-        // After a short time, switch to TextField to warm it up too
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.warmUpTextView?.resignFirstResponder()
-            self?.warmUpTextField?.becomeFirstResponder()
+        // Prefer a "silent" warmup: resign as soon as keyboard is about to show.
+        keyboardWillShowObserver = NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillShowNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.finishWarmUp(after: 0.01)
         }
 
-        // Keep keyboard up for full preload (including autocomplete, emoji keyboard, etc.)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.warmUpTextField?.resignFirstResponder()
-
-            // Clean up after keyboard is fully dismissed
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                self?.warmUpTextView?.removeFromSuperview()
-                self?.warmUpTextView = nil
-                self?.warmUpTextField?.removeFromSuperview()
-                self?.warmUpTextField = nil
-                self?.warmUpWindow?.isHidden = true
-                self?.warmUpWindow = nil
+        let didFocus = textField.becomeFirstResponder()
+        if !didFocus {
+            teardownWarmUp()
+            isWarmingUp = false
+            // Retry quickly if focus fails.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.performWarmUp()
             }
+            return
         }
+
+        // Fallback: if we never get keyboardWillShow (e.g., hardware keyboard), stop quickly.
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.finishWarmUp(after: 0.0)
+        }
+        fallbackWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
+    }
+
+    private func finishWarmUp(after delay: TimeInterval) {
+        guard isWarmingUp else { return }
+        isWarmingUp = false
+
+        fallbackWorkItem?.cancel()
+        fallbackWorkItem = nil
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self = self else { return }
+            self.dummyTextField?.resignFirstResponder()
+            self.teardownWarmUp()
+            self.didWarmUp = true
+        }
+    }
+
+    private func teardownWarmUp() {
+        if let token = keyboardWillShowObserver {
+            NotificationCenter.default.removeObserver(token)
+            keyboardWillShowObserver = nil
+        }
+        dummyTextField?.removeFromSuperview()
+        dummyTextField = nil
+    }
+
+    private static func keyWindow() -> UIWindow? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
+    }
+}
+
+private extension UIResponder {
+    private static weak var _currentFirstResponder: UIResponder?
+
+    static func currentFirstResponder() -> UIResponder? {
+        _currentFirstResponder = nil
+        UIApplication.shared.sendAction(#selector(_trapFirstResponder(_:)), to: nil, from: nil, for: nil)
+        return _currentFirstResponder
+    }
+
+    @objc private func _trapFirstResponder(_ sender: Any) {
+        UIResponder._currentFirstResponder = self
     }
 }

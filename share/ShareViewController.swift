@@ -17,6 +17,7 @@ class ShareViewController: UIViewController {
     private var imageProviders: [NSItemProvider] = []  // Don't load images, just keep providers
     private var videoProviders: [NSItemProvider] = []  // Don't load videos, just keep providers
     private var hostingController: UIHostingController<ShareExtensionView>?
+    private let collectedContentQueue = DispatchQueue(label: "company.thecool.taby.share.collected-content")
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -57,7 +58,7 @@ class ShareViewController: UIViewController {
                     provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] item, _ in
                         defer { group.leave() }
                         if let url = item as? URL {
-                            DispatchQueue.main.async {
+                            self?.collectedContentQueue.sync {
                                 self?.urlContent.append(url)
                             }
                         }
@@ -69,7 +70,7 @@ class ShareViewController: UIViewController {
                     provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] item, _ in
                         defer { group.leave() }
                         if let text = item as? String {
-                            DispatchQueue.main.async {
+                            self?.collectedContentQueue.sync {
                                 if self?.textContent.isEmpty == true {
                                     self?.textContent = text
                                 } else {
@@ -144,6 +145,7 @@ class ShareViewController: UIViewController {
         var videoAspectRatios: [Double] = []
         var videoDurations: [Double] = []
         var videoThumbnailFileNames: [String] = []
+        let resultsQueue = DispatchQueue(label: "company.thecool.taby.share.save-results")
 
         let group = DispatchGroup()
 
@@ -152,8 +154,10 @@ class ShareViewController: UIViewController {
             saveImageProvider(provider) { result in
                 defer { group.leave() }
                 if let (fileName, aspectRatio) = result {
-                    photoFileNames.append(fileName)
-                    photoAspectRatios.append(aspectRatio)
+                    resultsQueue.sync {
+                        photoFileNames.append(fileName)
+                        photoAspectRatios.append(aspectRatio)
+                    }
                 }
             }
         }
@@ -163,10 +167,12 @@ class ShareViewController: UIViewController {
             saveVideoProvider(provider) { result in
                 defer { group.leave() }
                 if let result = result {
-                    videoFileNames.append(result.fileName)
-                    videoAspectRatios.append(result.aspectRatio)
-                    videoDurations.append(result.duration)
-                    videoThumbnailFileNames.append(result.thumbnailFileName)
+                    resultsQueue.sync {
+                        videoFileNames.append(result.fileName)
+                        videoAspectRatios.append(result.aspectRatio)
+                        videoDurations.append(result.duration)
+                        videoThumbnailFileNames.append(result.thumbnailFileName)
+                    }
                 }
             }
         }
