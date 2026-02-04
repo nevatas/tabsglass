@@ -52,6 +52,11 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onIndexChange = { newIndex in
             selectedIndex = newIndex
         }
+        vc.onAnimatedIndexChange = { newIndex in
+            withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                selectedIndex = newIndex
+            }
+        }
         vc.onTextChange = { text in
             messageText = text
         }
@@ -117,6 +122,7 @@ final class UnifiedChatViewController: UIViewController {
     /// Check if currently on Search tab
     private var isOnSearch: Bool { selectedIndex == 0 }
     var onIndexChange: ((Int) -> Void)?
+    var onAnimatedIndexChange: ((Int) -> Void)?  // For animated tab switches (e.g., edge swipe to Search)
     var onTextChange: ((String) -> Void)?
     var onSwitchFraction: ((CGFloat) -> Void)?  // -1.0 to 1.0
     var onDeleteMessage: ((Message) -> Void)?
@@ -190,9 +196,42 @@ final class UnifiedChatViewController: UIViewController {
         setupPageViewController()
         setupInputView()
         setupSearchInput()
+        setupEdgeSwipeToSearch()
         // Search tabs are now embedded in MessageListViewController for the search tab
         // This allows swipe gestures to work properly
         updateInputVisibility(animated: false)
+    }
+
+    /// Setup left edge swipe gesture to navigate to Search from any tab
+    private func setupEdgeSwipeToSearch() {
+        let edgeSwipe = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleLeftEdgeSwipe(_:)))
+        edgeSwipe.edges = .left
+        edgeSwipe.delegate = self
+        view.addGestureRecognizer(edgeSwipe)
+
+        // Make page scroll view's pan gesture require edge swipe to fail first
+        if let scrollView = pageScrollView {
+            for gesture in scrollView.gestureRecognizers ?? [] {
+                if let panGesture = gesture as? UIPanGestureRecognizer {
+                    panGesture.require(toFail: edgeSwipe)
+                }
+            }
+        }
+    }
+
+    @objc private func handleLeftEdgeSwipe(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        // Navigate to Search on swipe completion (same as tapping search icon in tab bar)
+        guard gesture.state == .ended else { return }
+        guard selectedIndex != 0 else { return }
+
+        let translation = gesture.translation(in: view).x
+        let velocity = gesture.velocity(in: view).x
+
+        // Complete navigation if swiped enough or with enough velocity
+        if translation > 50 || velocity > 300 {
+            // Use animated callback to trigger SwiftUI animation (same as tapping search icon)
+            onAnimatedIndexChange?(0)
+        }
     }
 
     private func setupPageViewController() {
@@ -933,6 +972,26 @@ extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewC
         selectedIndex = currentVC.pageIndex
         onIndexChange?(selectedIndex)
         updateInputVisibility(animated: true)
+    }
+}
+
+// MARK: - UIGestureRecognizerDelegate (Edge Swipe)
+
+extension UnifiedChatViewController: UIGestureRecognizerDelegate {
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Disable edge swipe on Search (index 0) and Inbox (index 1) - let normal swipe work
+        if gestureRecognizer is UIScreenEdgePanGestureRecognizer {
+            return selectedIndex > 1
+        }
+        return true
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Edge swipe should NOT work simultaneously with page scroll - it takes priority
+        if gestureRecognizer is UIScreenEdgePanGestureRecognizer {
+            return false
+        }
+        return true
     }
 }
 
