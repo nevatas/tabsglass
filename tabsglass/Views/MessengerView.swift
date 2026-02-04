@@ -731,6 +731,7 @@ final class MessageTableCell: UITableViewCell {
     private var mosaicBottomToBubble: NSLayoutConstraint!
     private var todoViewHeightConstraint: NSLayoutConstraint!
     private var todoViewBottomToBubble: NSLayoutConstraint!
+    private var bubbleContainerTopConstraint: NSLayoutConstraint!
     private var traitChangeRegistration: UITraitChangeRegistration?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -757,7 +758,9 @@ final class MessageTableCell: UITableViewCell {
         backgroundColor = .clear
         selectionStyle = .none
         clipsToBounds = false
+        layer.masksToBounds = false
         contentView.clipsToBounds = false
+        contentView.layer.masksToBounds = false
 
         // Checkbox for selection mode (hidden by default)
         checkboxView.translatesAutoresizingMaskIntoConstraints = false
@@ -794,6 +797,7 @@ final class MessageTableCell: UITableViewCell {
         // Reminder badge (positioned on top-right corner of bubble, slightly outside)
         reminderBadge.backgroundColor = .systemRed
         reminderBadge.layer.cornerRadius = 12
+        reminderBadge.layer.zPosition = 1000  // Render above adjacent cells
         reminderBadge.translatesAutoresizingMaskIntoConstraints = false
         reminderBadge.isHidden = true
         bubbleContainer.addSubview(reminderBadge)
@@ -865,6 +869,8 @@ final class MessageTableCell: UITableViewCell {
         // Two variants of leading constraint for bubble container
         bubbleContainerLeadingNormal = bubbleContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8)
         bubbleContainerLeadingSelection = bubbleContainer.leadingAnchor.constraint(equalTo: checkboxView.trailingAnchor, constant: 4)
+        // Top constraint adjustable for messages with reminders (need extra space at top)
+        bubbleContainerTopConstraint = bubbleContainer.topAnchor.constraint(equalTo: contentView.topAnchor, constant: -4)
 
         NSLayoutConstraint.activate([
             // Checkbox constraints
@@ -875,7 +881,8 @@ final class MessageTableCell: UITableViewCell {
 
             // Container positioned to keep bubble in same place as before (with symmetric 8pt padding)
             // bubble.top = container.top + 8, so container.top = contentView.top + 4 - 8 = -4
-            bubbleContainer.topAnchor.constraint(equalTo: contentView.topAnchor, constant: -4),
+            // For messages with reminders, we use contentView.top + 4 instead (extra 8pt for badge)
+            bubbleContainerTopConstraint,
             // bubble.bottom = container.bottom - 8, so container.bottom = contentView.bottom - 4 + 8 = +4
             bubbleContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: 4),
             // bubble.trailing = container.trailing - 8, so container.trailing = contentView.trailing - 16 + 8 = -8
@@ -1012,6 +1019,7 @@ final class MessageTableCell: UITableViewCell {
         cachedMessage = nil
         lastLayoutWidth = 0
         reminderBadge.isHidden = true
+        bubbleContainerTopConstraint.constant = -4  // Reset to default
         // Reset constraints
         messageTextViewTopToMosaic.isActive = false
         messageTextViewTopToBubble.isActive = false
@@ -1037,8 +1045,10 @@ final class MessageTableCell: UITableViewCell {
             todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
         }
 
-        // Show/hide reminder badge
+        // Show/hide reminder badge and adjust top spacing
         reminderBadge.isHidden = !message.hasReminder
+        // Messages with reminders need extra top space so badge stays within cell bounds
+        bubbleContainerTopConstraint.constant = message.hasReminder ? 4 : -4
 
         updateBubbleColor()
 

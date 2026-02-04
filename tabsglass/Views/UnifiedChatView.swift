@@ -212,6 +212,7 @@ final class UnifiedChatViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
+        view.clipsToBounds = false
         setupPageViewController()
         setupInputView()
         setupSearchInput()
@@ -275,11 +276,17 @@ final class UnifiedChatViewController: UIViewController {
         pageViewController.didMove(toParent: self)
 
         // Find the scroll view inside UIPageViewController to track swipe progress
+        // Also disable clipping to allow reminder badges to extend outside cell bounds
+        pageViewController.view.clipsToBounds = false
         for subview in pageViewController.view.subviews {
+            subview.clipsToBounds = false
             if let scrollView = subview as? UIScrollView {
                 pageScrollView = scrollView
                 scrollView.delegate = self
-                break
+                // Disable clipping on all scroll view subviews (page containers)
+                for pageContainer in scrollView.subviews {
+                    pageContainer.clipsToBounds = false
+                }
             }
         }
 
@@ -1020,6 +1027,11 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
         isUserSwiping = true
+
+        // Ensure all page containers have clipping disabled (for reminder badges)
+        for subview in scrollView.subviews {
+            subview.clipsToBounds = false
+        }
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -1103,6 +1115,7 @@ final class MessageListViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
+        view.clipsToBounds = false
         setupTableView()
 
         // Setup embedded search tabs if this is the search tab
@@ -1118,6 +1131,7 @@ final class MessageListViewController: UIViewController {
         tableView.separatorStyle = .none
         tableView.keyboardDismissMode = .interactive
         tableView.showsVerticalScrollIndicator = false
+        tableView.clipsToBounds = false
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 200
         tableView.delegate = self
@@ -1641,6 +1655,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         if message.isTodoList, let items = message.todoItems {
             let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             height += todoHeight
+            // Extra space for reminder badge
+            if message.hasReminder { height += 8 }
             return max(height, 50)
         }
 
@@ -1679,6 +1695,9 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 height += 10 + ceil(textHeight) + 10
             }
         }
+
+        // Extra space for reminder badge
+        if message.hasReminder { height += 8 }
 
         return max(height, 50)  // Minimum height
     }
