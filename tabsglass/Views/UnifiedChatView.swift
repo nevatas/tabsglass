@@ -166,6 +166,24 @@ final class UnifiedChatViewController: UIViewController {
     private var isComposerFocused: Bool = false
     private var isSearchFocused: Bool = false
 
+    /// Messages matching the current search query (case-insensitive, all tabs)
+    private var filteredMessages: [Message] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return [] }
+        return allMessages.filter { $0.content.localizedCaseInsensitiveContains(query) }
+    }
+
+    /// Update search tab with filtered messages
+    private func updateSearchResults() {
+        guard let searchVC = messageControllers[0] else { return }
+        searchVC.messages = filteredMessages
+        searchVC.reloadMessages()
+
+        // Show tabs only when no search text and not focused
+        let shouldShowTabs = searchText.isEmpty && !isSearchFocused
+        searchVC.setSearchTabsVisible(shouldShowTabs, animated: true)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
@@ -348,6 +366,13 @@ final class UnifiedChatViewController: UIViewController {
             self.updateSearchKeyboardConstraint(followKeyboard: isFocused)
         }
 
+        // Track text changes to update search results
+        searchInputState.onTextChange = { [weak self] newText in
+            guard let self = self else { return }
+            self.searchText = newText
+            self.updateSearchResults()
+        }
+
         // Search input starts with interaction disabled - updateInputVisibility will enable when on Search
         container.isUserInteractionEnabled = false
         hostingController.view.isUserInteractionEnabled = false
@@ -362,9 +387,10 @@ final class UnifiedChatViewController: UIViewController {
             searchBottomToKeyboard?.isActive = false
             searchBottomToSafeArea?.isActive = true
         }
-        // Update embedded search tabs visibility (hide when keyboard is focused)
+        // Update embedded search tabs visibility (hide when keyboard is focused or has search text)
         if let searchVC = messageControllers[0] {
-            searchVC.setSearchTabsVisible(!followKeyboard, animated: true)
+            let shouldShowTabs = !followKeyboard && searchText.isEmpty
+            searchVC.setSearchTabsVisible(shouldShowTabs, animated: true)
         }
     }
 
@@ -497,8 +523,8 @@ final class UnifiedChatViewController: UIViewController {
 
     private func getMessageController(for index: Int) -> MessageListViewController {
         let currentTabId = tabId(for: index)
-        // Search tab (index 0) shows empty for now
-        let tabMessages = index == 0 ? [] : messages(for: currentTabId)
+        // Search tab (index 0) shows filtered search results
+        let tabMessages = index == 0 ? filteredMessages : messages(for: currentTabId)
 
         if let existing = messageControllers[index] {
             existing.allTabs = tabs
@@ -559,11 +585,20 @@ final class UnifiedChatViewController: UIViewController {
 
         // Search tab: callback for when a tab button is tapped
         if index == 0 {
-            vc.onTabSelected = { [weak self] tabIndex in
+            vc.onTabSelected = { [weak self] tabIndex, messageId in
                 guard let self = self else { return }
                 self.selectedIndex = tabIndex
                 self.onIndexChange?(tabIndex)
                 self.updatePageSelection(animated: true)
+
+                // Scroll to specific message after navigation completes
+                if let messageId = messageId {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        if let targetVC = self.messageControllers[tabIndex] {
+                            targetVC.scrollToMessage(id: messageId, animated: true)
+                        }
+                    }
+                }
             }
         }
 
@@ -603,8 +638,8 @@ final class UnifiedChatViewController: UIViewController {
             if index < totalTabCount {
                 currentVC.currentTabId = tabId(for: index)
                 currentVC.allTabs = tabs
-                // Search tab (index 0) shows empty for now
-                currentVC.messages = index == 0 ? [] : messages(for: currentVC.currentTabId)
+                // Search tab (index 0) shows filtered search results
+                currentVC.messages = index == 0 ? filteredMessages : messages(for: currentVC.currentTabId)
                 currentVC.reloadMessages()
             }
         }
@@ -972,7 +1007,7 @@ final class MessageListViewController: UIViewController {
     var onToggleMessageSelection: ((UUID, Bool) -> Void)?
 
     // Search tabs (for search tab only)
-    var onTabSelected: ((Int) -> Void)?  // Callback when a tab button is tapped
+    var onTabSelected: ((Int, UUID?) -> Void)?  // Callback when a tab button is tapped (tabIndex, messageId to scroll to)
 
     private let tableView = UITableView()
     private var sortedMessages: [Message] = []
@@ -985,6 +1020,7 @@ final class MessageListViewController: UIViewController {
 
     // Embedded search tabs for search tab
     private var searchTabsHostingController: UIHostingController<SearchTabsView>?
+    private var topFadeGradient: TopFadeGradientView?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -994,6 +1030,7 @@ final class MessageListViewController: UIViewController {
         // Setup embedded search tabs if this is the search tab
         if isSearchTab {
             setupSearchTabs()
+            setupTopFadeGradient()
         }
     }
 
@@ -1009,7 +1046,11 @@ final class MessageListViewController: UIViewController {
         tableView.dataSource = self
         tableView.register(MessageTableCell.self, forCellReuseIdentifier: "MessageCell")
         tableView.register(EmptyTableCell.self, forCellReuseIdentifier: "EmptyCell")
-        tableView.transform = CGAffineTransform(scaleX: 1, y: -1)
+        tableView.register(SearchResultCell.self, forCellReuseIdentifier: "SearchResultCell")
+        // Only invert for chat tabs - search tab uses normal top-to-bottom layout
+        if !isSearchTab {
+            tableView.transform = CGAffineTransform(scaleX: 1, y: -1)
+        }
 
         view.addSubview(tableView)
 
@@ -1034,7 +1075,7 @@ final class MessageListViewController: UIViewController {
 
     private func setupSearchTabs() {
         let searchTabsView = SearchTabsView(tabs: allTabs) { [weak self] index in
-            self?.onTabSelected?(index)
+            self?.onTabSelected?(index, nil)
         }
 
         let hostingController = UIHostingController(rootView: searchTabsView)
@@ -1055,11 +1096,28 @@ final class MessageListViewController: UIViewController {
         searchTabsHostingController = hostingController
     }
 
+    private func setupTopFadeGradient() {
+        let gradientView = TopFadeGradientView()
+        gradientView.translatesAutoresizingMaskIntoConstraints = false
+        gradientView.isUserInteractionEnabled = false
+        // Insert below tableView so it's under the header but above messages
+        view.insertSubview(gradientView, aboveSubview: tableView)
+
+        NSLayoutConstraint.activate([
+            gradientView.topAnchor.constraint(equalTo: view.topAnchor),
+            gradientView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            gradientView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            gradientView.heightAnchor.constraint(equalToConstant: 100)
+        ])
+
+        topFadeGradient = gradientView
+    }
+
     /// Update the search tabs with new data
     func updateSearchTabs(tabs: [Tab]) {
         guard isSearchTab, let hostingController = searchTabsHostingController else { return }
         hostingController.rootView = SearchTabsView(tabs: tabs) { [weak self] index in
-            self?.onTabSelected?(index)
+            self?.onTabSelected?(index, nil)
         }
     }
 
@@ -1161,12 +1219,14 @@ final class MessageListViewController: UIViewController {
 
                 // Start appear animation immediately (in parallel with insert animation)
                 // Use async to ensure cells are created first
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
                     self.pendingAppearAnimationIds.removeAll()
 
                     for indexPath in insertIndexPaths {
                         guard let cell = self.tableView.cellForRow(at: indexPath) else { continue }
-                        let originalTransform = CGAffineTransform(scaleX: 1, y: -1)
+                        // Search tab uses identity, chat tabs use inverted transform
+                        let originalTransform: CGAffineTransform = self.isSearchTab ? .identity : CGAffineTransform(scaleX: 1, y: -1)
 
                         // Set initial state: small and transparent
                         cell.transform = originalTransform.scaledBy(x: 0.85, y: 0.85)
@@ -1180,8 +1240,9 @@ final class MessageListViewController: UIViewController {
                         }
                     }
                 }
-            } else if isSimpleInsertion && oldMessages.isEmpty {
+            } else if isSimpleInsertion && oldMessages.isEmpty && !isSearchTab {
                 // First message in empty tab - fade out empty cell, then show message cell
+                // (Skip for search tab - it doesn't have empty cell placeholder)
                 isAnimatingFirstMessage = true
                 let emptyCell = tableView.cellForRow(at: IndexPath(row: 0, section: 0))
 
@@ -1292,38 +1353,52 @@ final class MessageListViewController: UIViewController {
         let extraSpacing: CGFloat = 16
         // bottomPadding already includes inputContainer height + keyboard (if visible)
         let newInset = bottomPadding + extraSpacing
-        let oldInset = tableView.contentInset.top
-        let delta = newInset - oldInset
 
-        // Save current offset BEFORE changing inset (tableView auto-adjusts on inset change)
-        let currentOffset = tableView.contentOffset
-
-        // Visual bottom (composer area) - tableView is flipped so top = visual bottom
-        tableView.contentInset.top = newInset
-        tableView.verticalScrollIndicatorInsets.top = newInset
-
-        // Visual top (header/tab bar area) - tableView is flipped so bottom = visual top
         // Safe area top + header content + extra padding
         let safeAreaTop = view.safeAreaInsets.top
         let headerHeight: CGFloat = 115
         let topInset = safeAreaTop + headerHeight
-        tableView.contentInset.bottom = topInset
-        tableView.verticalScrollIndicatorInsets.bottom = topInset
 
-        // Adjust offset to keep messages in sync with keyboard
-        if animated && abs(delta) > 1 {
-            var offset = currentOffset
-            offset.y -= delta
-            tableView.contentOffset = offset
-        } else if delta > 1 {
-            // Non-animated: only adjust when inset increases (keyboard appearing)
-            var offset = currentOffset
-            offset.y -= delta
-            tableView.contentOffset = offset
+        if isSearchTab {
+            // Search tab: normal layout (top to bottom)
+            // Smaller top inset - just search input, no tab bar
+            let searchTopInset = safeAreaTop + 70
+            tableView.contentInset.top = searchTopInset
+            tableView.verticalScrollIndicatorInsets.top = searchTopInset
+            // Bottom inset for search input + keyboard
+            tableView.contentInset.bottom = newInset
+            tableView.verticalScrollIndicatorInsets.bottom = newInset
+        } else {
+            // Chat tabs: inverted layout (bottom to top)
+            let oldInset = tableView.contentInset.top
+            let delta = newInset - oldInset
+
+            // Save current offset BEFORE changing inset (tableView auto-adjusts on inset change)
+            let currentOffset = tableView.contentOffset
+
+            // Visual bottom (composer area) - tableView is flipped so top = visual bottom
+            tableView.contentInset.top = newInset
+            tableView.verticalScrollIndicatorInsets.top = newInset
+
+            // Visual top (header/tab bar area) - tableView is flipped so bottom = visual top
+            tableView.contentInset.bottom = topInset
+            tableView.verticalScrollIndicatorInsets.bottom = topInset
+
+            // Adjust offset to keep messages in sync with keyboard
+            if animated && abs(delta) > 1 {
+                var offset = currentOffset
+                offset.y -= delta
+                tableView.contentOffset = offset
+            } else if delta > 1 {
+                // Non-animated: only adjust when inset increases (keyboard appearing)
+                var offset = currentOffset
+                offset.y -= delta
+                tableView.contentOffset = offset
+            }
         }
 
         // Recalculate empty cell height to stay centered
-        if sortedMessages.isEmpty {
+        if sortedMessages.isEmpty && !isSearchTab {
             tableView.beginUpdates()
             tableView.endUpdates()
         }
@@ -1331,11 +1406,23 @@ final class MessageListViewController: UIViewController {
 
     func scrollToBottom(animated: Bool) {
         guard !sortedMessages.isEmpty else { return }
+        // Search tab doesn't scroll to bottom - results start at top
+        guard !isSearchTab else { return }
         // Ensure table has updated layout
         tableView.layoutIfNeeded()
         // For flipped table: scroll to show row 0 at visual bottom (near composer)
         // Use .top because the table is flipped - .top in flipped coordinates = visual bottom
         tableView.scrollToRow(at: IndexPath(row: 0, section: 0), at: .top, animated: animated)
+    }
+
+    /// Scroll to a specific message by ID
+    func scrollToMessage(id: UUID, animated: Bool) {
+        guard let index = sortedMessages.firstIndex(where: { $0.id == id }) else { return }
+        tableView.layoutIfNeeded()
+        let indexPath = IndexPath(row: index, section: 0)
+        // For flipped table, .top shows the row at visual bottom (near composer)
+        // Use .middle to center the message on screen
+        tableView.scrollToRow(at: indexPath, at: .middle, animated: animated)
     }
 
     // MARK: - Selection Mode
@@ -1376,8 +1463,10 @@ final class MessageListViewController: UIViewController {
 
 extension MessageListViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        // Search tab shows no cells (tabs overlay handles empty state)
-        if isSearchTab { return 0 }
+        // Search tab shows search results (0 when empty, no empty cell placeholder)
+        if isSearchTab {
+            return sortedMessages.count
+        }
         return sortedMessages.isEmpty ? 1 : sortedMessages.count
     }
 
@@ -1388,8 +1477,41 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             return cell
         }
 
-        let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
         let message = sortedMessages[indexPath.row]
+
+        // Use SearchResultCell for search tab
+        if isSearchTab {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "SearchResultCell", for: indexPath) as! SearchResultCell
+
+            // Get tab name for display
+            let tabName: String
+            if let tabId = message.tabId {
+                tabName = allTabs.first(where: { $0.id == tabId })?.title ?? L10n.Reorder.inbox
+            } else {
+                tabName = L10n.Reorder.inbox
+            }
+
+            cell.configure(with: message, tabName: tabName)
+            cell.onTap = { [weak self] in
+                // Navigate to the message's tab and scroll to the message
+                guard let self = self else { return }
+                let tabIndex: Int
+                if let tabId = message.tabId {
+                    // Find tab index (tab indices start at 2: 0=Search, 1=Inbox, 2+=tabs)
+                    if let idx = self.allTabs.firstIndex(where: { $0.id == tabId }) {
+                        tabIndex = idx + 2
+                    } else {
+                        tabIndex = 1 // Fallback to Inbox
+                    }
+                } else {
+                    tabIndex = 1 // Inbox
+                }
+                self.onTabSelected?(tabIndex, message.id)
+            }
+            return cell
+        }
+
+        let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
         cell.configure(with: message)
         cell.onMediaTapped = { [weak self] index, sourceFrame, _, _, _ in
             // Open unified gallery with all media (photos + videos)
@@ -1414,7 +1536,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             cell.isHidden = false
             cell.alpha = 1
         }
-        cell.transform = CGAffineTransform(scaleX: 1, y: -1)
+        // Only invert cells for chat tabs - search tab uses normal layout
+        cell.transform = isSearchTab ? .identity : CGAffineTransform(scaleX: 1, y: -1)
         return cell
     }
 
@@ -1426,6 +1549,12 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
         let message = sortedMessages[indexPath.row]
         let cellWidth = tableView.bounds.width
+
+        // Search tab uses SearchResultCell with different layout
+        if isSearchTab {
+            return SearchResultCell.calculateHeight(for: message, maxWidth: cellWidth)
+        }
+
         let bubbleWidth = cellWidth - 32  // 16px margins on each side
 
         var height: CGFloat = 8  // Cell padding (4 top + 4 bottom)
@@ -1585,41 +1714,13 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             return nil
         }
 
+        // Use the actual bubble view - iOS will automatically hide it during context menu animation
         let bubbleView = cell.bubbleViewForContextMenu
-        let bubbleFrame = bubbleView.convert(bubbleView.bounds, to: nil)
-        let screenHeight = view.window?.windowScene?.screen.bounds.height ?? view.bounds.height
-        let maxPreviewHeight = screenHeight * 0.4
-
-        // For short cells, use standard preview (container includes bubble + reminder badge)
-        if bubbleFrame.height <= maxPreviewHeight {
-            let parameters = UIPreviewParameters()
-            parameters.backgroundColor = .clear
-            return UITargetedPreview(view: bubbleView, parameters: parameters)
-        }
-
-        // For tall cells, show top portion
-        let snapshotHeight = maxPreviewHeight
-
-        // Create container for top portion
-        let containerView = UIView(frame: CGRect(x: 0, y: 0, width: bubbleView.bounds.width, height: snapshotHeight))
-        containerView.backgroundColor = .clear
-        containerView.clipsToBounds = true
-        containerView.layer.cornerRadius = 18
-
-        // Create snapshot positioned at top
-        if let snapshot = bubbleView.snapshotView(afterScreenUpdates: false) {
-            snapshot.frame = CGRect(x: 0, y: 0, width: bubbleView.bounds.width, height: bubbleView.bounds.height)
-            containerView.addSubview(snapshot)
-        }
 
         let parameters = UIPreviewParameters()
         parameters.backgroundColor = .clear
 
-        // Target at the top of the bubble view
-        let center = CGPoint(x: bubbleView.bounds.midX, y: snapshotHeight / 2)
-        let target = UIPreviewTarget(container: bubbleView, center: center)
-
-        return UITargetedPreview(view: containerView, parameters: parameters, target: target)
+        return UITargetedPreview(view: bubbleView, parameters: parameters)
     }
 }
 
@@ -1680,6 +1781,67 @@ final class BottomFadeGradientView: UIView {
         gradientLayer.colors = [
             bgColor.withAlphaComponent(0).cgColor,
             bgColor.cgColor
+        ]
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        gradientLayer.frame = bounds
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+}
+
+// MARK: - Top Fade Gradient View
+
+final class TopFadeGradientView: UIView {
+    private let gradientLayer = CAGradientLayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGradient()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGradient()
+    }
+
+    private func setupGradient() {
+        gradientLayer.locations = [0.0, 1.0]
+        gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)  // Top (solid)
+        gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)    // Bottom (transparent)
+        layer.addSublayer(gradientLayer)
+        updateColors()
+
+        // Update colors when trait collection changes
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: TopFadeGradientView, _) in
+            self.updateColors()
+        }
+
+        // Update colors when theme changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleThemeChange),
+            name: .themeDidChange,
+            object: nil
+        )
+    }
+
+    @objc private func handleThemeChange() {
+        updateColors()
+    }
+
+    private func updateColors() {
+        let theme = ThemeManager.shared.currentTheme
+        let isDark = traitCollection.userInterfaceStyle == .dark
+        let bgColor = isDark ? UIColor(theme.backgroundColorDark) : UIColor(theme.backgroundColor)
+
+        gradientLayer.colors = [
+            bgColor.cgColor,
+            bgColor.withAlphaComponent(0).cgColor
         ]
     }
 

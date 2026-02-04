@@ -575,6 +575,10 @@ struct EmbeddedComposerView: View {
             }
             .padding(.top, hasMedia ? 8 : 14)
             .padding(.bottom, 14)
+            .contentShape(.rect(cornerRadius: 24))
+            .onTapGesture {
+                state.shouldFocus = true
+            }
             .clipShape(.rect(cornerRadius: 24))
             .glassEffect(
                 .regular.tint(composerTint).interactive(),
@@ -1241,5 +1245,264 @@ final class EmptyTableCell: UITableViewCell {
             stackView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             stackView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
         ])
+    }
+}
+
+// MARK: - Search Result Cell
+
+final class SearchResultCell: UITableViewCell {
+    private let tabNameLabel = UILabel()
+    private let messageLabel = UILabel()
+    private let thumbnailStack = UIStackView()
+    private let dividerView = UIView()
+
+    private static let thumbnailSize: CGFloat = 36
+    private static let maxVisibleThumbnails = 5
+
+    var onTap: (() -> Void)?
+
+    // Dynamic constraints
+    private var labelBottomWithoutMedia: NSLayoutConstraint!
+    private var labelBottomWithMedia: NSLayoutConstraint!
+    private var thumbnailStackHeight: NSLayoutConstraint!
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        setupCell()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupCell() {
+        backgroundColor = .clear
+        selectionStyle = .none
+
+        // Tab name label
+        tabNameLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        tabNameLabel.textColor = ThemeManager.shared.currentTheme.placeholderColor
+        tabNameLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(tabNameLabel)
+
+        // Message text label
+        messageLabel.font = .systemFont(ofSize: 16)
+        messageLabel.textColor = .label
+        messageLabel.numberOfLines = 3
+        messageLabel.lineBreakMode = .byTruncatingTail
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(messageLabel)
+
+        // Thumbnail horizontal stack
+        thumbnailStack.axis = .horizontal
+        thumbnailStack.spacing = 6
+        thumbnailStack.alignment = .center
+        thumbnailStack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(thumbnailStack)
+
+        // Bottom divider
+        dividerView.backgroundColor = .separator.withAlphaComponent(0.3)
+        dividerView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(dividerView)
+
+        // Create dynamic constraints
+        labelBottomWithoutMedia = messageLabel.bottomAnchor.constraint(equalTo: dividerView.topAnchor, constant: -12)
+        labelBottomWithMedia = thumbnailStack.topAnchor.constraint(equalTo: messageLabel.bottomAnchor, constant: 8)
+        thumbnailStackHeight = thumbnailStack.heightAnchor.constraint(equalToConstant: Self.thumbnailSize)
+
+        NSLayoutConstraint.activate([
+            tabNameLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            tabNameLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            tabNameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+
+            messageLabel.topAnchor.constraint(equalTo: tabNameLabel.bottomAnchor, constant: 4),
+            messageLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            messageLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+
+            thumbnailStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            thumbnailStack.bottomAnchor.constraint(equalTo: dividerView.topAnchor, constant: -12),
+
+            dividerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            dividerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            dividerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            dividerView.heightAnchor.constraint(equalToConstant: 0.5),
+        ])
+
+        // Tap gesture
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        contentView.addGestureRecognizer(tap)
+    }
+
+    @objc private func handleTap() {
+        onTap?()
+    }
+
+    func configure(with message: Message, tabName: String) {
+        // Set tab name
+        tabNameLabel.text = tabName
+        tabNameLabel.textColor = ThemeManager.shared.currentTheme.placeholderColor
+
+        // Set text
+        if message.content.isEmpty {
+            messageLabel.text = message.hasMedia ? "📷 \(L10n.Composer.gallery)" : ""
+        } else {
+            messageLabel.text = message.content
+        }
+
+        // Clear old thumbnails
+        thumbnailStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        // Check if message has media
+        let totalMedia = message.photoFileNames.count + message.videoFileNames.count
+        let hasMedia = totalMedia > 0
+
+        // Update constraints based on media presence
+        if hasMedia {
+            labelBottomWithoutMedia.isActive = false
+            labelBottomWithMedia.isActive = true
+            thumbnailStackHeight.isActive = true
+            thumbnailStack.isHidden = false
+        } else {
+            labelBottomWithMedia.isActive = false
+            thumbnailStackHeight.isActive = false
+            labelBottomWithoutMedia.isActive = true
+            thumbnailStack.isHidden = true
+            return
+        }
+
+        // Calculate how many thumbnails to show
+        let visibleCount = min(totalMedia, Self.maxVisibleThumbnails)
+        let hiddenCount = totalMedia - visibleCount
+
+        // Add photo thumbnails
+        for (index, fileName) in message.photoFileNames.prefix(visibleCount).enumerated() {
+            let isLast = (index == visibleCount - 1) && hiddenCount > 0
+            let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount)
+            thumbnailStack.addArrangedSubview(thumbnailView)
+
+            // Load image asynchronously
+            let thumbSize = CGSize(width: Self.thumbnailSize * 2, height: Self.thumbnailSize * 2)
+            ImageCache.shared.loadThumbnail(for: fileName, targetSize: thumbSize) { [weak thumbnailView] image in
+                DispatchQueue.main.async {
+                    guard let imageView = thumbnailView?.subviews.first as? UIImageView else { return }
+                    imageView.image = image
+                }
+            }
+        }
+
+        // Add video thumbnails if we have room
+        let remainingSlots = visibleCount - message.photoFileNames.count
+        if remainingSlots > 0 {
+            for (index, thumbFileName) in message.videoThumbnailFileNames.prefix(remainingSlots).enumerated() {
+                let actualIndex = message.photoFileNames.count + index
+                let isLast = (actualIndex == visibleCount - 1) && hiddenCount > 0
+                let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount, isVideo: true)
+                thumbnailStack.addArrangedSubview(thumbnailView)
+
+                let thumbSize = CGSize(width: Self.thumbnailSize * 2, height: Self.thumbnailSize * 2)
+                ImageCache.shared.loadThumbnail(for: thumbFileName, targetSize: thumbSize) { [weak thumbnailView] image in
+                    DispatchQueue.main.async {
+                        guard let imageView = thumbnailView?.subviews.first as? UIImageView else { return }
+                        imageView.image = image
+                    }
+                }
+            }
+        }
+    }
+
+    private func createThumbnailView(isLast: Bool, hiddenCount: Int, isVideo: Bool = false) -> UIView {
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.layer.cornerRadius = 8
+        container.clipsToBounds = true
+        container.backgroundColor = .systemGray5
+
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(imageView)
+
+        NSLayoutConstraint.activate([
+            container.widthAnchor.constraint(equalToConstant: Self.thumbnailSize),
+            container.heightAnchor.constraint(equalToConstant: Self.thumbnailSize),
+            imageView.topAnchor.constraint(equalTo: container.topAnchor),
+            imageView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            imageView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
+        // Add video indicator
+        if isVideo {
+            let playIcon = UIImageView(image: UIImage(systemName: "play.fill"))
+            playIcon.tintColor = .white
+            playIcon.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(playIcon)
+
+            NSLayoutConstraint.activate([
+                playIcon.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                playIcon.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                playIcon.widthAnchor.constraint(equalToConstant: 14),
+                playIcon.heightAnchor.constraint(equalToConstant: 14),
+            ])
+        }
+
+        // Add "+N" overlay for last thumbnail if there are hidden items
+        if isLast && hiddenCount > 0 {
+            let overlay = UIView()
+            overlay.backgroundColor = .black.withAlphaComponent(0.6)
+            overlay.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(overlay)
+
+            let countLabel = UILabel()
+            countLabel.text = "+\(hiddenCount)"
+            countLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+            countLabel.textColor = .white
+            countLabel.textAlignment = .center
+            countLabel.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(countLabel)
+
+            NSLayoutConstraint.activate([
+                overlay.topAnchor.constraint(equalTo: container.topAnchor),
+                overlay.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                overlay.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                overlay.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                countLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                countLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            ])
+        }
+
+        return container
+    }
+
+    /// Calculate cell height for a message
+    static func calculateHeight(for message: Message, maxWidth: CGFloat) -> CGFloat {
+        let textWidth = maxWidth - 32 // 16px padding on each side
+        var height: CGFloat = 12 // top padding
+
+        // Tab name label height
+        height += 16 // ~13pt font + some padding
+        height += 4 // spacing between tab name and message
+
+        // Text height (max 3 lines)
+        let text = message.content.isEmpty && message.hasMedia ? "📷 \(L10n.Composer.gallery)" : message.content
+        let textHeight = text.boundingRect(
+            with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: UIFont.systemFont(ofSize: 16)],
+            context: nil
+        ).height
+        height += min(ceil(textHeight), 60) // max 3 lines ~60pt
+
+        // Thumbnails height if has media
+        let totalMedia = message.photoFileNames.count + message.videoFileNames.count
+        if totalMedia > 0 {
+            height += 8 + thumbnailSize // spacing + thumbnail height
+        }
+
+        height += 12 // bottom padding before divider
+        height += 0.5 // divider
+
+        return height
     }
 }

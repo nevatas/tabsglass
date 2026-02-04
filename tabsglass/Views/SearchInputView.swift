@@ -6,10 +6,97 @@
 //
 
 import SwiftUI
+import UIKit
+
+// MARK: - UIKit TextField Wrapper
+
+/// Fast UITextField wrapper that avoids SwiftUI FocusState delays
+struct FastTextField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let placeholder: String
+    let placeholderColor: UIColor
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField()
+        textField.font = .systemFont(ofSize: 17, weight: .medium)
+        textField.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .foregroundColor: placeholderColor,
+                .font: UIFont.systemFont(ofSize: 17, weight: .medium)
+            ]
+        )
+        textField.delegate = context.coordinator
+        textField.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        textField.autocorrectionType = .default
+        textField.spellCheckingType = .default
+        textField.returnKeyType = .search
+        textField.clearButtonMode = .never // We handle clear button ourselves
+        return textField
+    }
+
+    func updateUIView(_ textField: UITextField, context: Context) {
+        if textField.text != text {
+            textField.text = text
+        }
+
+        // Update placeholder color when theme changes
+        textField.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .foregroundColor: placeholderColor,
+                .font: UIFont.systemFont(ofSize: 17, weight: .medium)
+            ]
+        )
+
+        // Handle focus changes from SwiftUI
+        if isFocused && !textField.isFirstResponder {
+            textField.becomeFirstResponder()
+        } else if !isFocused && textField.isFirstResponder {
+            textField.resignFirstResponder()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: FastTextField
+
+        init(_ parent: FastTextField) {
+            self.parent = parent
+        }
+
+        @objc func textChanged(_ textField: UITextField) {
+            parent.text = textField.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            DispatchQueue.main.async {
+                self.parent.isFocused = true
+            }
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            DispatchQueue.main.async {
+                self.parent.isFocused = false
+            }
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            textField.resignFirstResponder()
+            return true
+        }
+    }
+}
+
+// MARK: - Search Input View
 
 struct SearchInputView: View {
     @Binding var searchText: String
-    var isFocused: FocusState<Bool>.Binding
+    @Binding var isFocused: Bool
 
     @Environment(\.colorScheme) private var colorScheme
     private var themeManager: ThemeManager { ThemeManager.shared }
@@ -19,41 +106,46 @@ struct SearchInputView: View {
         return colorScheme == .dark ? theme.composerTintColorDark : theme.composerTintColor
     }
 
+    private var placeholderColor: UIColor {
+        themeManager.currentTheme.placeholderColor
+    }
+
     /// Unique ID that changes with theme to force glassEffect refresh
     private var glassId: String {
         "\(themeManager.currentTheme.rawValue)-\(colorScheme == .dark ? "dark" : "light")"
     }
 
     var body: some View {
-        GlassEffectContainer {
-            HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.secondary)
 
-                TextField(L10n.Search.placeholder, text: $searchText)
-                    .font(.system(size: 16))
-                    .focused(isFocused)
+            FastTextField(text: $searchText, isFocused: $isFocused, placeholder: L10n.Search.placeholder, placeholderColor: placeholderColor)
+                .frame(height: 24)
 
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 17))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .glassEffect(
-                .regular.tint(composerTint).interactive(),
-                in: .capsule
-            )
-            .id(glassId)  // Force recreation when theme changes
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .contentShape(.capsule)
+        .onTapGesture {
+            isFocused = true
+        }
+        .glassEffect(
+            .regular.tint(composerTint).interactive(),
+            in: .capsule
+        )
+        .id(glassId)  // Force recreation when theme changes
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
@@ -65,7 +157,7 @@ struct SearchInputView: View {
 @Observable
 final class SearchInputState {
     var text: String = ""
-    var shouldFocus: Bool = false
+    var isFocused: Bool = false
     var onTextChange: ((String) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
 
@@ -75,39 +167,38 @@ final class SearchInputState {
     }
 
     func focus() {
-        shouldFocus = true
+        isFocused = true
     }
 
     func blur() {
-        shouldFocus = false
+        isFocused = false
     }
 }
 
 /// SwiftUI view that can be hosted in UIKit
 struct SearchInputWrapper: View {
     @Bindable var state: SearchInputState
-    @FocusState private var isFocused: Bool
 
     var body: some View {
-        SearchInputView(searchText: Binding(
-            get: { state.text },
-            set: { state.updateText($0) }
-        ), isFocused: $isFocused)
-        .onChange(of: state.shouldFocus) { _, shouldFocus in
-            if shouldFocus {
-                isFocused = true
-                state.shouldFocus = false  // Reset trigger
-            }
-        }
-        .onChange(of: isFocused) { _, newValue in
-            state.onFocusChange?(newValue)
-        }
+        SearchInputView(
+            searchText: Binding(
+                get: { state.text },
+                set: { state.updateText($0) }
+            ),
+            isFocused: Binding(
+                get: { state.isFocused },
+                set: { newValue in
+                    state.isFocused = newValue
+                    state.onFocusChange?(newValue)
+                }
+            )
+        )
     }
 }
 
-struct SearchInputView_Previews: PreviewProvider {
+#Preview {
     struct PreviewWrapper: View {
-        @FocusState private var isFocused: Bool
+        @State private var isFocused = false
 
         var body: some View {
             VStack {
@@ -118,7 +209,5 @@ struct SearchInputView_Previews: PreviewProvider {
         }
     }
 
-    static var previews: some View {
-        PreviewWrapper()
-    }
+    return PreviewWrapper()
 }

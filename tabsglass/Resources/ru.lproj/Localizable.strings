@@ -130,7 +130,7 @@
 // MARK: - Search
 
 "search.title" = "Поиск";
-"search.placeholder" = "Поиск...";
+"search.placeholder" = "Найти...";
 
 // MARK: - Selection
 

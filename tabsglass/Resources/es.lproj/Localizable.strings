@@ -130,7 +130,7 @@
 // MARK: - Search
 
 "search.title" = "Búsqueda";
-"search.placeholder" = "Buscar...";
+"search.placeholder" = "Encontrar...";
 
 // MARK: - Selection
 
