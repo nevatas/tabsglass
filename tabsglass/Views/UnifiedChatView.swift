@@ -125,6 +125,7 @@ final class UnifiedChatViewController: UIViewController {
     var onAnimatedIndexChange: ((Int) -> Void)?  // For animated tab switches (e.g., edge swipe to Search)
     var onTextChange: ((String) -> Void)?
     var onSwitchFraction: ((CGFloat) -> Void)?  // -1.0 to 1.0
+    private var lastReportedFraction: CGFloat = 0  // For filtering micro-fluctuations
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
     var onEditMessage: ((Message) -> Void)?
@@ -1027,6 +1028,7 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
         isUserSwiping = true
+        lastReportedFraction = 0
 
         // Ensure all page containers have clipping disabled (for reminder badges)
         for subview in scrollView.subviews {
@@ -1047,15 +1049,24 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
 
         // fraction: -1 = fully swiped to previous, 0 = center, +1 = fully swiped to next
         let clampedFraction = max(-1, min(1, fraction))
-        onSwitchFraction?(clampedFraction)
 
-        // Sync input sliding with page swipe
+        // Filter out micro-fluctuations (e.g., from keyboard dismissal)
+        // Only report changes larger than 1% or direction changes
+        let delta = abs(clampedFraction - lastReportedFraction)
+        let directionChanged = (clampedFraction > 0) != (lastReportedFraction > 0) && lastReportedFraction != 0
+        if delta > 0.01 || directionChanged {
+            lastReportedFraction = clampedFraction
+            onSwitchFraction?(clampedFraction)
+        }
+
+        // Sync input sliding with page swipe (always update for smooth input movement)
         updateInputPositions(fraction: clampedFraction)
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
         isUserSwiping = false
+        lastReportedFraction = 0
         onSwitchFraction?(0)  // Reset fraction when swipe completes
     }
 
@@ -1063,6 +1074,7 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
         guard scrollView === pageScrollView else { return }
         if !decelerate {
             isUserSwiping = false
+            lastReportedFraction = 0
             onSwitchFraction?(0)  // Reset fraction when drag ends without deceleration
         }
     }
