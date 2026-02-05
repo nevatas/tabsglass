@@ -1881,6 +1881,16 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         return cell
     }
 
+    func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
+        // Ensure selection mode is correct for pre-fetched cells that missed updateSelectionMode
+        guard let messageCell = cell as? MessageTableCell,
+              indexPath.row < sortedMessages.count else { return }
+        messageCell.setSelectionMode(isSelectionMode, animated: false)
+        if isSelectionMode {
+            messageCell.setSelected(selectedMessageIds.contains(sortedMessages[indexPath.row].id))
+        }
+    }
+
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
         if sortedMessages.isEmpty {
             let availableHeight = tableView.bounds.height - tableView.contentInset.top - tableView.contentInset.bottom
