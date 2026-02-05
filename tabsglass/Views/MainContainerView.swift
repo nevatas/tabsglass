@@ -56,20 +56,19 @@ struct MainContainerView: View {
         selectedTabIndex == 0
     }
 
-    /// Calculate TabBar offset for Search ↔ Inbox transition
-    private var tabBarOffset: CGFloat {
-        let screenWidth = UIScreen.main.bounds.width
+    /// TabBar opacity - fades out when arriving at Search screen
+    private var tabBarOpacity: CGFloat {
         if selectedTabIndex == 0 {
-            // On Search: TabBar is off-screen right, but slides in when swiping back to Inbox
-            // switchFraction > 0 means swiping toward Inbox
-            return screenWidth * (1 - switchFraction)
+            // On Search: hidden, but visible when swiping toward Inbox
+            return switchFraction  // 0 when on Search, increases toward 1 when swiping to Inbox
         } else if selectedTabIndex == 1 && switchFraction < 0 {
-            // On Inbox, swiping toward Search: TabBar slides out to the right
-            // switchFraction: 0 → -1
-            return -switchFraction * screenWidth
+            // On Inbox, swiping toward Search: fade out
+            return 1 + switchFraction  // 1 → 0 as fraction goes -1
         }
-        return 0  // On other tabs, TabBar stays in place
+        return 1  // Fully visible on other tabs
     }
+
+    // Note: tabBarOffset removed - now using opacity instead
 
     /// Check if currently on Inbox
     private var isOnInbox: Bool {
@@ -149,7 +148,8 @@ struct MainContainerView: View {
                     tabs: tabs,
                     selectedIndex: $selectedTabIndex,
                     switchFraction: $switchFraction,
-                    tabsOffset: tabBarOffset,
+                    tabsOffset: 0,
+                    tabsOpacity: tabBarOpacity,
                     onAddTap: {
                         newTabTitle = ""
                         showNewTabAlert = true

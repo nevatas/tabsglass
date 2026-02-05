@@ -58,6 +58,7 @@ struct TabBarView: View {
     @Binding var selectedIndex: Int
     @Binding var switchFraction: CGFloat  // -1.0 ... 0 ... 1.0 при свайпе
     var tabsOffset: CGFloat = 0  // Offset for tabs row only (for Search transition)
+    var tabsOpacity: CGFloat = 1  // Opacity for tabs row only (fades on Search)
     let onAddTap: () -> Void
     let onMenuTap: () -> Void
     let onRenameTab: (Tab) -> Void
@@ -157,6 +158,7 @@ struct TabBarView: View {
             )
             .padding(.horizontal, 12)
             .offset(x: tabsOffset)
+            .opacity(tabsOpacity)
         }
         .padding(.top, 4)
         .padding(.bottom, 16)
