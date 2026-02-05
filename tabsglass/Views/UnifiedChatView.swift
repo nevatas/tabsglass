@@ -663,7 +663,7 @@ final class UnifiedChatViewController: UIViewController {
     }
 
     // MARK: - Performance Logging
-    private let perfLogEnabled = true
+    private let perfLogEnabled = false
     private func perfLog(_ message: String, duration: CFAbsoluteTime? = nil) {
         guard perfLogEnabled else { return }
         if let duration = duration {
@@ -1258,9 +1258,6 @@ final class MessageListViewController: UIViewController {
     private var heightCache: [UUID: CGFloat] = [:]
     /// Width used for cached heights (invalidate on width change)
     private var cachedHeightWidth: CGFloat = 0
-    /// Track height calculation stats for logging
-    private var heightCacheHits = 0
-    private var heightCacheMisses = 0
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -1392,7 +1389,7 @@ final class MessageListViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        print("📍 [PERF] viewWillAppear pageIndex=\(pageIndex)")
+        // Performance logging disabled via perfLogEnabled
         reloadMessages()
         refreshContentInset()
     }
@@ -1417,8 +1414,6 @@ final class MessageListViewController: UIViewController {
     private var lastProcessedMessageIds: Set<UUID> = []
 
     func reloadMessages() {
-        let start = CFAbsoluteTimeGetCurrent()
-
         // Skip if first message animation is in progress
         if isAnimatingFirstMessage { return }
 
@@ -1561,10 +1556,6 @@ final class MessageListViewController: UIViewController {
                     tableView.reloadData()
                 }
                 CATransaction.commit()
-                let duration = CFAbsoluteTimeGetCurrent() - start
-                if duration > 0.001 {
-                    print("⏱️ [PERF] reloadMessages(fullReload) pageIndex=\(pageIndex) msgs=\(sortedMessages.count): \(String(format: "%.2f", duration * 1000))ms")
-                }
             }
         }
     }
@@ -1752,8 +1743,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let start = CFAbsoluteTimeGetCurrent()
-
         if sortedMessages.isEmpty && !isSearchTab {
             let cell = tableView.dequeueReusableCell(withIdentifier: "EmptyCell", for: indexPath) as! EmptyTableCell
             cell.transform = CGAffineTransform(scaleX: 1, y: -1)
@@ -1791,10 +1780,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 }
                 self.onTabSelected?(tabIndex, message.id)
             }
-            let duration = CFAbsoluteTimeGetCurrent() - start
-            if duration > 0.002 {
-                print("⏱️ [PERF] cellForRowAt(search) row=\(indexPath.row): \(String(format: "%.2f", duration * 1000))ms")
-            }
             return cell
         }
 
@@ -1826,10 +1811,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         // Only invert cells for chat tabs - search tab uses normal layout
         cell.transform = isSearchTab ? .identity : CGAffineTransform(scaleX: 1, y: -1)
 
-        let duration = CFAbsoluteTimeGetCurrent() - start
-        if duration > 0.002 {
-            print("⏱️ [PERF] cellForRowAt(message) row=\(indexPath.row) textLen=\(message.content.count): \(String(format: "%.2f", duration * 1000))ms")
-        }
         return cell
     }
 
@@ -1847,30 +1828,20 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         if cellWidth != cachedHeightWidth {
             heightCache.removeAll()
             cachedHeightWidth = cellWidth
-            heightCacheHits = 0
-            heightCacheMisses = 0
         }
 
         // Return cached height if available
         if let cachedHeight = heightCache[message.id] {
-            heightCacheHits += 1
             return cachedHeight
         }
 
         // Calculate height (expensive operation)
-        let start = CFAbsoluteTimeGetCurrent()
         let height: CGFloat
         if isSearchTab {
             // Search tab uses SearchResultCell with different layout
             height = SearchResultCell.calculateHeight(for: message, maxWidth: cellWidth)
         } else {
             height = calculateMessageHeight(for: message, cellWidth: cellWidth)
-        }
-        let duration = CFAbsoluteTimeGetCurrent() - start
-        heightCacheMisses += 1
-
-        if duration > 0.001 {
-            print("⏱️ [PERF] heightForRowAt MISS pageIndex=\(pageIndex) row=\(indexPath.row) textLen=\(message.content.count): \(String(format: "%.2f", duration * 1000))ms (hits:\(heightCacheHits) misses:\(heightCacheMisses))")
         }
 
         // Cache the result
