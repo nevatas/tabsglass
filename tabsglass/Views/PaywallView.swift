@@ -8,7 +8,6 @@
 import SwiftUI
 
 struct PaywallView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @Binding var isPresented: Bool
 
     @State private var titleVisible = false
@@ -17,14 +16,8 @@ struct PaywallView: View {
     private var themeManager: ThemeManager { ThemeManager.shared }
 
     private var backgroundColor: Color {
-        let theme = themeManager.currentTheme
-        if theme == .system {
-            return colorScheme == .dark
-                ? theme.backgroundColorDark
-                : theme.backgroundColor
-        } else {
-            return colorScheme == .dark ? theme.backgroundColorDark : theme.backgroundColor
-        }
+        // Always use dark background for paywall
+        themeManager.currentTheme.backgroundColorDark
     }
 
     var body: some View {
@@ -80,7 +73,8 @@ struct PaywallView: View {
             .padding(.trailing, 16)
             .opacity(titleVisible ? 1 : 0)
         }
-        .preferredColorScheme(themeManager.currentTheme.colorSchemeOverride)
+        .preferredColorScheme(.dark)
+        .environment(\.colorScheme, .dark)
         .ignoresSafeArea(.keyboard)
         .onAppear {
             animateAppearance()
@@ -126,6 +120,7 @@ struct FeatureCard: View {
 }
 
 struct TabsFeatureCard: View {
+    // Full list for variety, but we only use a subset for performance
     private static let allTabs = [
         "📝 Journal", "🧘 Mindfulness", "🛌 Sleep Tracker", "🏋️ Fitness", "💊 Health",
         "🍽️ Recipes", "🎯 Goals", "💰 Finance", "🛒 Shopping", "🎁 Gifts",
@@ -139,9 +134,10 @@ struct TabsFeatureCard: View {
         "🛠️ DIY & Fixes", "💅 Nail Works", "🪴 Minimalism", "🕵️ Secrets", "☕ Coffee Journal"
     ]
 
-    @State private var tabs1: [String] = allTabs.shuffled()
-    @State private var tabs2: [String] = allTabs.shuffled()
-    @State private var tabs3: [String] = allTabs.shuffled()
+    // Only use 10 tabs per row for better performance (visible area + buffer)
+    @State private var tabs1: [String] = Array(allTabs.shuffled().prefix(10))
+    @State private var tabs2: [String] = Array(allTabs.shuffled().prefix(10))
+    @State private var tabs3: [String] = Array(allTabs.shuffled().prefix(10))
 
     var body: some View {
         VStack(spacing: 0) {

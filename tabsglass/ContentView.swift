@@ -10,7 +10,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showPaywall = true
+    @State private var showPaywall = false
     private var themeManager: ThemeManager { ThemeManager.shared }
 
     private var backgroundColor: Color {
