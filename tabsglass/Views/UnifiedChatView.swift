@@ -1124,6 +1124,12 @@ extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewC
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
         guard completed,
               let currentVC = pageViewController.viewControllers?.first as? MessageListViewController else { return }
+
+        // IMPORTANT: Reset switchFraction BEFORE changing selectedIndex
+        // This prevents the tab bar indicator from jumping to wrong position
+        // (e.g., when selectedIndex=1 and fraction=0.99, it would calculate targetIndex=2)
+        onSwitchFraction?(0)
+
         selectedIndex = currentVC.pageIndex
         onIndexChange?(selectedIndex)
         updateInputVisibility(animated: true)

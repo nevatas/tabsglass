@@ -859,6 +859,7 @@ final class MessageTableCell: UITableViewCell {
         bubbleView.addSubview(todoView)
 
         mosaicHeightConstraint = mosaicView.heightAnchor.constraint(equalToConstant: 0)
+        mosaicHeightConstraint.priority = UILayoutPriority(999)  // Slightly lower to avoid conflict with encapsulated height
         todoViewHeightConstraint = todoView.heightAnchor.constraint(equalToConstant: 0)
         todoViewBottomToBubble = todoView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
         messageTextViewTopToMosaic = messageTextView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 10)

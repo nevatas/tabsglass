@@ -50,21 +50,35 @@ final class TodoBubbleView: UIView {
         addSubview(footerLabel)
 
         titleLabelHeightConstraint = titleLabel.heightAnchor.constraint(equalToConstant: 0)
+        titleLabelHeightConstraint.priority = .defaultHigh  // Lower priority to avoid conflict when hidden
+
+        // Use lower priority for vertical chain so constraints don't conflict when height=0
+        let titleTop = titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12)
+        titleTop.priority = .defaultHigh
+
+        let stackTop = stackView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4)
+        stackTop.priority = .defaultHigh
+
+        let footerTop = footerLabel.topAnchor.constraint(equalTo: stackView.bottomAnchor, constant: 8)
+        footerTop.priority = .defaultHigh
+
+        let footerBottom = footerLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
+        footerBottom.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            titleTop,
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             titleLabelHeightConstraint,
 
-            stackView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            stackTop,
             stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
 
-            footerLabel.topAnchor.constraint(equalTo: stackView.bottomAnchor, constant: 8),
+            footerTop,
             footerLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             footerLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            footerLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
+            footerBottom
         ])
     }
 
