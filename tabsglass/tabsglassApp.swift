@@ -195,7 +195,7 @@ final class KeyboardWarmer {
 
     func warmUp() {
         guard !didWarmUp else { return }
-        // Start shortly after launch; retry until app is active and a key window exists.
+        // Start shortly after launch
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.performWarmUp()
         }
@@ -239,7 +239,7 @@ final class KeyboardWarmer {
         textField.returnKeyType = .default
         textField.textContentType = .none
         textField.font = .systemFont(ofSize: 16)
-        textField.isUserInteractionEnabled = false
+        textField.isUserInteractionEnabled = true
         textField.alpha = 0.01
         textField.backgroundColor = .clear
         keyWindow.addSubview(textField)
@@ -251,7 +251,7 @@ final class KeyboardWarmer {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.finishWarmUp(after: 0.01)
+            self?.finishWarmUp(after: 0.0)
         }
 
         let didFocus = textField.becomeFirstResponder()

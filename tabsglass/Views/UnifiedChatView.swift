@@ -1389,7 +1389,6 @@ final class MessageListViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // Performance logging disabled via perfLogEnabled
         reloadMessages()
         refreshContentInset()
     }
