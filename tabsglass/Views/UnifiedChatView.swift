@@ -81,8 +81,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UnifiedChatViewController, context: Context) {
-        uiViewController.tabs = tabs
-        uiViewController.allMessages = messages
+        // Update callbacks (cheap)
         uiViewController.onDeleteMessage = onDeleteMessage
         uiViewController.onMoveMessage = onMoveMessage
         uiViewController.onEditMessage = onEditMessage
@@ -90,20 +89,42 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onShowTaskList = onShowTaskList
         uiViewController.onToggleTodoItem = onToggleTodoItem
         uiViewController.onToggleReminder = onToggleReminder
-        // Selection mode
         uiViewController.onEnterSelectionMode = onEnterSelectionMode
         uiViewController.onToggleMessageSelection = onToggleMessageSelection
+
+        // Selection mode
         if uiViewController.isSelectionMode != isSelectionMode {
             uiViewController.isSelectionMode = isSelectionMode
             uiViewController.selectedMessageIds = selectedMessageIds
         } else if uiViewController.selectedMessageIds != selectedMessageIds {
             uiViewController.updateSelectedMessageIds(selectedMessageIds)
         }
+
+        // Tab selection change
         if uiViewController.selectedIndex != selectedIndex {
             uiViewController.selectedIndex = selectedIndex
             uiViewController.updatePageSelection(animated: true)
         }
-        uiViewController.reloadCurrentTab()
+
+        // MARK: - Performance: Only reload if data actually changed
+        let tabsChanged = uiViewController.tabs.count != tabs.count ||
+                          !uiViewController.tabs.elementsEqual(tabs, by: { $0.id == $1.id && $0.title == $1.title })
+
+        // Check if messages changed (count, IDs, or content hash)
+        let oldIds = Set(uiViewController.allMessages.map { $0.id })
+        let newIds = Set(messages.map { $0.id })
+        let idsChanged = oldIds != newIds
+
+        // Quick content hash check (catches todo toggles, edits, etc.)
+        let oldContentHash = uiViewController.allMessages.reduce(0) { $0 &+ $1.content.hashValue &+ ($1.todoItems?.count ?? 0) }
+        let newContentHash = messages.reduce(0) { $0 &+ $1.content.hashValue &+ ($1.todoItems?.count ?? 0) }
+        let contentChanged = oldContentHash != newContentHash
+
+        if tabsChanged || idsChanged || contentChanged {
+            uiViewController.tabs = tabs
+            uiViewController.allMessages = messages
+            uiViewController.reloadCurrentTab()
+        }
     }
 }
 
@@ -172,11 +193,29 @@ final class UnifiedChatViewController: UIViewController {
     private var isComposerFocused: Bool = false
     private var isSearchFocused: Bool = false
 
-    /// Messages matching the current search query (case-insensitive, all tabs)
+    // MARK: - Performance Optimization: Cached filtered messages
+    private var cachedFilteredMessages: [Message]?
+    private var cachedSearchQuery: String = ""
+    private var cachedMessagesHash: Int = 0
+
+    /// Messages matching the current search query (case-insensitive, all tabs) - cached for performance
     private var filteredMessages: [Message] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return [] }
-        return allMessages.filter { message in
+        guard !query.isEmpty else {
+            cachedFilteredMessages = nil
+            cachedSearchQuery = ""
+            return []
+        }
+
+        // Return cached result if query and messages haven't changed
+        let currentHash = allMessages.count
+        if query == cachedSearchQuery && currentHash == cachedMessagesHash,
+           let cached = cachedFilteredMessages {
+            return cached
+        }
+
+        // Compute and cache
+        let result = allMessages.filter { message in
             // Search in text content
             if message.content.localizedCaseInsensitiveContains(query) {
                 return true
@@ -196,6 +235,48 @@ final class UnifiedChatViewController: UIViewController {
             }
             return false
         }
+
+        cachedFilteredMessages = result
+        cachedSearchQuery = query
+        cachedMessagesHash = currentHash
+        return result
+    }
+
+    /// Invalidate filtered messages cache (call when messages change)
+    private func invalidateFilteredMessagesCache() {
+        cachedFilteredMessages = nil
+        cachedMessagesHash = 0
+    }
+
+    // MARK: - Performance Optimization: Cached per-tab messages
+    private var cachedTabMessages: [UUID?: [Message]] = [:]
+    private var cachedTabMessagesHash: Int = 0
+
+    /// Get messages for a specific tab (cached for performance during swipes)
+    private func messagesForTab(_ tabId: UUID?) -> [Message] {
+        let currentHash = allMessages.count
+
+        // Invalidate cache if messages count changed
+        if currentHash != cachedTabMessagesHash {
+            cachedTabMessages.removeAll()
+            cachedTabMessagesHash = currentHash
+        }
+
+        // Return cached result if available
+        if let cached = cachedTabMessages[tabId] {
+            return cached
+        }
+
+        // Compute and cache
+        let result = allMessages.filter { $0.tabId == tabId }
+        cachedTabMessages[tabId] = result
+        return result
+    }
+
+    /// Invalidate per-tab messages cache
+    private func invalidateTabMessagesCache() {
+        cachedTabMessages.removeAll()
+        cachedTabMessagesHash = 0
     }
 
     /// Update search tab with filtered messages
@@ -293,6 +374,9 @@ final class UnifiedChatViewController: UIViewController {
         // Set initial page (always show Inbox at index 1, Search is at index 0)
         let initialVC = getMessageController(for: selectedIndex)
         pageViewController.setViewControllers([initialVC], direction: .forward, animated: false)
+
+        // Preload adjacent tabs for smooth initial swiping
+        preloadAdjacentTabs()
     }
 
     private func setupInputView() {
@@ -578,15 +662,26 @@ final class UnifiedChatViewController: UIViewController {
         return tabs[index - 2].id
     }
 
-    /// Filter messages for a given tabId
-    private func messages(for tabId: UUID?) -> [Message] {
-        allMessages.filter { $0.tabId == tabId }
+    // MARK: - Performance Logging
+    private let perfLogEnabled = true
+    private func perfLog(_ message: String, duration: CFAbsoluteTime? = nil) {
+        guard perfLogEnabled else { return }
+        if let duration = duration {
+            let ms = duration * 1000
+            if ms > 1 { // Only log if > 1ms
+                print("⏱️ [PERF] \(message): \(String(format: "%.2f", ms))ms")
+            }
+        } else {
+            print("📍 [PERF] \(message)")
+        }
     }
 
     private func getMessageController(for index: Int) -> MessageListViewController {
+        let start = CFAbsoluteTimeGetCurrent()
+
         let currentTabId = tabId(for: index)
         // Search tab (index 0) shows filtered search results
-        let tabMessages = index == 0 ? filteredMessages : messages(for: currentTabId)
+        let tabMessages = index == 0 ? filteredMessages : messagesForTab(currentTabId)
 
         if let existing = messageControllers[index] {
             existing.allTabs = tabs
@@ -599,6 +694,7 @@ final class UnifiedChatViewController: UIViewController {
             if index == 0 {
                 existing.updateSearchTabs(tabs: tabs)
             }
+            perfLog("getMessageController(cached) index=\(index) msgs=\(tabMessages.count)", duration: CFAbsoluteTimeGetCurrent() - start)
             return existing
         }
 
@@ -665,7 +761,33 @@ final class UnifiedChatViewController: UIViewController {
         }
 
         messageControllers[index] = vc
+        perfLog("getMessageController(NEW) index=\(index) msgs=\(tabMessages.count)", duration: CFAbsoluteTimeGetCurrent() - start)
         return vc
+    }
+
+    // MARK: - Performance Optimization: Preload adjacent tabs
+
+    /// Preload view controllers for adjacent tabs to ensure smooth swiping
+    private func preloadAdjacentTabs() {
+        // Skip preloading during active swipe to avoid competing with animation
+        guard !isUserSwiping else { return }
+
+        // Preload in next run loop to avoid blocking current frame
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, !self.isUserSwiping else { return }
+
+            let indicesToPreload = [
+                self.selectedIndex - 1,
+                self.selectedIndex + 1
+            ].filter { $0 >= 0 && $0 < self.totalTabCount }
+
+            for index in indicesToPreload {
+                if self.messageControllers[index] == nil {
+                    // Create and cache the view controller
+                    _ = self.getMessageController(for: index)
+                }
+            }
+        }
     }
 
     func updatePageSelection(animated: Bool) {
@@ -692,16 +814,20 @@ final class UnifiedChatViewController: UIViewController {
             pageViewController.setViewControllers([vc], direction: .forward, animated: false)
             updateInputVisibility(animated: false)
         }
+        preloadAdjacentTabs()
     }
 
     func reloadCurrentTab() {
+        // Invalidate caches when reloading (data may have changed)
+        invalidateTabMessagesCache()
+
         if let currentVC = pageViewController.viewControllers?.first as? MessageListViewController {
             let index = currentVC.pageIndex
             if index < totalTabCount {
                 currentVC.currentTabId = tabId(for: index)
                 currentVC.allTabs = tabs
                 // Search tab (index 0) shows filtered search results
-                currentVC.messages = index == 0 ? filteredMessages : messages(for: currentVC.currentTabId)
+                currentVC.messages = index == 0 ? filteredMessages : messagesForTab(currentVC.currentTabId)
                 currentVC.reloadMessages()
             }
         }
@@ -976,17 +1102,23 @@ extension UnifiedChatViewController: UIImagePickerControllerDelegate, UINavigati
 
 extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewControllerDelegate {
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
+        let start = CFAbsoluteTimeGetCurrent()
         guard let vc = viewController as? MessageListViewController else { return nil }
         let index = vc.pageIndex - 1
         guard index >= 0 else { return nil }
-        return getMessageController(for: index)
+        let result = getMessageController(for: index)
+        perfLog("viewControllerBefore index=\(index)", duration: CFAbsoluteTimeGetCurrent() - start)
+        return result
     }
 
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
+        let start = CFAbsoluteTimeGetCurrent()
         guard let vc = viewController as? MessageListViewController else { return nil }
         let index = vc.pageIndex + 1
         guard index < totalTabCount else { return nil }
-        return getMessageController(for: index)
+        let result = getMessageController(for: index)
+        perfLog("viewControllerAfter index=\(index)", duration: CFAbsoluteTimeGetCurrent() - start)
+        return result
     }
 
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
@@ -995,6 +1127,7 @@ extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewC
         selectedIndex = currentVC.pageIndex
         onIndexChange?(selectedIndex)
         updateInputVisibility(animated: true)
+        preloadAdjacentTabs()
     }
 }
 
@@ -1119,6 +1252,15 @@ final class MessageListViewController: UIViewController {
     // Embedded search tabs for search tab
     private var searchTabsHostingController: UIHostingController<SearchTabsView>?
     private var topFadeGradient: TopFadeGradientView?
+
+    // MARK: - Performance: Height cache
+    /// Cache for calculated row heights, keyed by message ID
+    private var heightCache: [UUID: CGFloat] = [:]
+    /// Width used for cached heights (invalidate on width change)
+    private var cachedHeightWidth: CGFloat = 0
+    /// Track height calculation stats for logging
+    private var heightCacheHits = 0
+    private var heightCacheMisses = 0
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -1250,6 +1392,7 @@ final class MessageListViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        print("📍 [PERF] viewWillAppear pageIndex=\(pageIndex)")
         reloadMessages()
         refreshContentInset()
     }
@@ -1270,14 +1413,35 @@ final class MessageListViewController: UIViewController {
         updateContentInset(bottomPadding: bottomPadding, safeAreaBottom: safeAreaBottom)
     }
 
+    /// Track last processed message IDs for quick change detection
+    private var lastProcessedMessageIds: Set<UUID> = []
+
     func reloadMessages() {
+        let start = CFAbsoluteTimeGetCurrent()
+
         // Skip if first message animation is in progress
         if isAnimatingFirstMessage { return }
 
+        // Quick optimization: check if message IDs are the same before sorting
+        let currentIds = Set(messages.map { $0.id })
+        let idsMatch = currentIds == lastProcessedMessageIds && currentIds.count == sortedMessages.count
+        lastProcessedMessageIds = currentIds
+
         let oldMessages = sortedMessages
-        let newMessages = messages
-            .filter { !$0.isEmpty }
-            .sorted { $0.createdAt > $1.createdAt }
+        let newMessages: [Message]
+
+        if idsMatch {
+            // IDs match - reuse sorted order, just update content
+            // Create a lookup for quick access
+            let messageById = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+            newMessages = sortedMessages.compactMap { messageById[$0.id] }
+        } else {
+            // IDs changed - need full filter and sort, invalidate height cache
+            heightCache.removeAll()
+            newMessages = messages
+                .filter { !$0.isEmpty }
+                .sorted { $0.createdAt > $1.createdAt }
+        }
 
         // Check if only content changed (same IDs, same order) - just reconfigure cells
         let oldIds = Set(oldMessages.map { $0.id })
@@ -1285,6 +1449,17 @@ final class MessageListViewController: UIViewController {
 
         if oldIds == Set(newIds) && oldMessages.map({ $0.id }) == newIds {
             // Same messages, just update content - reconfigure visible cells without animation
+            // Invalidate height cache for messages whose content changed
+            for (index, newMsg) in newMessages.enumerated() {
+                let oldMsg = oldMessages[index]
+                // Check if content that affects height has changed
+                if oldMsg.content != newMsg.content ||
+                   oldMsg.todoItems?.count != newMsg.todoItems?.count ||
+                   oldMsg.hasReminder != newMsg.hasReminder {
+                    heightCache.removeValue(forKey: newMsg.id)
+                }
+            }
+
             sortedMessages = newMessages
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -1386,6 +1561,10 @@ final class MessageListViewController: UIViewController {
                     tableView.reloadData()
                 }
                 CATransaction.commit()
+                let duration = CFAbsoluteTimeGetCurrent() - start
+                if duration > 0.001 {
+                    print("⏱️ [PERF] reloadMessages(fullReload) pageIndex=\(pageIndex) msgs=\(sortedMessages.count): \(String(format: "%.2f", duration * 1000))ms")
+                }
             }
         }
     }
@@ -1573,6 +1752,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let start = CFAbsoluteTimeGetCurrent()
+
         if sortedMessages.isEmpty && !isSearchTab {
             let cell = tableView.dequeueReusableCell(withIdentifier: "EmptyCell", for: indexPath) as! EmptyTableCell
             cell.transform = CGAffineTransform(scaleX: 1, y: -1)
@@ -1610,6 +1791,10 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 }
                 self.onTabSelected?(tabIndex, message.id)
             }
+            let duration = CFAbsoluteTimeGetCurrent() - start
+            if duration > 0.002 {
+                print("⏱️ [PERF] cellForRowAt(search) row=\(indexPath.row): \(String(format: "%.2f", duration * 1000))ms")
+            }
             return cell
         }
 
@@ -1640,6 +1825,11 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
         // Only invert cells for chat tabs - search tab uses normal layout
         cell.transform = isSearchTab ? .identity : CGAffineTransform(scaleX: 1, y: -1)
+
+        let duration = CFAbsoluteTimeGetCurrent() - start
+        if duration > 0.002 {
+            print("⏱️ [PERF] cellForRowAt(message) row=\(indexPath.row) textLen=\(message.content.count): \(String(format: "%.2f", duration * 1000))ms")
+        }
         return cell
     }
 
@@ -1652,11 +1842,45 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         let message = sortedMessages[indexPath.row]
         let cellWidth = tableView.bounds.width
 
-        // Search tab uses SearchResultCell with different layout
-        if isSearchTab {
-            return SearchResultCell.calculateHeight(for: message, maxWidth: cellWidth)
+        // MARK: - Performance: Use cached height if available
+        // Invalidate cache if width changed (rotation, etc.)
+        if cellWidth != cachedHeightWidth {
+            heightCache.removeAll()
+            cachedHeightWidth = cellWidth
+            heightCacheHits = 0
+            heightCacheMisses = 0
         }
 
+        // Return cached height if available
+        if let cachedHeight = heightCache[message.id] {
+            heightCacheHits += 1
+            return cachedHeight
+        }
+
+        // Calculate height (expensive operation)
+        let start = CFAbsoluteTimeGetCurrent()
+        let height: CGFloat
+        if isSearchTab {
+            // Search tab uses SearchResultCell with different layout
+            height = SearchResultCell.calculateHeight(for: message, maxWidth: cellWidth)
+        } else {
+            height = calculateMessageHeight(for: message, cellWidth: cellWidth)
+        }
+        let duration = CFAbsoluteTimeGetCurrent() - start
+        heightCacheMisses += 1
+
+        if duration > 0.001 {
+            print("⏱️ [PERF] heightForRowAt MISS pageIndex=\(pageIndex) row=\(indexPath.row) textLen=\(message.content.count): \(String(format: "%.2f", duration * 1000))ms (hits:\(heightCacheHits) misses:\(heightCacheMisses))")
+        }
+
+        // Cache the result
+        heightCache[message.id] = height
+
+        return height
+    }
+
+    /// Calculate height for a message cell (expensive - only call when not cached)
+    private func calculateMessageHeight(for message: Message, cellWidth: CGFloat) -> CGFloat {
         let bubbleWidth = cellWidth - 32  // 16px margins on each side
 
         var height: CGFloat = 8  // Cell padding (4 top + 4 bottom)
