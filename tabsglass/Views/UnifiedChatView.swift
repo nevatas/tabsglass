@@ -2006,7 +2006,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
             // Add Inbox option if not already in Inbox
             if self.currentTabId != nil {
-                moveMenuChildren.append(UIAction(title: L10n.Reorder.inbox, image: UIImage(systemName: "tray")) { [weak self] _ in
+                moveMenuChildren.append(UIAction(title: L10n.Reorder.inbox) { [weak self] _ in
                     self?.animateDeleteMessage(message) {
                         self?.onMoveMessage?(message, nil)
                     }
@@ -2059,22 +2059,28 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
     }
 
-    func tableView(_ tableView: UITableView, previewForHighlightingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        // Return nil to let iOS use default behavior (no custom preview = no flicker)
-        return nil
-    }
-
-    func tableView(_ tableView: UITableView, previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        // Create a preview with clear background to prevent white rectangle artifact on delete
+    private func makeContextMenuPreview(for configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
         guard let indexPath = configuration.identifier as? IndexPath,
               let cell = tableView.cellForRow(at: indexPath) as? MessageTableCell else {
             return nil
         }
-
         let parameters = UIPreviewParameters()
         parameters.backgroundColor = .clear
-
         return UITargetedPreview(view: cell.bubbleViewForContextMenu, parameters: parameters)
+    }
+
+    func tableView(_ tableView: UITableView, previewForHighlightingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
+        makeContextMenuPreview(for: configuration)
+    }
+
+    func tableView(_ tableView: UITableView, previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
+        makeContextMenuPreview(for: configuration)
+    }
+
+    func tableView(_ tableView: UITableView, willEndContextMenuInteraction configuration: UIContextMenuConfiguration, animator: (any UIContextMenuInteractionAnimating)?) {
+        animator?.addCompletion { [weak tableView] in
+            tableView?.visibleCells.forEach { $0.alpha = 1.0 }
+        }
     }
 }
 
