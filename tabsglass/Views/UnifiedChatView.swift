@@ -101,12 +101,6 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             uiViewController.updateSelectedMessageIds(selectedMessageIds)
         }
 
-        // Tab selection change
-        if uiViewController.selectedIndex != selectedIndex {
-            uiViewController.selectedIndex = selectedIndex
-            uiViewController.updatePageSelection(animated: true)
-        }
-
         // MARK: - Performance: Only reload if data actually changed
         // Compare raw counts to detect deletions (don't filter - deleted objects still count)
         let tabCountChanged = uiViewController.tabs.count != tabs.count
@@ -126,16 +120,25 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         let newContentHash = messages.reduce(0) { $0 &+ $1.content.hashValue &+ ($1.todoItems?.count ?? 0) }
         let contentChanged = oldContentHash != newContentHash
 
+        // Update tab/message data BEFORE changing page selection so totalTabCount is correct
         if tabsChanged || idsChanged || contentChanged {
             uiViewController.tabs = tabs
             uiViewController.allMessages = messages
+        }
 
-            if tabsChanged {
-                // Tabs structure changed - need to reset page view controller
-                uiViewController.handleTabsStructureChange()
-            } else {
-                uiViewController.reloadCurrentTab()
-            }
+        // Tab selection change (after data update so totalTabCount is current)
+        let indexChanged = uiViewController.selectedIndex != selectedIndex
+        if indexChanged {
+            uiViewController.selectedIndex = selectedIndex
+        }
+
+        if tabsChanged {
+            // Tabs structure changed - reset page view controller (handles selection too)
+            uiViewController.handleTabsStructureChange()
+        } else if indexChanged {
+            uiViewController.updatePageSelection(animated: true)
+        } else if idsChanged || contentChanged {
+            uiViewController.reloadCurrentTab()
         }
     }
 }

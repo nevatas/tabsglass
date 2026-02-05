@@ -247,7 +247,9 @@ struct MainContainerView: View {
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.delete, role: .destructive) {
                 if let tab = tabToDelete {
-                    deleteTab(tab)
+                    withAnimation(.spring(duration: 0.3, bounce: 0.1)) {
+                        deleteTab(tab)
+                    }
                 }
             }
         } message: {

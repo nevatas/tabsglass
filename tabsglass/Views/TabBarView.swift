@@ -263,7 +263,11 @@ struct TelegramTabBar: View {
                                     )
                                 }
                             )
-                            .id(index)
+                            .id(item.id)
+                            .transition(.asymmetric(
+                                insertion: .opacity,
+                                removal: .scale(scale: 0.5).combined(with: .opacity)
+                            ))
                         }
                     }
                     .padding(.horizontal, 4)
@@ -275,8 +279,10 @@ struct TelegramTabBar: View {
                 tabFrames = frames
             }
             .onChange(of: selectedIndex) { _, newIndex in
-                withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
-                    proxy.scrollTo(newIndex, anchor: .center)
+                if newIndex < allItems.count {
+                    withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                        proxy.scrollTo(allItems[newIndex].id, anchor: .center)
+                    }
                 }
             }
             .onChange(of: switchFraction) { _, _ in
@@ -284,7 +290,7 @@ struct TelegramTabBar: View {
                 let targetIndex = Int((CGFloat(selectedIndex) + switchFraction).rounded())
                 if targetIndex >= 0 && targetIndex < allItems.count && targetIndex != selectedIndex {
                     withAnimation(.interactiveSpring) {
-                        proxy.scrollTo(targetIndex, anchor: .center)
+                        proxy.scrollTo(allItems[targetIndex].id, anchor: .center)
                     }
                 }
             }
