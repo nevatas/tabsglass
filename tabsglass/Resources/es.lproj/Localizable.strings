@@ -127,6 +127,13 @@
 "share.inbox_info" = "Se guardará en Entrada. Abre Taby para moverlo a otra pestaña.";
 "share.where_to_save" = "¿Dónde guardar?";
 
+// MARK: - Tips
+
+"tips.title" = "Consejos";
+"tips.edge_swipe" = "Desliza desde el borde izquierdo para abrir Búsqueda desde cualquier pestaña";
+"tips.shake_undo" = "¿Eliminaste una nota por accidente? Agita tu teléfono para recuperarla";
+"tips.formatting" = "Selecciona texto en el campo de entrada para aplicar Negrita, Cursiva y más";
+
 // MARK: - Search
 
 "search.title" = "Búsqueda";

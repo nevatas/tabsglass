@@ -156,6 +156,14 @@ enum L10n {
         static var whereToSave: String { NSLocalizedString("share.where_to_save", comment: "Where to save title") }
     }
 
+    // MARK: - Tips
+    enum Tips {
+        static var title: String { NSLocalizedString("tips.title", comment: "Tips section title") }
+        static var edgeSwipe: String { NSLocalizedString("tips.edge_swipe", comment: "Tip: swipe from left edge") }
+        static var shakeUndo: String { NSLocalizedString("tips.shake_undo", comment: "Tip: shake to undo delete") }
+        static var formatting: String { NSLocalizedString("tips.formatting", comment: "Tip: text formatting") }
+    }
+
     // MARK: - Search
     enum Search {
         static var title: String { NSLocalizedString("search.title", comment: "Search screen title") }

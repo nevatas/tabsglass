@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct SearchTabsView: View {
     let tabs: [Tab]
@@ -21,6 +22,10 @@ struct SearchTabsView: View {
     }
 
     @State private var contentHeight: CGFloat = 0
+    @State private var keyboardHeight: CGFloat = 0
+
+    /// Show tips when no tabs, or keyboard is up
+    private var showTips: Bool { tabs.isEmpty || keyboardHeight > 0 }
 
     var body: some View {
         GeometryReader { geometry in
@@ -28,7 +33,13 @@ struct SearchTabsView: View {
             let shouldCenter = contentHeight > 0 && contentHeight < availableHeight
 
             ZStack {
-                // Scrollable content
+                // Tips: when no tabs OR keyboard is up
+                if showTips {
+                    SearchTipsView(keyboardHeight: keyboardHeight)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                // Scrollable content (tab chips — fade out when keyboard is up)
                 ScrollView {
                     if !tabs.isEmpty {
                         FlowLayout(spacing: 12) {
@@ -55,6 +66,8 @@ struct SearchTabsView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                .opacity(keyboardHeight > 0 ? 0 : 1)
+                .allowsHitTesting(keyboardHeight == 0)
 
                 // Gradients overlay
                 VStack(spacing: 0) {
@@ -84,6 +97,18 @@ struct SearchTabsView: View {
                     .frame(height: 100)
                 }
                 .allowsHitTesting(false)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    keyboardHeight = frame.height
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                keyboardHeight = 0
             }
         }
     }
@@ -212,6 +237,51 @@ struct FlowLayout: Layout {
         let sizes: [CGSize]
         let lineIndices: [Int]
         let lineWidths: [CGFloat]
+    }
+}
+
+// MARK: - Search Tips (Empty State)
+
+struct SearchTipsView: View {
+    let keyboardHeight: CGFloat
+    @State private var currentTipIndex: Int
+
+    private var tips: [String] {
+        [
+            L10n.Tips.edgeSwipe,
+            L10n.Tips.shakeUndo,
+            L10n.Tips.formatting,
+        ]
+    }
+
+    init(keyboardHeight: CGFloat) {
+        self.keyboardHeight = keyboardHeight
+        _currentTipIndex = State(initialValue: Int.random(in: 0..<3))
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(L10n.Tips.title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.tertiary)
+                .textCase(.uppercase)
+                .tracking(0.5)
+
+            Text(tips[currentTipIndex])
+                .font(.system(size: 15))
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 48)
+        .offset(y: keyboardHeight > 0 ? 50 - keyboardHeight / 2 : 0)
+        .id(currentTipIndex)
+        .transition(.blurReplace)
+        .onReceive(Timer.publish(every: 8, on: .main, in: .common).autoconnect()) { _ in
+            withAnimation(.easeInOut(duration: 0.6)) {
+                currentTipIndex = (currentTipIndex + 1) % tips.count
+            }
+        }
     }
 }
 

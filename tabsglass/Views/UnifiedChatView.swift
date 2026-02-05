@@ -299,9 +299,8 @@ final class UnifiedChatViewController: UIViewController {
         searchVC.messages = filteredMessages
         searchVC.reloadMessages()
 
-        // Show tabs only when no search text and not focused
-        let shouldShowTabs = searchText.isEmpty && !isSearchFocused
-        searchVC.setSearchTabsVisible(shouldShowTabs, animated: true)
+        // Always show when no search text (tips/tabs handle keyboard state internally)
+        searchVC.setSearchTabsVisible(searchText.isEmpty, animated: true)
     }
 
     override func viewDidLoad() {
@@ -547,10 +546,9 @@ final class UnifiedChatViewController: UIViewController {
             searchBottomToKeyboard?.isActive = false
             searchBottomToSafeArea?.isActive = true
         }
-        // Update embedded search tabs visibility (hide when keyboard is focused or has search text)
+        // Always show when no search text (tips/tabs handle keyboard state internally)
         if let searchVC = messageControllers[0] {
-            let shouldShowTabs = !followKeyboard && searchText.isEmpty
-            searchVC.setSearchTabsVisible(shouldShowTabs, animated: true)
+            searchVC.setSearchTabsVisible(searchText.isEmpty, animated: true)
         }
     }
 
@@ -1383,6 +1381,11 @@ final class MessageListViewController: UIViewController {
 
         hostingController.didMove(toParent: self)
         searchTabsHostingController = hostingController
+
+        // Tap on empty area dismisses keyboard
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        tap.cancelsTouchesInView = false
+        hostingController.view.addGestureRecognizer(tap)
     }
 
     private func setupTopFadeGradient() {
