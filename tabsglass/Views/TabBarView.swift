@@ -270,22 +270,19 @@ struct TelegramTabBar: View {
                 }
             }
             .onPreferenceChange(TabFramePreferenceKey.self) { frames in
-                // Only update frames when not swiping to avoid jitter from keyboard dismissal
-                if switchFraction == 0 {
-                    tabFrames = frames
-                }
+                tabFrames = frames
             }
             .onChange(of: selectedIndex) { _, newIndex in
                 withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
                     proxy.scrollTo(newIndex, anchor: .center)
                 }
             }
-            .onChange(of: switchFraction) { oldValue, newValue in
-                // Only scroll when swipe completes (fraction returns to 0)
-                // Avoid scrolling during swipe to prevent jitter from keyboard dismissal
-                if oldValue != 0 && newValue == 0 {
-                    withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
-                        proxy.scrollTo(selectedIndex, anchor: .center)
+            .onChange(of: switchFraction) { _, _ in
+                // Scroll to interpolated position during swipe
+                let targetIndex = Int((CGFloat(selectedIndex) + switchFraction).rounded())
+                if targetIndex >= 0 && targetIndex < allItems.count && targetIndex != selectedIndex {
+                    withAnimation(.interactiveSpring) {
+                        proxy.scrollTo(targetIndex, anchor: .center)
                     }
                 }
             }
