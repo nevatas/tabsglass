@@ -2059,7 +2059,16 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
     }
 
     func tableView(_ tableView: UITableView, previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        return nil
+        // Create a preview with clear background to prevent white rectangle artifact on delete
+        guard let indexPath = configuration.identifier as? IndexPath,
+              let cell = tableView.cellForRow(at: indexPath) as? MessageTableCell else {
+            return nil
+        }
+
+        let parameters = UIPreviewParameters()
+        parameters.backgroundColor = .clear
+
+        return UITargetedPreview(view: cell.bubbleViewForContextMenu, parameters: parameters)
     }
 }
 
