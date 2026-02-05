@@ -161,8 +161,7 @@ final class UnifiedChatViewController: UIViewController {
     private var inputBottomToKeyboard: NSLayoutConstraint?
     private var inputBottomToSafeArea: NSLayoutConstraint?
     private let bottomFadeView = BottomFadeGradientView()
-    private var fadeBottomToKeyboard: NSLayoutConstraint?
-    private var fadeBottomToScreen: NSLayoutConstraint?
+    private var fadeTopAboveComposer: NSLayoutConstraint?  // Top follows above composer
 
     private let searchInputState = SearchInputState()
     private var searchInputContainer: UIView?
@@ -357,22 +356,21 @@ final class UnifiedChatViewController: UIViewController {
         inputBottomToKeyboard = inputContainer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         inputBottomToSafeArea = inputContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
 
-        // Create bottom constraints for fade gradient
-        fadeBottomToKeyboard = bottomFadeView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
-        fadeBottomToScreen = bottomFadeView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        // Create constraint for fade gradient top (follows above composer)
+        fadeTopAboveComposer = bottomFadeView.topAnchor.constraint(equalTo: inputContainer.topAnchor, constant: -15)
 
         // Auto Layout: pin leading, trailing, and bottom (start with safe area)
         NSLayoutConstraint.activate([
             inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
 
-            // Bottom fade gradient constraints
+            // Bottom fade gradient constraints - extends beyond safe area to screen edge
             bottomFadeView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bottomFadeView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            bottomFadeView.heightAnchor.constraint(equalToConstant: 80)
+            bottomFadeView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: 50)
         ])
         inputBottomToSafeArea?.isActive = true
-        fadeBottomToScreen?.isActive = true
+        fadeTopAboveComposer?.isActive = true
     }
 
     /// Switch between keyboard-following and safe-area-anchored modes
@@ -380,14 +378,12 @@ final class UnifiedChatViewController: UIViewController {
         if followKeyboard {
             inputBottomToSafeArea?.isActive = false
             inputBottomToKeyboard?.isActive = true
-            fadeBottomToScreen?.isActive = false
-            fadeBottomToKeyboard?.isActive = true
         } else {
             inputBottomToKeyboard?.isActive = false
             inputBottomToSafeArea?.isActive = true
-            fadeBottomToKeyboard?.isActive = false
-            fadeBottomToScreen?.isActive = true
         }
+        // Gradient top follows composer via fadeTopAboveComposer constraint
+        // Bottom is always at screen edge
     }
 
     private func setupSearchInput() {
@@ -1889,8 +1885,10 @@ final class BottomFadeGradientView: UIView {
 
         gradientLayer.colors = [
             bgColor.withAlphaComponent(0).cgColor,
+            bgColor.withAlphaComponent(0.7).cgColor,
             bgColor.cgColor
         ]
+        gradientLayer.locations = [0.0, 0.25, 0.6]
     }
 
     override func layoutSubviews() {
