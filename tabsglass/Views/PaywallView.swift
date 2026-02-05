@@ -11,6 +11,9 @@ struct PaywallView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Binding var isPresented: Bool
 
+    @State private var titleVisible = false
+    @State private var cardsVisible = [false, false, false, false]
+
     private var themeManager: ThemeManager { ThemeManager.shared }
 
     private var backgroundColor: Color {
@@ -34,6 +37,8 @@ struct PaywallView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .padding(.top, 60)
+                    .opacity(titleVisible ? 1 : 0)
+                    .offset(y: titleVisible ? 0 : 20)
 
                 // 2x2 grid of feature cards
                 LazyVGrid(columns: [
@@ -41,9 +46,20 @@ struct PaywallView: View {
                     GridItem(.flexible(), spacing: 12)
                 ], spacing: 12) {
                     TabsFeatureCard()
+                        .opacity(cardsVisible[0] ? 1 : 0)
+                        .offset(y: cardsVisible[0] ? 0 : 30)
+
                     TasksFeatureCard()
+                        .opacity(cardsVisible[1] ? 1 : 0)
+                        .offset(y: cardsVisible[1] ? 0 : 30)
+
                     FeatureCard(title: "Reminders")
+                        .opacity(cardsVisible[2] ? 1 : 0)
+                        .offset(y: cardsVisible[2] ? 0 : 30)
+
                     FeatureCard(title: "Themes")
+                        .opacity(cardsVisible[3] ? 1 : 0)
+                        .offset(y: cardsVisible[3] ? 0 : 30)
                 }
                 .padding(.horizontal, 16)
 
@@ -62,9 +78,29 @@ struct PaywallView: View {
             }
             .padding(.top, 16)
             .padding(.trailing, 16)
+            .opacity(titleVisible ? 1 : 0)
         }
         .preferredColorScheme(themeManager.currentTheme.colorSchemeOverride)
         .ignoresSafeArea(.keyboard)
+        .onAppear {
+            animateAppearance()
+        }
+    }
+
+    private func animateAppearance() {
+        // Title appears first
+        withAnimation(.easeOut(duration: 0.4)) {
+            titleVisible = true
+        }
+
+        // Cards appear one by one with delay
+        for index in 0..<4 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 + Double(index) * 0.1) {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                    cardsVisible[index] = true
+                }
+            }
+        }
     }
 }
 
