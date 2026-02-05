@@ -1181,6 +1181,7 @@ final class MessageListViewController: UIViewController {
         let hostingController = UIHostingController(rootView: searchTabsView)
         hostingController.view.backgroundColor = .clear
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+        hostingController.view.clipsToBounds = false
 
         addChild(hostingController)
         view.addSubview(hostingController.view)
@@ -1204,10 +1205,11 @@ final class MessageListViewController: UIViewController {
         view.addSubview(gradientView)
 
         NSLayoutConstraint.activate([
-            gradientView.topAnchor.constraint(equalTo: view.topAnchor),
+            // Extend above view top to cover full safe area (Dynamic Island, etc.)
+            gradientView.topAnchor.constraint(equalTo: view.topAnchor, constant: -100),
             gradientView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             gradientView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            gradientView.heightAnchor.constraint(equalToConstant: 100)
+            gradientView.heightAnchor.constraint(equalToConstant: 220)
         ])
 
         topFadeGradient = gradientView
@@ -1917,7 +1919,7 @@ final class TopFadeGradientView: UIView {
     }
 
     private func setupGradient() {
-        gradientLayer.locations = [0.0, 1.0]
+        gradientLayer.locations = [0.0, 0.3, 0.5, 0.7, 0.85, 1.0]
         gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)  // Top (solid)
         gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)    // Bottom (transparent)
         layer.addSublayer(gradientLayer)
@@ -1947,8 +1949,12 @@ final class TopFadeGradientView: UIView {
         let bgColor = isDark ? UIColor(theme.backgroundColorDark) : UIColor(theme.backgroundColor)
 
         gradientLayer.colors = [
-            bgColor.cgColor,
-            bgColor.withAlphaComponent(0).cgColor
+            bgColor.cgColor,                          // 0%: 100% opaque
+            bgColor.cgColor,                          // 30%: 100% opaque
+            bgColor.withAlphaComponent(0.8).cgColor,  // 50%: 80% opaque
+            bgColor.withAlphaComponent(0.5).cgColor,  // 70%: 50% opaque
+            bgColor.withAlphaComponent(0.2).cgColor,  // 85%: 20% opaque
+            bgColor.withAlphaComponent(0).cgColor     // 100%: transparent
         ]
     }
 

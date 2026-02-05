@@ -27,7 +27,7 @@ struct SearchTabsView: View {
             let availableHeight = geometry.size.height - 80 - 120  // minus top and bottom padding
             let shouldCenter = contentHeight > 0 && contentHeight < availableHeight
 
-            ZStack(alignment: .bottom) {
+            ZStack {
                 // Scrollable content
                 ScrollView {
                     if !tabs.isEmpty {
@@ -56,16 +56,33 @@ struct SearchTabsView: View {
                 }
                 .scrollIndicators(.hidden)
 
-                // Bottom fade gradient overlay (like under composer)
-                LinearGradient(
-                    stops: [
-                        .init(color: backgroundColor.opacity(0), location: 0),
-                        .init(color: backgroundColor, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 100)
+                // Gradients overlay
+                VStack(spacing: 0) {
+                    // Top fade gradient - positioned to fade within header area
+                    LinearGradient(
+                        stops: [
+                            .init(color: backgroundColor, location: 0),
+                            .init(color: backgroundColor, location: 0.5),
+                            .init(color: backgroundColor.opacity(0), location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 70)
+
+                    Spacer()
+
+                    // Bottom fade gradient
+                    LinearGradient(
+                        stops: [
+                            .init(color: backgroundColor.opacity(0), location: 0),
+                            .init(color: backgroundColor, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 100)
+                }
                 .allowsHitTesting(false)
             }
         }
