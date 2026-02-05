@@ -1271,6 +1271,10 @@ final class SearchResultCell: UITableViewCell {
 
     var onTap: (() -> Void)?
 
+    // Store for theme updates
+    private var currentMessage: Message?
+    private var currentTabName: String?
+
     // Dynamic constraints
     private var labelBottomWithoutMedia: NSLayoutConstraint!
     private var labelBottomWithMedia: NSLayoutConstraint!
@@ -1301,6 +1305,10 @@ final class SearchResultCell: UITableViewCell {
 
     @objc private func themeDidChange() {
         tabNameLabel.textColor = ThemeManager.shared.currentTheme.placeholderColor
+        // Reconfigure to update attributed string colors (e.g., "+N more" in task lists)
+        if let message = currentMessage, let tabName = currentTabName {
+            configure(with: message, tabName: tabName)
+        }
     }
 
     private func setupCell() {
@@ -1368,6 +1376,10 @@ final class SearchResultCell: UITableViewCell {
     }
 
     func configure(with message: Message, tabName: String) {
+        // Store for theme updates
+        currentMessage = message
+        currentTabName = tabName
+
         // Set tab name
         tabNameLabel.text = tabName
         tabNameLabel.textColor = ThemeManager.shared.currentTheme.placeholderColor
