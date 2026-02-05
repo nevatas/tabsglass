@@ -5,6 +5,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import UIKit
 import PhotosUI
 import AVFoundation
@@ -107,23 +108,34 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         }
 
         // MARK: - Performance: Only reload if data actually changed
-        let tabsChanged = uiViewController.tabs.count != tabs.count ||
-                          !uiViewController.tabs.elementsEqual(tabs, by: { $0.id == $1.id && $0.title == $1.title })
+        // Compare raw counts to detect deletions (don't filter - deleted objects still count)
+        let tabCountChanged = uiViewController.tabs.count != tabs.count
+        // For content comparison, filter deleted objects to avoid crashes
+        let validOldTabs = uiViewController.tabs.filter { $0.modelContext != nil }
+        let tabsContentChanged = !validOldTabs.elementsEqual(tabs, by: { $0.id == $1.id && $0.title == $1.title })
+        let tabsChanged = tabCountChanged || tabsContentChanged
 
         // Check if messages changed (count, IDs, or content hash)
-        let oldIds = Set(uiViewController.allMessages.map { $0.id })
+        let validOldMessages = uiViewController.allMessages.filter { $0.modelContext != nil }
+        let oldIds = Set(validOldMessages.map { $0.id })
         let newIds = Set(messages.map { $0.id })
         let idsChanged = oldIds != newIds
 
         // Quick content hash check (catches todo toggles, edits, etc.)
-        let oldContentHash = uiViewController.allMessages.reduce(0) { $0 &+ $1.content.hashValue &+ ($1.todoItems?.count ?? 0) }
+        let oldContentHash = validOldMessages.reduce(0) { $0 &+ $1.content.hashValue &+ ($1.todoItems?.count ?? 0) }
         let newContentHash = messages.reduce(0) { $0 &+ $1.content.hashValue &+ ($1.todoItems?.count ?? 0) }
         let contentChanged = oldContentHash != newContentHash
 
         if tabsChanged || idsChanged || contentChanged {
             uiViewController.tabs = tabs
             uiViewController.allMessages = messages
-            uiViewController.reloadCurrentTab()
+
+            if tabsChanged {
+                // Tabs structure changed - need to reset page view controller
+                uiViewController.handleTabsStructureChange()
+            } else {
+                uiViewController.reloadCurrentTab()
+            }
         }
     }
 }
@@ -214,8 +226,10 @@ final class UnifiedChatViewController: UIViewController {
             return cached
         }
 
-        // Compute and cache
+        // Compute and cache (filter out deleted SwiftData objects)
         let result = allMessages.filter { message in
+            // Skip deleted objects
+            guard message.modelContext != nil else { return false }
             // Search in text content
             if message.content.localizedCaseInsensitiveContains(query) {
                 return true
@@ -267,8 +281,8 @@ final class UnifiedChatViewController: UIViewController {
             return cached
         }
 
-        // Compute and cache
-        let result = allMessages.filter { $0.tabId == tabId }
+        // Compute and cache (filter out deleted SwiftData objects)
+        let result = allMessages.filter { $0.modelContext != nil && $0.tabId == tabId }
         cachedTabMessages[tabId] = result
         return result
     }
@@ -831,6 +845,35 @@ final class UnifiedChatViewController: UIViewController {
                 currentVC.reloadMessages()
             }
         }
+    }
+
+    /// Called when tabs are added or removed - clears caches and resets page view controller
+    func handleTabsStructureChange() {
+        // Invalidate all caches
+        invalidateTabMessagesCache()
+
+        // Clear cached controllers for indexes that no longer exist
+        let maxValidIndex = totalTabCount - 1
+        messageControllers = messageControllers.filter { $0.key <= maxValidIndex }
+
+        // Ensure selectedIndex is within bounds
+        if selectedIndex >= totalTabCount {
+            selectedIndex = max(1, totalTabCount - 1)  // Go to last valid tab or Inbox
+            onIndexChange?(selectedIndex)
+        }
+
+        // Update search tab's tabs list
+        if let searchVC = messageControllers[0] {
+            searchVC.allTabs = tabs
+            searchVC.reloadMessages()
+        }
+
+        // Reset page view controller to current valid index
+        let vc = getMessageController(for: selectedIndex)
+        pageViewController.setViewControllers([vc], direction: .forward, animated: false)
+
+        // Update current tab
+        reloadCurrentTab()
     }
 
     // MARK: - Selection Mode
@@ -1422,23 +1465,26 @@ final class MessageListViewController: UIViewController {
         // Skip if first message animation is in progress
         if isAnimatingFirstMessage { return }
 
+        // Filter out deleted SwiftData objects first
+        let validMessages = messages.filter { $0.modelContext != nil }
+
         // Quick optimization: check if message IDs are the same before sorting
-        let currentIds = Set(messages.map { $0.id })
+        let currentIds = Set(validMessages.map { $0.id })
         let idsMatch = currentIds == lastProcessedMessageIds && currentIds.count == sortedMessages.count
         lastProcessedMessageIds = currentIds
 
-        let oldMessages = sortedMessages
+        let oldMessages = sortedMessages.filter { $0.modelContext != nil }
         let newMessages: [Message]
 
         if idsMatch {
             // IDs match - reuse sorted order, just update content
             // Create a lookup for quick access
-            let messageById = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+            let messageById = Dictionary(uniqueKeysWithValues: validMessages.map { ($0.id, $0) })
             newMessages = sortedMessages.compactMap { messageById[$0.id] }
         } else {
             // IDs changed - need full filter and sort, invalidate height cache
             heightCache.removeAll()
-            newMessages = messages
+            newMessages = validMessages
                 .filter { !$0.isEmpty }
                 .sorted { $0.createdAt > $1.createdAt }
         }
