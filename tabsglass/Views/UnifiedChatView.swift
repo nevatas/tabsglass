@@ -791,16 +791,20 @@ final class UnifiedChatViewController: UIViewController {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, !self.isUserSwiping else { return }
 
+            let bounds = self.pageViewController.view.bounds
             let indicesToPreload = [
                 self.selectedIndex - 1,
                 self.selectedIndex + 1
             ].filter { $0 >= 0 && $0 < self.totalTabCount }
 
             for index in indicesToPreload {
-                if self.messageControllers[index] == nil {
-                    // Create and cache the view controller
-                    _ = self.getMessageController(for: index)
+                let vc: MessageListViewController
+                if let existing = self.messageControllers[index] {
+                    vc = existing
+                } else {
+                    vc = self.getMessageController(for: index)
                 }
+                vc.prewarmCells(in: bounds)
             }
         }
     }
@@ -1146,23 +1150,17 @@ extension UnifiedChatViewController: UIImagePickerControllerDelegate, UINavigati
 
 extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewControllerDelegate {
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
-        let start = CFAbsoluteTimeGetCurrent()
         guard let vc = viewController as? MessageListViewController else { return nil }
         let index = vc.pageIndex - 1
         guard index >= 0 else { return nil }
-        let result = getMessageController(for: index)
-        perfLog("viewControllerBefore index=\(index)", duration: CFAbsoluteTimeGetCurrent() - start)
-        return result
+        return getMessageController(for: index)
     }
 
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
-        let start = CFAbsoluteTimeGetCurrent()
         guard let vc = viewController as? MessageListViewController else { return nil }
         let index = vc.pageIndex + 1
         guard index < totalTabCount else { return nil }
-        let result = getMessageController(for: index)
-        perfLog("viewControllerAfter index=\(index)", duration: CFAbsoluteTimeGetCurrent() - start)
-        return result
+        return getMessageController(for: index)
     }
 
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
@@ -1298,6 +1296,7 @@ final class MessageListViewController: UIViewController {
     /// IDs of messages that should animate appearance (scale + fade in)
     private var pendingAppearAnimationIds: Set<UUID> = []
     private var isAnimatingFirstMessage = false
+    private var isPrewarmed = false
 
     // Embedded search tabs for search tab
     private var searchTabsHostingController: UIHostingController<SearchTabsView>?
@@ -1456,6 +1455,17 @@ final class MessageListViewController: UIViewController {
             scrollToBottom(animated: false)
             hasAppearedBefore = true
         }
+    }
+
+    /// Pre-create table view cells so they're in the reuse pool before the swipe animation
+    func prewarmCells(in bounds: CGRect) {
+        guard !isPrewarmed else { return }
+        isPrewarmed = true
+        loadViewIfNeeded()
+        view.frame = bounds
+        reloadMessages()
+        tableView.setNeedsLayout()
+        tableView.layoutIfNeeded()
     }
 
     private func refreshContentInset() {

@@ -550,6 +550,9 @@ struct EmbeddedComposerView: View {
                                 Image(systemName: "plus")
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
+                                    .padding(.vertical, 8)
+                                    .padding(.trailing, 12)
+                                    .contentShape(Rectangle())
                             }
 
                             Spacer()
