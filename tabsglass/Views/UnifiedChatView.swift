@@ -601,7 +601,7 @@ final class UnifiedChatViewController: UIViewController {
         }
 
         // Use screen width as fallback if view hasn't laid out yet
-        let screenWidth = view.bounds.width > 0 ? view.bounds.width : UIScreen.main.bounds.width
+        let screenWidth = view.bounds.width > 0 ? view.bounds.width : (view.window?.windowScene?.screen.bounds.width ?? 390)
         let showSearch = isOnSearch
 
         // Set interaction state immediately (not in animation block)
@@ -2008,26 +2008,12 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
     }
 
     func tableView(_ tableView: UITableView, previewForHighlightingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        return makeTargetedPreview(for: configuration)
+        // Return nil to let iOS use default behavior (no custom preview = no flicker)
+        return nil
     }
 
     func tableView(_ tableView: UITableView, previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        return makeTargetedPreview(for: configuration)
-    }
-
-    private func makeTargetedPreview(for configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        guard let indexPath = configuration.identifier as? IndexPath,
-              let cell = tableView.cellForRow(at: indexPath) as? MessageTableCell else {
-            return nil
-        }
-
-        // Use the actual bubble view - iOS will automatically hide it during context menu animation
-        let bubbleView = cell.bubbleViewForContextMenu
-
-        let parameters = UIPreviewParameters()
-        parameters.backgroundColor = .clear
-
-        return UITargetedPreview(view: bubbleView, parameters: parameters)
+        return nil
     }
 }
 
