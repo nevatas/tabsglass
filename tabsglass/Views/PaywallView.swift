@@ -10,21 +10,18 @@ import SwiftUI
 struct PaywallView: View {
     @Binding var isPresented: Bool
 
+    @State private var contentReady = false
     @State private var titleVisible = false
     @State private var cardsVisible = [false, false, false, false]
 
-    private var themeManager: ThemeManager { ThemeManager.shared }
-
-    private var backgroundColor: Color {
-        // Always use dark background for paywall
-        themeManager.currentTheme.backgroundColorDark
-    }
+    private let backgroundColor = Color.black
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             backgroundColor
                 .ignoresSafeArea()
 
+            // Content renders immediately but invisible until ready
             VStack(spacing: 32) {
                 Text("Taby Unlimited")
                     .font(.largeTitle)
@@ -46,7 +43,7 @@ struct PaywallView: View {
                         .opacity(cardsVisible[1] ? 1 : 0)
                         .offset(y: cardsVisible[1] ? 0 : 30)
 
-                    FeatureCard(title: "Reminders")
+                    RemindersFeatureCard()
                         .opacity(cardsVisible[2] ? 1 : 0)
                         .offset(y: cardsVisible[2] ? 0 : 30)
 
@@ -58,15 +55,16 @@ struct PaywallView: View {
 
                 Spacer()
             }
+            .opacity(contentReady ? 1 : 0.001)
 
             // Close button
             Button {
                 isPresented = false
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 30, height: 30)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
                     .glassEffect(.regular, in: .circle)
             }
             .padding(.top, 16)
@@ -77,7 +75,11 @@ struct PaywallView: View {
         .environment(\.colorScheme, .dark)
         .ignoresSafeArea(.keyboard)
         .onAppear {
-            animateAppearance()
+            // Let TimelineView scrollers render a few frames off-screen first
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                contentReady = true
+                animateAppearance()
+            }
         }
     }
 
@@ -214,6 +216,100 @@ struct TasksFeatureCard: View {
         .frame(height: 190)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+}
+
+struct RemindersFeatureCard: View {
+    private let postImages = ["paywall_image_1", "paywall_image_2"]
+
+    @State private var currentIndex = 0
+    @State private var postOffset: CGSize = CGSize(width: 0, height: 300)
+    @State private var showBadge = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("Reminders")
+                .font(.system(size: 17, weight: .bold, design: .default))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+
+            GeometryReader { geo in
+                Color.clear
+                    .overlay(alignment: .topTrailing) {
+                        ZStack(alignment: .topTrailing) {
+                            // Post bubble with image
+                            Image(postImages[currentIndex])
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 340, height: 340)
+                                .clipShape(RoundedRectangle(cornerRadius: 18))
+
+                            // Reminder badge — drawingGroup rasterizes before glass
+                            if showBadge {
+                                ZStack {
+                                    Circle()
+                                        .fill(.red)
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: "bell.fill")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                }
+                                .drawingGroup()
+                                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                                .offset(x: 10, y: -10)
+                                .transition(.scale)
+                            }
+                        }
+                        .offset(postOffset)
+                        .padding(.trailing, 28)
+                        .padding(.top, 24)
+                    }
+                    .onAppear {
+                        startCycle(areaHeight: geo.size.height)
+                    }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 190)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+
+    private func startCycle(areaHeight: CGFloat) {
+        // Phase 1: Slide up from bottom
+        withAnimation(.easeOut(duration: 0.3)) {
+            postOffset = .zero
+        }
+
+        // Phase 2: Show badge
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                showBadge = true
+            }
+        }
+
+        // Phase 3: Slide out left
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeIn(duration: 0.3)) {
+                postOffset = CGSize(width: -300, height: 0)
+            }
+        }
+
+        // Phase 4: Reset and next
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) {
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) {
+                showBadge = false
+                currentIndex = (currentIndex + 1) % postImages.count
+                postOffset = CGSize(width: 0, height: areaHeight)
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                startCycle(areaHeight: areaHeight)
+            }
+        }
     }
 }
 
