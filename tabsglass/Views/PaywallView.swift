@@ -47,7 +47,7 @@ struct PaywallView: View {
                         .opacity(cardsVisible[2] ? 1 : 0)
                         .offset(y: cardsVisible[2] ? 0 : 30)
 
-                    FeatureCard(title: "Themes")
+                    ThemesFeatureCard()
                         .opacity(cardsVisible[3] ? 1 : 0)
                         .offset(y: cardsVisible[3] ? 0 : 30)
                 }
@@ -152,11 +152,12 @@ struct TabsFeatureCard: View {
 
             // Content area - scrolling tabs
             VStack(spacing: 8) {
-                InfiniteTabsScroller(tabs: tabs1, reverse: false)
-                InfiniteTabsScroller(tabs: tabs2, reverse: true)
-                InfiniteTabsScroller(tabs: tabs3, reverse: false)
+                InfiniteTabsScroller(tabs: tabs1, reverse: false, scrollSpeed: 55)
+                InfiniteTabsScroller(tabs: tabs2, reverse: true, scrollSpeed: 70)
+                InfiniteTabsScroller(tabs: tabs3, reverse: false, scrollSpeed: 45)
             }
             .padding(.top, 8)
+            .compositingGroup()
             .mask(
                 VStack(spacing: 0) {
                     LinearGradient(
@@ -211,6 +212,88 @@ struct TasksFeatureCard: View {
                 .frame(height: 110)
                 .padding(.top, 8)
             Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 190)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+}
+
+struct ThemesFeatureCard: View {
+    private let themeImages = ["paywall_theme_1", "paywall_theme_2", "paywall_theme_3", "paywall_theme_4"]
+    private let scrollSpeed: CGFloat = 70
+    private let spacing: CGFloat = 20
+    private let curveAmount: CGFloat = 30
+
+    @State private var imageWidth: CGFloat = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("Themes")
+                .font(.system(size: 17, weight: .bold, design: .default))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+
+            GeometryReader { geo in
+                let phoneHeight = geo.size.height * 1.2
+                let cardWidth = geo.size.width
+                let itemStride = imageWidth + spacing
+                let loopWidth = itemStride * CGFloat(themeImages.count)
+
+                TimelineView(.animation) { timeline in
+                    let elapsed = timeline.date.timeIntervalSinceReferenceDate
+                    let totalOffset = CGFloat(elapsed) * scrollSpeed
+                    let currentOffset = loopWidth > 0
+                        ? totalOffset.truncatingRemainder(dividingBy: loopWidth)
+                        : 0
+
+                    ZStack(alignment: .topLeading) {
+                        // Only render images visible in viewport (+ buffer)
+                        let buffer = itemStride
+                        ForEach(0..<(themeImages.count * 2), id: \.self) { i in
+                            let imgIndex = i % themeImages.count
+                            let x = CGFloat(i) * itemStride - currentOffset
+
+                            if x > -buffer && x < cardWidth + buffer {
+                                // Arc curve: highest at center, lower at edges
+                                let centerX = cardWidth * 0.4
+                                let distance = (x - centerX) / cardWidth
+                                let yOffset = distance * distance * curveAmount
+
+                                Image(themeImages[imgIndex])
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(height: phoneHeight)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
+                                    .offset(x: x, y: 18 + yOffset)
+                                    .background(
+                                        imageWidth == 0 ? GeometryReader { imgGeo in
+                                            Color.clear.onAppear {
+                                                imageWidth = imgGeo.size.width
+                                            }
+                                        } : nil
+                                    )
+                            }
+                        }
+                    }
+                    .drawingGroup()
+                }
+                .frame(width: cardWidth, height: geo.size.height, alignment: .topLeading)
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0),
+                            .init(color: .black, location: 0.5),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
         }
         .frame(maxWidth: .infinity)
         .frame(height: 190)
@@ -412,6 +495,7 @@ struct InfiniteTasksScroller: View {
                         }
                     }
                 )
+                .drawingGroup()
                 .offset(y: -currentOffset)
                 .padding(.leading, 12)
             }
@@ -434,7 +518,6 @@ struct InfiniteTasksScroller: View {
 }
 
 struct TaskItem: View {
-    @Environment(\.colorScheme) private var colorScheme
     let title: String
     var isCompleted: Bool = false
 
@@ -443,18 +526,18 @@ struct TaskItem: View {
             // Checkbox
             Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 20))
-                .foregroundColor(isCompleted ? .green : (colorScheme == .dark ? .white.opacity(0.5) : .black.opacity(0.5)))
+                .foregroundColor(isCompleted ? .green : .white.opacity(0.5))
 
             // Task text
             Text(title)
                 .font(.system(size: 17, weight: .medium))
-                .foregroundColor(colorScheme == .dark ? .white.opacity(0.7) : .black.opacity(0.7))
+                .foregroundColor(.white.opacity(0.7))
                 .lineLimit(1)
                 .fixedSize()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color.primary.opacity(0.06))
+        .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
@@ -462,8 +545,7 @@ struct TaskItem: View {
 struct InfiniteTabsScroller: View {
     let tabs: [String]
     var reverse: Bool = false
-
-    private let scrollSpeed: CGFloat = 60
+    var scrollSpeed: CGFloat = 60
 
     @State private var contentWidth: CGFloat = 0
 
@@ -492,6 +574,7 @@ struct InfiniteTabsScroller: View {
                         }
                     }
                 )
+                .drawingGroup()
                 .offset(x: reverse ? currentOffset - loopWidth : -currentOffset)
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
@@ -501,18 +584,17 @@ struct InfiniteTabsScroller: View {
 }
 
 struct TabPill: View {
-    @Environment(\.colorScheme) private var colorScheme
     let title: String
 
     var body: some View {
         Text(title)
             .font(.system(size: 17, weight: .medium))
-            .foregroundColor(colorScheme == .dark ? .white.opacity(0.7) : .black.opacity(0.7))
+            .foregroundColor(.white.opacity(0.7))
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color.primary.opacity(0.06))
+            .background(Color.white.opacity(0.06))
             .clipShape(Capsule())
     }
 }
