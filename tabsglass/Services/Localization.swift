@@ -179,6 +179,10 @@ enum L10n {
         static func count(_ n: Int) -> String {
             String(format: NSLocalizedString("selection.count", comment: "Selected count"), n)
         }
+        static var deleteTitle: String { NSLocalizedString("selection.delete_title", comment: "Delete confirmation title") }
+        static func deleteMessage(_ n: Int) -> String {
+            String(format: NSLocalizedString("selection.delete_message", comment: "Delete confirmation message"), n)
+        }
     }
 
     // MARK: - Data (Export/Import)

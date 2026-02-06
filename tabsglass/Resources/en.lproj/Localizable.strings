@@ -147,6 +147,8 @@
 "selection.delete" = "Delete";
 "selection.move_to" = "Move to";
 "selection.count" = "%d selected";
+"selection.delete_title" = "Delete Messages?";
+"selection.delete_message" = "%d messages will be permanently deleted";
 
 // MARK: - Data (Export/Import)
 

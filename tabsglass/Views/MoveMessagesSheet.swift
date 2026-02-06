@@ -23,7 +23,11 @@ struct MoveMessagesSheet: View {
                         onMove(nil)
                         dismiss()
                     } label: {
-                        Label(L10n.Reorder.inbox, systemImage: "tray")
+                        HStack {
+                            Text(L10n.Reorder.inbox)
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -34,7 +38,11 @@ struct MoveMessagesSheet: View {
                         onMove(tab.id)
                         dismiss()
                     } label: {
-                        Text(tab.title)
+                        HStack {
+                            Text(tab.title)
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }

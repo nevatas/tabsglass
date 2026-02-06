@@ -39,6 +39,8 @@ struct MainContainerView: View {
     @State private var isSelectionMode = false
     @State private var selectedMessageIds: Set<UUID> = []
     @State private var showMoveSheet = false
+    @State private var showDeleteSelectedAlert = false
+    @State private var reloadTrigger = 0
 
     /// Total number of tabs including Search and virtual Inbox
     private var totalTabCount: Int {
@@ -85,61 +87,66 @@ struct MainContainerView: View {
         }
     }
 
+    private var chatView: UnifiedChatView {
+        UnifiedChatView(
+            tabs: tabs,
+            messages: allMessages,
+            selectedIndex: $selectedTabIndex,
+            messageText: $messageText,
+            switchFraction: $switchFraction,
+            attachedImages: $attachedImages,
+            attachedVideos: $attachedVideos,
+            formattingEntities: $formattingEntities,
+            onSend: { sendMessage() },
+            onDeleteMessage: { message in
+                deleteMessage(message)
+            },
+            onMoveMessage: { message, targetTabId in
+                moveMessage(message, toTabId: targetTabId)
+            },
+            onEditMessage: { message in
+                if message.isTodoList {
+                    taskListToEdit = message
+                } else {
+                    messageToEdit = message
+                }
+            },
+            onRestoreMessage: {
+                restoreDeletedMessage()
+            },
+            onShowTaskList: {
+                showTaskListSheet = true
+            },
+            onToggleTodoItem: { message, itemId, isCompleted in
+                toggleTodoItem(message: message, itemId: itemId, isCompleted: isCompleted)
+            },
+            onToggleReminder: { message in
+                messageForReminder = message
+            },
+            isSelectionMode: $isSelectionMode,
+            selectedMessageIds: $selectedMessageIds,
+            onEnterSelectionMode: { message in
+                selectedMessageIds = [message.id]
+                withAnimation(.easeOut(duration: 0.25)) {
+                    isSelectionMode = true
+                }
+            },
+            onToggleMessageSelection: { messageId, selected in
+                if selected {
+                    selectedMessageIds.insert(messageId)
+                } else {
+                    selectedMessageIds.remove(messageId)
+                }
+            },
+            reloadTrigger: reloadTrigger
+        )
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             // Content layer (full screen)
             // Always show chat view (Inbox is always available as virtual tab)
-            UnifiedChatView(
-                tabs: tabs,
-                messages: allMessages,
-                selectedIndex: $selectedTabIndex,
-                messageText: $messageText,
-                switchFraction: $switchFraction,
-                attachedImages: $attachedImages,
-                attachedVideos: $attachedVideos,
-                formattingEntities: $formattingEntities,
-                onSend: { sendMessage() },
-                onDeleteMessage: { message in
-                    deleteMessage(message)
-                },
-                onMoveMessage: { message, targetTabId in
-                    moveMessage(message, toTabId: targetTabId)
-                },
-                onEditMessage: { message in
-                    if message.isTodoList {
-                        taskListToEdit = message
-                    } else {
-                        messageToEdit = message
-                    }
-                },
-                onRestoreMessage: {
-                    restoreDeletedMessage()
-                },
-                onShowTaskList: {
-                    showTaskListSheet = true
-                },
-                onToggleTodoItem: { message, itemId, isCompleted in
-                    toggleTodoItem(message: message, itemId: itemId, isCompleted: isCompleted)
-                },
-                onToggleReminder: { message in
-                    messageForReminder = message
-                },
-                isSelectionMode: $isSelectionMode,
-                selectedMessageIds: $selectedMessageIds,
-                onEnterSelectionMode: { message in
-                    selectedMessageIds = [message.id]
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        isSelectionMode = true
-                    }
-                },
-                onToggleMessageSelection: { messageId, selected in
-                    if selected {
-                        selectedMessageIds.insert(messageId)
-                    } else {
-                        selectedMessageIds.remove(messageId)
-                    }
-                }
-            )
+            chatView
             .ignoresSafeArea(.keyboard)
 
             // Header layer (floating on top) - hidden in selection mode
@@ -199,7 +206,7 @@ struct MainContainerView: View {
                         selectedCount: selectedMessageIds.count,
                         canMove: canMoveMessages,
                         onMove: { showMoveSheet = true },
-                        onDelete: { deleteSelectedMessages() }
+                        onDelete: { showDeleteSelectedAlert = true }
                     )
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -256,6 +263,14 @@ struct MainContainerView: View {
             if let tab = tabToDelete {
                 Text(L10n.Tab.deleteMessage(tab.title))
             }
+        }
+        .alert(L10n.Selection.deleteTitle, isPresented: $showDeleteSelectedAlert) {
+            Button(L10n.Tab.cancel, role: .cancel) { }
+            Button(L10n.Selection.delete, role: .destructive) {
+                deleteSelectedMessages()
+            }
+        } message: {
+            Text(L10n.Selection.deleteMessage(selectedMessageIds.count))
         }
         .onChange(of: tabs.count) { oldValue, newValue in
             if newValue > oldValue {
@@ -544,6 +559,7 @@ struct MainContainerView: View {
     private func moveMessage(_ message: Message, toTabId targetTabId: UUID?) {
         message.tabId = targetTabId
         try? modelContext.save()
+        reloadTrigger += 1
     }
 
     private func sendTaskListMessage(title: String?, items: [TodoItem]) {
@@ -576,12 +592,7 @@ struct MainContainerView: View {
     }
 
     private func saveReminder(message: Message, date: Date, repeatInterval: ReminderRepeatInterval) {
-        // Cancel existing notification if any
-        if let existingId = message.notificationId {
-            NotificationService.shared.cancelReminder(notificationId: existingId)
-        }
-
-        // Schedule new notification
+        // Schedule new notification first to avoid losing an existing one on failure.
         Task {
             if let notificationId = await NotificationService.shared.scheduleReminder(
                 for: message,
@@ -589,6 +600,9 @@ struct MainContainerView: View {
                 repeatInterval: repeatInterval
             ) {
                 await MainActor.run {
+                    if let existingId = message.notificationId, existingId != notificationId {
+                        NotificationService.shared.cancelReminder(notificationId: existingId)
+                    }
                     message.reminderDate = date
                     message.reminderRepeatInterval = repeatInterval
                     message.notificationId = notificationId
@@ -630,9 +644,22 @@ struct MainContainerView: View {
         )
         // Restore original creation date
         message.createdAt = snapshot.createdAt
+        message.todoItems = snapshot.todoItems
+        message.todoTitle = snapshot.todoTitle
+        message.reminderDate = nil
+        message.reminderRepeatInterval = nil
+        message.notificationId = nil
 
         modelContext.insert(message)
         try? modelContext.save()
+
+        if let reminderDate = snapshot.reminderDate, reminderDate > Date() {
+            saveReminder(
+                message: message,
+                date: reminderDate,
+                repeatInterval: snapshot.reminderRepeatInterval ?? .never
+            )
+        }
     }
 
     private func createTab(title: String) {
@@ -732,17 +759,45 @@ struct MainContainerView: View {
     }
 
     private func deleteSelectedMessages() {
-        for message in allMessages where selectedMessageIds.contains(message.id) {
-            deleteMessage(message)
+        let messagesToDelete = allMessages.filter { selectedMessageIds.contains($0.id) }
+        guard !messagesToDelete.isEmpty else {
+            exitSelectionMode()
+            return
         }
+
+        // Clean up previous deleted message's media (if any)
+        if let previousDeleted = DeletedMessageStore.shared.lastDeleted {
+            for fileName in previousDeleted.photoFileNames {
+                let url = Message.photosDirectory.appendingPathComponent(fileName)
+                try? FileManager.default.removeItem(at: url)
+            }
+            for fileName in previousDeleted.videoFileNames {
+                SharedVideoStorage.deleteVideo(fileName)
+            }
+            for fileName in previousDeleted.videoThumbnailFileNames {
+                SharedPhotoStorage.deletePhoto(fileName)
+            }
+        }
+
+        for message in messagesToDelete {
+            if let notificationId = message.notificationId {
+                NotificationService.shared.cancelReminder(notificationId: notificationId)
+            }
+            DeletedMessageStore.shared.store(message)
+            modelContext.delete(message)
+        }
+        try? modelContext.save()
+        reloadTrigger += 1
         exitSelectionMode()
     }
 
     private func moveSelectedMessages(to targetTabId: UUID?) {
-        for message in allMessages where selectedMessageIds.contains(message.id) {
+        let messagesToMove = allMessages.filter { selectedMessageIds.contains($0.id) }
+        for message in messagesToMove {
             message.tabId = targetTabId
         }
         try? modelContext.save()
+        reloadTrigger += 1
         exitSelectionMode()
     }
 

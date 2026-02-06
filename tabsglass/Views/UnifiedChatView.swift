@@ -37,6 +37,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     var onEnterSelectionMode: ((Message) -> Void)?
     var onToggleMessageSelection: ((UUID, Bool) -> Void)?
 
+    /// Incremented to force UIKit reload when SwiftData mutations aren't detectable via reference comparison
+    var reloadTrigger: Int = 0
+
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
         vc.tabs = tabs
@@ -81,6 +84,22 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         return vc
     }
 
+    private func makeMessagesContentHash(_ items: [Message]) -> Int {
+        var hasher = Hasher()
+        hasher.combine(items.count)
+        for message in items {
+            hasher.combine(message.id)
+            hasher.combine(message.tabId)
+            hasher.combine(message.content)
+            hasher.combine(message.todoTitle)
+            hasher.combine(message.todoItems?.count ?? -1)
+            hasher.combine(message.hasReminder)
+            hasher.combine(message.photoFileNames.count)
+            hasher.combine(message.videoFileNames.count)
+        }
+        return hasher.finalize()
+    }
+
     func updateUIViewController(_ uiViewController: UnifiedChatViewController, context: Context) {
         // Update callbacks (cheap)
         uiViewController.onDeleteMessage = onDeleteMessage
@@ -109,21 +128,27 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         let tabsContentChanged = !validOldTabs.elementsEqual(tabs, by: { $0.id == $1.id && $0.title == $1.title })
         let tabsChanged = tabCountChanged || tabsContentChanged
 
-        // Check if messages changed (count, IDs, or content hash)
-        let validOldMessages = uiViewController.allMessages.filter { $0.modelContext != nil }
-        let oldIds = Set(validOldMessages.map { $0.id })
+        // Check if messages changed (IDs compared without filtering — .id is safe on deleted objects)
+        let oldIds = Set(uiViewController.allMessages.map { $0.id })
         let newIds = Set(messages.map { $0.id })
         let idsChanged = oldIds != newIds
 
         // Quick content hash check (catches todo toggles, edits, etc.)
-        let oldContentHash = validOldMessages.reduce(0) { $0 &+ $1.content.hashValue &+ ($1.todoItems?.count ?? 0) }
-        let newContentHash = messages.reduce(0) { $0 &+ $1.content.hashValue &+ ($1.todoItems?.count ?? 0) }
+        // Filter deleted objects here — accessing .content on them can crash
+        let validOldMessages = uiViewController.allMessages.filter { $0.modelContext != nil }
+        let oldContentHash = makeMessagesContentHash(validOldMessages)
+        let newContentHash = makeMessagesContentHash(messages)
         let contentChanged = oldContentHash != newContentHash
 
+        // Explicit reload trigger for bulk operations (move/delete) where reference-type
+        // mutations make change detection via hash comparison impossible
+        let forceReload = uiViewController.reloadTrigger != reloadTrigger
+
         // Update tab/message data BEFORE changing page selection so totalTabCount is correct
-        if tabsChanged || idsChanged || contentChanged {
+        if tabsChanged || idsChanged || contentChanged || forceReload {
             uiViewController.tabs = tabs
             uiViewController.allMessages = messages
+            uiViewController.reloadTrigger = reloadTrigger
         }
 
         // Tab selection change (after data update so totalTabCount is current)
@@ -137,7 +162,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             uiViewController.handleTabsStructureChange()
         } else if indexChanged {
             uiViewController.updatePageSelection(animated: true)
-        } else if idsChanged || contentChanged {
+        } else if idsChanged || contentChanged || forceReload {
             uiViewController.reloadCurrentTab()
         }
     }
@@ -149,6 +174,7 @@ final class UnifiedChatViewController: UIViewController {
     var tabs: [Tab] = []  // Real tabs only (Inbox is virtual)
     var allMessages: [Message] = []  // All messages from SwiftUI
     var selectedIndex: Int = 1  // 0 = Search, 1 = Inbox, 2+ = real tabs
+    var reloadTrigger: Int = 0
     var onSend: (() -> Void)?
     var onEntitiesExtracted: (([TextEntity]) -> Void)?
 
@@ -213,6 +239,22 @@ final class UnifiedChatViewController: UIViewController {
     private var cachedSearchQuery: String = ""
     private var cachedMessagesHash: Int = 0
 
+    private func makeCacheHash(from messages: [Message]) -> Int {
+        var hasher = Hasher()
+        hasher.combine(messages.count)
+        for message in messages where message.modelContext != nil {
+            hasher.combine(message.id)
+            hasher.combine(message.tabId)
+            hasher.combine(message.content)
+            hasher.combine(message.todoTitle)
+            hasher.combine(message.todoItems?.count ?? -1)
+            hasher.combine(message.hasReminder)
+            hasher.combine(message.photoFileNames.count)
+            hasher.combine(message.videoFileNames.count)
+        }
+        return hasher.finalize()
+    }
+
     /// Messages matching the current search query (case-insensitive, all tabs) - cached for performance
     private var filteredMessages: [Message] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -223,7 +265,7 @@ final class UnifiedChatViewController: UIViewController {
         }
 
         // Return cached result if query and messages haven't changed
-        let currentHash = allMessages.count
+        let currentHash = makeCacheHash(from: allMessages)
         if query == cachedSearchQuery && currentHash == cachedMessagesHash,
            let cached = cachedFilteredMessages {
             return cached
@@ -262,6 +304,7 @@ final class UnifiedChatViewController: UIViewController {
     /// Invalidate filtered messages cache (call when messages change)
     private func invalidateFilteredMessagesCache() {
         cachedFilteredMessages = nil
+        cachedSearchQuery = ""
         cachedMessagesHash = 0
     }
 
@@ -271,7 +314,7 @@ final class UnifiedChatViewController: UIViewController {
 
     /// Get messages for a specific tab (cached for performance during swipes)
     private func messagesForTab(_ tabId: UUID?) -> [Message] {
-        let currentHash = allMessages.count
+        let currentHash = makeCacheHash(from: allMessages)
 
         // Invalidate cache if messages count changed
         if currentHash != cachedTabMessagesHash {
@@ -839,16 +882,30 @@ final class UnifiedChatViewController: UIViewController {
     func reloadCurrentTab() {
         // Invalidate caches when reloading (data may have changed)
         invalidateTabMessagesCache()
+        invalidateFilteredMessagesCache()
 
         if let currentVC = pageViewController.viewControllers?.first as? MessageListViewController {
-            let index = currentVC.pageIndex
-            if index < totalTabCount {
-                currentVC.currentTabId = tabId(for: index)
+            let currentIndex = currentVC.pageIndex
+            if currentIndex < totalTabCount {
+                currentVC.currentTabId = tabId(for: currentIndex)
                 currentVC.allTabs = tabs
-                // Search tab (index 0) shows filtered search results
-                currentVC.messages = index == 0 ? filteredMessages : messagesForTab(currentVC.currentTabId)
+                let msgs = currentIndex == 0 ? filteredMessages : messagesForTab(currentVC.currentTabId)
+                currentVC.messages = msgs
                 currentVC.reloadMessages()
             }
+
+            // Also refresh adjacent cached controllers (UIPageViewController may serve them
+            // from its internal cache without calling the data source)
+            for adjacentIndex in [currentIndex - 1, currentIndex + 1] {
+                guard adjacentIndex >= 0, adjacentIndex < totalTabCount,
+                      let cachedVC = messageControllers[adjacentIndex] else { continue }
+                let adjTabId = tabId(for: adjacentIndex)
+                cachedVC.currentTabId = adjTabId
+                cachedVC.allTabs = tabs
+                cachedVC.messages = adjacentIndex == 0 ? filteredMessages : messagesForTab(adjTabId)
+                cachedVC.reloadMessages()
+            }
+        } else {
         }
     }
 
@@ -1489,14 +1546,14 @@ final class MessageListViewController: UIViewController {
         let idsMatch = currentIds == lastProcessedMessageIds && currentIds.count == sortedMessages.count
         lastProcessedMessageIds = currentIds
 
-        let oldMessages = sortedMessages.filter { $0.modelContext != nil }
         let newMessages: [Message]
 
         if idsMatch {
             // IDs match - reuse sorted order, just update content
-            // Create a lookup for quick access
             let messageById = Dictionary(uniqueKeysWithValues: validMessages.map { ($0.id, $0) })
-            newMessages = sortedMessages.compactMap { messageById[$0.id] }
+            newMessages = sortedMessages
+                .compactMap { messageById[$0.id] }
+                .filter { !$0.isEmpty }
         } else {
             // IDs changed - need full filter and sort, invalidate height cache
             heightCache.removeAll()
@@ -1505,15 +1562,16 @@ final class MessageListViewController: UIViewController {
                 .sorted { $0.createdAt > $1.createdAt }
         }
 
-        // Check if only content changed (same IDs, same order) - just reconfigure cells
-        let oldIds = Set(oldMessages.map { $0.id })
+        // Compare against sortedMessages (what UITableView currently displays)
+        // .id is safe to access on deleted SwiftData objects
+        let oldIds = sortedMessages.map { $0.id }
         let newIds = newMessages.map { $0.id }
 
-        if oldIds == Set(newIds) && oldMessages.map({ $0.id }) == newIds {
-            // Same messages, just update content - reconfigure visible cells without animation
-            // Invalidate height cache for messages whose content changed
+        if oldIds == newIds {
+            // Same messages in same order — just reconfigure content
+            // (if we're here, all sortedMessages are valid since their IDs match newMessages)
             for (index, newMsg) in newMessages.enumerated() {
-                let oldMsg = oldMessages[index]
+                let oldMsg = sortedMessages[index]
                 // Check if content that affects height has changed
                 if oldMsg.content != newMsg.content ||
                    oldMsg.todoItems?.count != newMsg.todoItems?.count ||
@@ -1539,12 +1597,13 @@ final class MessageListViewController: UIViewController {
             CATransaction.commit()
         } else {
             // Check if this is a simple insertion of new messages at the beginning
-            let newMessageIds = newIds.filter { !oldIds.contains($0) }
+            let oldIdSet = Set(oldIds)
+            let newMessageIds = newIds.filter { !oldIdSet.contains($0) }
             let isSimpleInsertion = !newMessageIds.isEmpty &&
-                                    oldIds.subtracting(Set(newIds)).isEmpty &&
-                                    newIds.dropFirst(newMessageIds.count).elementsEqual(oldMessages.map { $0.id })
+                                    oldIdSet.subtracting(Set(newIds)).isEmpty &&
+                                    newIds.dropFirst(newMessageIds.count).elementsEqual(oldIds)
 
-            if isSimpleInsertion && !oldMessages.isEmpty {
+            if isSimpleInsertion && !sortedMessages.isEmpty {
                 // New messages added at the top (row 0 in inverted table = newest)
                 // Mark these messages for appear animation (will be applied in cellForRowAt)
                 pendingAppearAnimationIds = Set(newMessageIds)
@@ -1579,7 +1638,7 @@ final class MessageListViewController: UIViewController {
                         }
                     }
                 }
-            } else if isSimpleInsertion && oldMessages.isEmpty && !isSearchTab {
+            } else if isSimpleInsertion && sortedMessages.isEmpty && !isSearchTab {
                 // First message in empty tab - fade out empty cell, then show message cell
                 // (Skip for search tab - it doesn't have empty cell placeholder)
                 isAnimatingFirstMessage = true
@@ -2008,6 +2067,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 title: L10n.Selection.select,
                 image: UIImage(systemName: "checkmark.circle")
             ) { [weak self] _ in
+                self?.view.window?.endEditing(true)
                 self?.onEnterSelectionMode?(message)
             }
             actions.append(selectAction)

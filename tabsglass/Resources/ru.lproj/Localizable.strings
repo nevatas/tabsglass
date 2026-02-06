@@ -147,6 +147,8 @@
 "selection.delete" = "Удалить";
 "selection.move_to" = "Переместить в";
 "selection.count" = "Выбрано: %d";
+"selection.delete_title" = "Удалить сообщения?";
+"selection.delete_message" = "Будет удалено сообщений: %d";
 
 // MARK: - Data (Export/Import)
 
