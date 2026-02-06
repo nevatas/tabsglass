@@ -891,7 +891,7 @@ final class UnifiedChatViewController: UIViewController {
                 currentVC.allTabs = tabs
                 let msgs = currentIndex == 0 ? filteredMessages : messagesForTab(currentVC.currentTabId)
                 currentVC.messages = msgs
-                currentVC.reloadMessages()
+                currentVC.reloadMessages(invalidateHeights: true)
             }
 
             // Also refresh adjacent cached controllers (UIPageViewController may serve them
@@ -903,7 +903,7 @@ final class UnifiedChatViewController: UIViewController {
                 cachedVC.currentTabId = adjTabId
                 cachedVC.allTabs = tabs
                 cachedVC.messages = adjacentIndex == 0 ? filteredMessages : messagesForTab(adjTabId)
-                cachedVC.reloadMessages()
+                cachedVC.reloadMessages(invalidateHeights: true)
             }
         } else {
         }
@@ -1534,9 +1534,14 @@ final class MessageListViewController: UIViewController {
     /// Track last processed message IDs for quick change detection
     private var lastProcessedMessageIds: Set<UUID> = []
 
-    func reloadMessages() {
+    func reloadMessages(invalidateHeights: Bool = false) {
         // Skip if first message animation is in progress
         if isAnimatingFirstMessage { return }
+
+        // Force reload: clear all height caches so cells recalculate
+        if invalidateHeights {
+            heightCache.removeAll()
+        }
 
         // Filter out deleted SwiftData objects first
         let validMessages = messages.filter { $0.modelContext != nil }
