@@ -21,41 +21,45 @@ struct PaywallView: View {
             backgroundColor
                 .ignoresSafeArea()
 
-            // Content renders immediately but invisible until ready
-            VStack(spacing: 32) {
-                Text("Taby Unlimited")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .padding(.top, 60)
-                    .opacity(titleVisible ? 1 : 0)
-                    .offset(y: titleVisible ? 0 : 20)
+            // Single TimelineView at 30fps drives all scrolling animations
+            TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { timeline in
+                let elapsed = timeline.date.timeIntervalSinceReferenceDate
 
-                // 2x2 grid of feature cards
-                LazyVGrid(columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12)
-                ], spacing: 12) {
-                    TabsFeatureCard()
-                        .opacity(cardsVisible[0] ? 1 : 0)
-                        .offset(y: cardsVisible[0] ? 0 : 30)
+                VStack(spacing: 32) {
+                    Text("Taby Unlimited")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .padding(.top, 60)
+                        .opacity(titleVisible ? 1 : 0)
+                        .offset(y: titleVisible ? 0 : 20)
 
-                    TasksFeatureCard()
-                        .opacity(cardsVisible[1] ? 1 : 0)
-                        .offset(y: cardsVisible[1] ? 0 : 30)
+                    // 2x2 grid of feature cards
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 12),
+                        GridItem(.flexible(), spacing: 12)
+                    ], spacing: 12) {
+                        TabsFeatureCard(elapsed: elapsed)
+                            .opacity(cardsVisible[0] ? 1 : 0)
+                            .offset(y: cardsVisible[0] ? 0 : 30)
 
-                    RemindersFeatureCard()
-                        .opacity(cardsVisible[2] ? 1 : 0)
-                        .offset(y: cardsVisible[2] ? 0 : 30)
+                        TasksFeatureCard(elapsed: elapsed)
+                            .opacity(cardsVisible[1] ? 1 : 0)
+                            .offset(y: cardsVisible[1] ? 0 : 30)
 
-                    ThemesFeatureCard()
-                        .opacity(cardsVisible[3] ? 1 : 0)
-                        .offset(y: cardsVisible[3] ? 0 : 30)
+                        RemindersFeatureCard()
+                            .opacity(cardsVisible[2] ? 1 : 0)
+                            .offset(y: cardsVisible[2] ? 0 : 30)
+
+                        ThemesFeatureCard(elapsed: elapsed)
+                            .opacity(cardsVisible[3] ? 1 : 0)
+                            .offset(y: cardsVisible[3] ? 0 : 30)
+                    }
+                    .padding(.horizontal, 16)
+
+                    Spacer()
                 }
-                .padding(.horizontal, 16)
-
-                Spacer()
+                .opacity(contentReady ? 1 : 0.001)
             }
-            .opacity(contentReady ? 1 : 0.001)
 
             // Close button
             Button {
@@ -75,7 +79,7 @@ struct PaywallView: View {
         .environment(\.colorScheme, .dark)
         .ignoresSafeArea(.keyboard)
         .onAppear {
-            // Let TimelineView scrollers render a few frames off-screen first
+            // Let TimelineView render a few frames off-screen first
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 contentReady = true
                 animateAppearance()
@@ -84,12 +88,10 @@ struct PaywallView: View {
     }
 
     private func animateAppearance() {
-        // Title appears first
         withAnimation(.easeOut(duration: 0.4)) {
             titleVisible = true
         }
 
-        // Cards appear one by one with delay
         for index in 0..<4 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 + Double(index) * 0.1) {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
@@ -100,29 +102,11 @@ struct PaywallView: View {
     }
 }
 
-struct FeatureCard: View {
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Title area
-            Text(title)
-                .font(.system(size: 17, weight: .bold, design: .default))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-
-            // Content area
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 190)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-    }
-}
+// MARK: - Tabs Card
 
 struct TabsFeatureCard: View {
-    // Full list for variety, but we only use a subset for performance
+    let elapsed: TimeInterval
+
     private static let allTabs = [
         "📝 Journal", "🧘 Mindfulness", "🛌 Sleep Tracker", "🏋️ Fitness", "💊 Health",
         "🍽️ Recipes", "🎯 Goals", "💰 Finance", "🛒 Shopping", "🎁 Gifts",
@@ -136,25 +120,22 @@ struct TabsFeatureCard: View {
         "🛠️ DIY & Fixes", "💅 Nail Works", "🪴 Minimalism", "🕵️ Secrets", "☕ Coffee Journal"
     ]
 
-    // Only use 10 tabs per row for better performance (visible area + buffer)
     @State private var tabs1: [String] = Array(allTabs.shuffled().prefix(10))
     @State private var tabs2: [String] = Array(allTabs.shuffled().prefix(10))
     @State private var tabs3: [String] = Array(allTabs.shuffled().prefix(10))
 
     var body: some View {
         VStack(spacing: 0) {
-            // Title area
             Text("∞ Tabs")
                 .font(.system(size: 17, weight: .bold, design: .default))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
 
-            // Content area - scrolling tabs
             VStack(spacing: 8) {
-                InfiniteTabsScroller(tabs: tabs1, reverse: false, scrollSpeed: 55)
-                InfiniteTabsScroller(tabs: tabs2, reverse: true, scrollSpeed: 70)
-                InfiniteTabsScroller(tabs: tabs3, reverse: false, scrollSpeed: 45)
+                InfiniteTabsScroller(tabs: tabs1, reverse: false, scrollSpeed: 55, elapsed: elapsed)
+                InfiniteTabsScroller(tabs: tabs2, reverse: true, scrollSpeed: 70, elapsed: elapsed)
+                InfiniteTabsScroller(tabs: tabs3, reverse: false, scrollSpeed: 45, elapsed: elapsed)
             }
             .padding(.top, 8)
             .compositingGroup()
@@ -185,7 +166,11 @@ struct TabsFeatureCard: View {
     }
 }
 
+// MARK: - Tasks Card
+
 struct TasksFeatureCard: View {
+    let elapsed: TimeInterval
+
     private static let allTasks = [
         "Drink a glass of water",
         "Reply to that one message you keep postponing",
@@ -200,15 +185,13 @@ struct TasksFeatureCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Title area
             Text("∞ Tasks")
                 .font(.system(size: 17, weight: .bold, design: .default))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
 
-            // Content area - scrolling tasks
-            InfiniteTasksScroller(tasks: tasks)
+            InfiniteTasksScroller(tasks: tasks, elapsed: elapsed)
                 .frame(height: 110)
                 .padding(.top, 8)
             Spacer()
@@ -220,11 +203,14 @@ struct TasksFeatureCard: View {
     }
 }
 
+// MARK: - Themes Card
+
 struct ThemesFeatureCard: View {
+    let elapsed: TimeInterval
+
     private let themeImages = ["paywall_theme_1", "paywall_theme_2", "paywall_theme_3", "paywall_theme_4"]
     private let scrollSpeed: CGFloat = 70
     private let spacing: CGFloat = 20
-    private let curveAmount: CGFloat = 30
 
     @State private var imageWidth: CGFloat = 0
 
@@ -242,45 +228,36 @@ struct ThemesFeatureCard: View {
                 let itemStride = imageWidth + spacing
                 let loopWidth = itemStride * CGFloat(themeImages.count)
 
-                TimelineView(.animation) { timeline in
-                    let elapsed = timeline.date.timeIntervalSinceReferenceDate
-                    let totalOffset = CGFloat(elapsed) * scrollSpeed
-                    let currentOffset = loopWidth > 0
-                        ? totalOffset.truncatingRemainder(dividingBy: loopWidth)
-                        : 0
+                let totalOffset = CGFloat(elapsed) * scrollSpeed
+                let currentOffset = loopWidth > 0
+                    ? totalOffset.truncatingRemainder(dividingBy: loopWidth)
+                    : 0
 
-                    ZStack(alignment: .topLeading) {
-                        // Only render images visible in viewport (+ buffer)
-                        let buffer = itemStride
-                        ForEach(0..<(themeImages.count * 2), id: \.self) { i in
-                            let imgIndex = i % themeImages.count
-                            let x = CGFloat(i) * itemStride - currentOffset
+                ZStack(alignment: .topLeading) {
+                    let buffer = itemStride
+                    ForEach(0..<(themeImages.count * 2), id: \.self) { i in
+                        let imgIndex = i % themeImages.count
+                        let x = CGFloat(i) * itemStride - currentOffset
 
-                            if x > -buffer && x < cardWidth + buffer {
-                                // Arc curve: highest at center, lower at edges
-                                let centerX = cardWidth * 0.4
-                                let distance = (x - centerX) / cardWidth
-                                let yOffset = distance * distance * curveAmount
-
-                                Image(themeImages[imgIndex])
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(height: phoneHeight)
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
-                                    .offset(x: x, y: 18 + yOffset)
-                                    .background(
-                                        imageWidth == 0 ? GeometryReader { imgGeo in
-                                            Color.clear.onAppear {
-                                                imageWidth = imgGeo.size.width
-                                            }
-                                        } : nil
-                                    )
-                            }
+                        if x > -buffer && x < cardWidth + buffer {
+                            Image(themeImages[imgIndex])
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: phoneHeight)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
+                                .offset(x: x, y: 18)
+                                .background(
+                                    imageWidth == 0 ? GeometryReader { imgGeo in
+                                        Color.clear.onAppear {
+                                            imageWidth = imgGeo.size.width
+                                        }
+                                    } : nil
+                                )
                         }
                     }
-                    .drawingGroup()
                 }
+                .drawingGroup()
                 .frame(width: cardWidth, height: geo.size.height, alignment: .topLeading)
                 .mask(
                     LinearGradient(
@@ -302,7 +279,10 @@ struct ThemesFeatureCard: View {
     }
 }
 
+// MARK: - Reminders Card
+
 struct RemindersFeatureCard: View {
+
     private enum PostKind {
         case image(String)
         case text
@@ -319,6 +299,7 @@ struct RemindersFeatureCard: View {
     @State private var currentIndex = 0
     @State private var postOffset: CGSize = CGSize(width: 0, height: 300)
     @State private var showBadge = false
+    @State private var isActive = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -332,10 +313,8 @@ struct RemindersFeatureCard: View {
                 Color.clear
                     .overlay(alignment: .topTrailing) {
                         ZStack(alignment: .topTrailing) {
-                            // Post bubble
                             postView(for: posts[currentIndex])
 
-                            // Reminder badge
                             if showBadge {
                                 ZStack {
                                     Circle()
@@ -356,7 +335,12 @@ struct RemindersFeatureCard: View {
                         .padding(.top, 24)
                     }
                     .onAppear {
+                        guard !isActive else { return }
+                        isActive = true
                         startCycle(areaHeight: geo.size.height)
+                    }
+                    .onDisappear {
+                        isActive = false
                     }
             }
         }
@@ -410,27 +394,28 @@ struct RemindersFeatureCard: View {
     }
 
     private func startCycle(areaHeight: CGFloat) {
-        // Phase 1: Slide up from bottom
+        guard isActive else { return }
+
         withAnimation(.easeOut(duration: 0.3)) {
             postOffset = .zero
         }
 
-        // Phase 2: Show badge
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            guard isActive else { return }
             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                 showBadge = true
             }
         }
 
-        // Phase 3: Slide out left
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            guard isActive else { return }
             withAnimation(.easeIn(duration: 0.3)) {
                 postOffset = CGSize(width: -300, height: 0)
             }
         }
 
-        // Phase 4: Reset and next
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) {
+            guard isActive else { return }
             var t = Transaction()
             t.disablesAnimations = true
             withTransaction(t) {
@@ -445,6 +430,8 @@ struct RemindersFeatureCard: View {
         }
     }
 }
+
+// MARK: - Shared Components
 
 private struct ReminderTaskRow: View {
     let title: String
@@ -467,6 +454,7 @@ private struct ReminderTaskRow: View {
 
 struct InfiniteTasksScroller: View {
     let tasks: [String]
+    let elapsed: TimeInterval
 
     private let scrollSpeed: CGFloat = 40
 
@@ -474,31 +462,28 @@ struct InfiniteTasksScroller: View {
 
     var body: some View {
         GeometryReader { geometry in
-            TimelineView(.animation) { timeline in
-                let elapsed = timeline.date.timeIntervalSinceReferenceDate
-                let offset = CGFloat(elapsed) * scrollSpeed
-                let loopHeight = contentHeight > 0 ? contentHeight : CGFloat(tasks.count) * 50
-                let currentOffset = offset.truncatingRemainder(dividingBy: loopHeight)
+            let offset = CGFloat(elapsed) * scrollSpeed
+            let loopHeight = contentHeight > 0 ? contentHeight : CGFloat(tasks.count) * 50
+            let currentOffset = offset.truncatingRemainder(dividingBy: loopHeight)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(0..<tasks.count, id: \.self) { index in
-                        TaskItem(title: tasks[index], isCompleted: index % 3 == 0)
-                    }
-                    ForEach(0..<tasks.count, id: \.self) { index in
-                        TaskItem(title: tasks[index], isCompleted: index % 3 == 0)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(0..<tasks.count, id: \.self) { index in
+                    TaskItem(title: tasks[index], isCompleted: index % 3 == 0)
+                }
+                ForEach(0..<tasks.count, id: \.self) { index in
+                    TaskItem(title: tasks[index], isCompleted: index % 3 == 0)
+                }
+            }
+            .background(
+                GeometryReader { contentGeometry in
+                    Color.clear.onAppear {
+                        contentHeight = (contentGeometry.size.height + 8) / 2
                     }
                 }
-                .background(
-                    GeometryReader { contentGeometry in
-                        Color.clear.onAppear {
-                            contentHeight = (contentGeometry.size.height + 8) / 2
-                        }
-                    }
-                )
-                .drawingGroup()
-                .offset(y: -currentOffset)
-                .padding(.leading, 12)
-            }
+            )
+            .drawingGroup()
+            .offset(y: -currentOffset)
+            .padding(.leading, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .clipped()
             .mask(
@@ -523,12 +508,10 @@ struct TaskItem: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // Checkbox
             Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 20))
                 .foregroundColor(isCompleted ? .green : .white.opacity(0.5))
 
-            // Task text
             Text(title)
                 .font(.system(size: 17, weight: .medium))
                 .foregroundColor(.white.opacity(0.7))
@@ -546,37 +529,33 @@ struct InfiniteTabsScroller: View {
     let tabs: [String]
     var reverse: Bool = false
     var scrollSpeed: CGFloat = 60
+    let elapsed: TimeInterval
 
     @State private var contentWidth: CGFloat = 0
 
     var body: some View {
         GeometryReader { geometry in
-            TimelineView(.animation) { timeline in
-                let elapsed = timeline.date.timeIntervalSinceReferenceDate
-                let offset = CGFloat(elapsed) * scrollSpeed
-                // Use contentWidth if measured, otherwise estimate
-                let loopWidth = contentWidth > 0 ? contentWidth : CGFloat(tabs.count) * 150
-                let currentOffset = offset.truncatingRemainder(dividingBy: loopWidth)
+            let offset = CGFloat(elapsed) * scrollSpeed
+            let loopWidth = contentWidth > 0 ? contentWidth : CGFloat(tabs.count) * 150
+            let currentOffset = offset.truncatingRemainder(dividingBy: loopWidth)
 
-                HStack(spacing: 8) {
-                    ForEach(0..<tabs.count, id: \.self) { index in
-                        TabPill(title: tabs[index])
-                    }
-                    ForEach(0..<tabs.count, id: \.self) { index in
-                        TabPill(title: tabs[index])
+            HStack(spacing: 8) {
+                ForEach(0..<tabs.count, id: \.self) { index in
+                    TabPill(title: tabs[index])
+                }
+                ForEach(0..<tabs.count, id: \.self) { index in
+                    TabPill(title: tabs[index])
+                }
+            }
+            .background(
+                GeometryReader { contentGeometry in
+                    Color.clear.onAppear {
+                        contentWidth = (contentGeometry.size.width + 8) / 2
                     }
                 }
-                .background(
-                    GeometryReader { contentGeometry in
-                        Color.clear.onAppear {
-                            // Measure actual width of one set of tabs (half the content)
-                            contentWidth = (contentGeometry.size.width + 8) / 2
-                        }
-                    }
-                )
-                .drawingGroup()
-                .offset(x: reverse ? currentOffset - loopWidth : -currentOffset)
-            }
+            )
+            .drawingGroup()
+            .offset(x: reverse ? currentOffset - loopWidth : -currentOffset)
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
             .clipped()
         }
