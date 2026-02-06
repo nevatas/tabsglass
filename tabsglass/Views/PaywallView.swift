@@ -220,7 +220,18 @@ struct TasksFeatureCard: View {
 }
 
 struct RemindersFeatureCard: View {
-    private let postImages = ["paywall_image_1", "paywall_image_2"]
+    private enum PostKind {
+        case image(String)
+        case text
+        case tasks
+    }
+
+    private let posts: [PostKind] = [
+        .image("paywall_image_1"),
+        .text,
+        .image("paywall_image_2"),
+        .tasks
+    ]
 
     @State private var currentIndex = 0
     @State private var postOffset: CGSize = CGSize(width: 0, height: 300)
@@ -238,14 +249,10 @@ struct RemindersFeatureCard: View {
                 Color.clear
                     .overlay(alignment: .topTrailing) {
                         ZStack(alignment: .topTrailing) {
-                            // Post bubble with image
-                            Image(postImages[currentIndex])
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 340, height: 340)
-                                .clipShape(RoundedRectangle(cornerRadius: 18))
+                            // Post bubble
+                            postView(for: posts[currentIndex])
 
-                            // Reminder badge — drawingGroup rasterizes before glass
+                            // Reminder badge
                             if showBadge {
                                 ZStack {
                                     Circle()
@@ -276,6 +283,49 @@ struct RemindersFeatureCard: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
+    @ViewBuilder
+    private func postView(for post: PostKind) -> some View {
+        switch post {
+        case .image(let name):
+            Image(name)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 340, height: 340)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+
+        case .text:
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Don't forget to call grandma, she makes the best cookies and you promised last Sunday that you'd come over for tea and bring that photo album she's been asking about since forever 🍪")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(width: 280, alignment: .leading)
+            .background(Color.white.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+
+        case .tasks:
+            VStack(alignment: .leading, spacing: 0) {
+                ReminderTaskRow(title: "Sleep in, no alarms", done: true)
+                Divider().overlay(Color.white.opacity(0.1))
+                ReminderTaskRow(title: "Finish that book", done: false)
+                Divider().overlay(Color.white.opacity(0.1))
+                ReminderTaskRow(title: "Cook something fancy", done: false)
+                Divider().overlay(Color.white.opacity(0.1))
+                ReminderTaskRow(title: "Movie night + snacks", done: true)
+                Divider().overlay(Color.white.opacity(0.1))
+                ReminderTaskRow(title: "Walk without phone", done: false)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .frame(width: 280, alignment: .leading)
+            .background(Color.white.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
     private func startCycle(areaHeight: CGFloat) {
         // Phase 1: Slide up from bottom
         withAnimation(.easeOut(duration: 0.3)) {
@@ -302,7 +352,7 @@ struct RemindersFeatureCard: View {
             t.disablesAnimations = true
             withTransaction(t) {
                 showBadge = false
-                currentIndex = (currentIndex + 1) % postImages.count
+                currentIndex = (currentIndex + 1) % posts.count
                 postOffset = CGSize(width: 0, height: areaHeight)
             }
 
@@ -310,6 +360,25 @@ struct RemindersFeatureCard: View {
                 startCycle(areaHeight: areaHeight)
             }
         }
+    }
+}
+
+private struct ReminderTaskRow: View {
+    let title: String
+    let done: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 18))
+                .foregroundStyle(done ? .green : .white.opacity(0.4))
+            Text(title)
+                .font(.system(size: 16))
+                .foregroundStyle(done ? .white.opacity(0.5) : .white.opacity(0.8))
+                .strikethrough(done, color: .white.opacity(0.3))
+                .lineLimit(1)
+        }
+        .padding(.vertical, 11)
     }
 }
 
