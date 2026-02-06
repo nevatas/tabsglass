@@ -74,6 +74,58 @@ struct PendingShareItem: Codable {
         self.tabId = tabId
         self.createdAt = Date()
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case text
+        case photoFileNames
+        case photoAspectRatios
+        case videoFileNames
+        case videoAspectRatios
+        case videoDurations
+        case videoThumbnailFileNames
+        case tabId
+        case createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedPhotoFileNames = try container.decodeIfPresent([String].self, forKey: .photoFileNames) ?? []
+        let decodedVideoFileNames = try container.decodeIfPresent([String].self, forKey: .videoFileNames) ?? []
+        let decodedVideoThumbnailFileNames = try container.decodeIfPresent([String].self, forKey: .videoThumbnailFileNames) ?? []
+
+        var decodedPhotoAspectRatios = try container.decodeIfPresent([Double].self, forKey: .photoAspectRatios) ?? []
+        if decodedPhotoAspectRatios.count < decodedPhotoFileNames.count {
+            decodedPhotoAspectRatios.append(contentsOf: repeatElement(1.0, count: decodedPhotoFileNames.count - decodedPhotoAspectRatios.count))
+        } else if decodedPhotoAspectRatios.count > decodedPhotoFileNames.count {
+            decodedPhotoAspectRatios = Array(decodedPhotoAspectRatios.prefix(decodedPhotoFileNames.count))
+        }
+
+        var decodedVideoAspectRatios = try container.decodeIfPresent([Double].self, forKey: .videoAspectRatios) ?? []
+        if decodedVideoAspectRatios.count < decodedVideoFileNames.count {
+            decodedVideoAspectRatios.append(contentsOf: repeatElement(1.0, count: decodedVideoFileNames.count - decodedVideoAspectRatios.count))
+        } else if decodedVideoAspectRatios.count > decodedVideoFileNames.count {
+            decodedVideoAspectRatios = Array(decodedVideoAspectRatios.prefix(decodedVideoFileNames.count))
+        }
+
+        var decodedVideoDurations = try container.decodeIfPresent([Double].self, forKey: .videoDurations) ?? []
+        if decodedVideoDurations.count < decodedVideoFileNames.count {
+            decodedVideoDurations.append(contentsOf: repeatElement(0.0, count: decodedVideoFileNames.count - decodedVideoDurations.count))
+        } else if decodedVideoDurations.count > decodedVideoFileNames.count {
+            decodedVideoDurations = Array(decodedVideoDurations.prefix(decodedVideoFileNames.count))
+        }
+
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+        self.photoFileNames = decodedPhotoFileNames
+        self.photoAspectRatios = decodedPhotoAspectRatios
+        self.videoFileNames = decodedVideoFileNames
+        self.videoAspectRatios = decodedVideoAspectRatios
+        self.videoDurations = decodedVideoDurations
+        self.videoThumbnailFileNames = decodedVideoThumbnailFileNames
+        self.tabId = try container.decodeIfPresent(UUID.self, forKey: .tabId)
+        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    }
 }
 
 /// Manages pending share items stored in App Group container

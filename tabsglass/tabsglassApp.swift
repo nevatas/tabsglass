@@ -80,10 +80,14 @@ private extension tabsglassApp {
             message.createdAt = item.createdAt
 
             context.insert(message)
+            do {
+                try context.save()
+                PendingShareStorage.remove(id: item.id)
+            } catch {
+                // Keep item in queue for retry on next foreground launch.
+                context.delete(message)
+            }
         }
-
-        try? context.save()
-        PendingShareStorage.clearAll()
     }
 
     static func seedWelcomeMessagesIfNeeded(in container: ModelContainer) {

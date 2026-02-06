@@ -24,6 +24,10 @@ struct DeletedMessageSnapshot {
     let sourceUrl: String?
     let linkPreview: LinkPreview?
     let mediaGroupId: String?
+    let todoItems: [TodoItem]?
+    let todoTitle: String?
+    let reminderDate: Date?
+    let reminderRepeatInterval: ReminderRepeatInterval?
 
     init(message: Message) {
         self.content = message.content
@@ -41,6 +45,10 @@ struct DeletedMessageSnapshot {
         self.sourceUrl = message.sourceUrl
         self.linkPreview = message.linkPreview
         self.mediaGroupId = message.mediaGroupId
+        self.todoItems = message.todoItems
+        self.todoTitle = message.todoTitle
+        self.reminderDate = message.reminderDate
+        self.reminderRepeatInterval = message.reminderRepeatInterval
     }
 }
 
