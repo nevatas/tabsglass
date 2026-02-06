@@ -21,45 +21,46 @@ struct PaywallView: View {
             backgroundColor
                 .ignoresSafeArea()
 
-            // Single TimelineView at 30fps drives all scrolling animations
-            TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { timeline in
-                let elapsed = timeline.date.timeIntervalSinceReferenceDate
+            VStack(spacing: 32) {
+                Text("Taby Unlimited")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding(.top, 60)
+                    .opacity(titleVisible ? 1 : 0)
+                    .offset(y: titleVisible ? 0 : 20)
 
-                VStack(spacing: 32) {
-                    Text("Taby Unlimited")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .padding(.top, 60)
-                        .opacity(titleVisible ? 1 : 0)
-                        .offset(y: titleVisible ? 0 : 20)
+                VStack(spacing: 12) {
+                    HStack(spacing: 12) {
+                        AnimatedCardTimeline { elapsed in
+                            TabsFeatureCard(elapsed: elapsed)
+                        }
+                        .opacity(cardsVisible[0] ? 1 : 0)
+                        .offset(y: cardsVisible[0] ? 0 : 30)
 
-                    // 2x2 grid of feature cards
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 12),
-                        GridItem(.flexible(), spacing: 12)
-                    ], spacing: 12) {
-                        TabsFeatureCard(elapsed: elapsed)
-                            .opacity(cardsVisible[0] ? 1 : 0)
-                            .offset(y: cardsVisible[0] ? 0 : 30)
+                        AnimatedCardTimeline { elapsed in
+                            TasksFeatureCard(elapsed: elapsed)
+                        }
+                        .opacity(cardsVisible[1] ? 1 : 0)
+                        .offset(y: cardsVisible[1] ? 0 : 30)
+                    }
 
-                        TasksFeatureCard(elapsed: elapsed)
-                            .opacity(cardsVisible[1] ? 1 : 0)
-                            .offset(y: cardsVisible[1] ? 0 : 30)
-
+                    HStack(spacing: 12) {
                         RemindersFeatureCard()
                             .opacity(cardsVisible[2] ? 1 : 0)
                             .offset(y: cardsVisible[2] ? 0 : 30)
 
-                        ThemesFeatureCard(elapsed: elapsed)
-                            .opacity(cardsVisible[3] ? 1 : 0)
-                            .offset(y: cardsVisible[3] ? 0 : 30)
+                        AnimatedCardTimeline { elapsed in
+                            ThemesFeatureCard(elapsed: elapsed)
+                        }
+                        .opacity(cardsVisible[3] ? 1 : 0)
+                        .offset(y: cardsVisible[3] ? 0 : 30)
                     }
-                    .padding(.horizontal, 16)
-
-                    Spacer()
                 }
-                .opacity(contentReady ? 1 : 0.001)
+                .padding(.horizontal, 16)
+
+                Spacer()
             }
+            .opacity(contentReady ? 1 : 0.001)
 
             // Close button
             Button {
@@ -124,6 +125,10 @@ struct TabsFeatureCard: View {
     @State private var tabs2: [String] = Array(allTabs.shuffled().prefix(10))
     @State private var tabs3: [String] = Array(allTabs.shuffled().prefix(10))
 
+    private let row1Speed: CGFloat = 42
+    private let row2Speed: CGFloat = 54
+    private let row3Speed: CGFloat = 34
+
     var body: some View {
         VStack(spacing: 0) {
             Text("∞ Tabs")
@@ -133,12 +138,11 @@ struct TabsFeatureCard: View {
                 .padding(.top, 16)
 
             VStack(spacing: 8) {
-                InfiniteTabsScroller(tabs: tabs1, reverse: false, scrollSpeed: 55, elapsed: elapsed)
-                InfiniteTabsScroller(tabs: tabs2, reverse: true, scrollSpeed: 70, elapsed: elapsed)
-                InfiniteTabsScroller(tabs: tabs3, reverse: false, scrollSpeed: 45, elapsed: elapsed)
+                InfiniteTabsScroller(tabs: tabs1, reverse: false, scrollSpeed: row1Speed, elapsed: elapsed)
+                InfiniteTabsScroller(tabs: tabs2, reverse: true, scrollSpeed: row2Speed, elapsed: elapsed)
+                InfiniteTabsScroller(tabs: tabs3, reverse: false, scrollSpeed: row3Speed, elapsed: elapsed)
             }
             .padding(.top, 8)
-            .compositingGroup()
             .mask(
                 VStack(spacing: 0) {
                     LinearGradient(
@@ -209,7 +213,7 @@ struct ThemesFeatureCard: View {
     let elapsed: TimeInterval
 
     private let themeImages = ["paywall_theme_1", "paywall_theme_2", "paywall_theme_3", "paywall_theme_4"]
-    private let scrollSpeed: CGFloat = 70
+    private let scrollSpeed: CGFloat = 58
     private let spacing: CGFloat = 20
 
     @State private var imageWidth: CGFloat = 0
@@ -257,7 +261,6 @@ struct ThemesFeatureCard: View {
                         }
                     }
                 }
-                .drawingGroup()
                 .frame(width: cardWidth, height: geo.size.height, alignment: .topLeading)
                 .mask(
                     LinearGradient(
@@ -318,13 +321,13 @@ struct RemindersFeatureCard: View {
                             if showBadge {
                                 ZStack {
                                     Circle()
-                                        .fill(.red)
+                                        .fill(Color(red: 1, green: 0.18, blue: 0.18))
                                         .frame(width: 32, height: 32)
                                     Image(systemName: "bell.fill")
                                         .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(.white)
                                 }
-                                .drawingGroup()
+                                .opacity(1)
                                 .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
                                 .offset(x: 10, y: -10)
                                 .transition(.scale)
@@ -452,6 +455,20 @@ private struct ReminderTaskRow: View {
     }
 }
 
+private struct AnimatedCardTimeline<Content: View>: View {
+    let content: (TimeInterval) -> Content
+
+    init(@ViewBuilder content: @escaping (TimeInterval) -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { timeline in
+            content(timeline.date.timeIntervalSinceReferenceDate)
+        }
+    }
+}
+
 struct InfiniteTasksScroller: View {
     let tasks: [String]
     let elapsed: TimeInterval
@@ -481,7 +498,6 @@ struct InfiniteTasksScroller: View {
                     }
                 }
             )
-            .drawingGroup()
             .offset(y: -currentOffset)
             .padding(.leading, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -510,11 +526,11 @@ struct TaskItem: View {
         HStack(spacing: 10) {
             Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 20))
-                .foregroundColor(isCompleted ? .green : .white.opacity(0.5))
+                .foregroundStyle(isCompleted ? .green : .white.opacity(0.5))
 
             Text(title)
                 .font(.system(size: 17, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
                 .fixedSize()
         }
@@ -554,7 +570,6 @@ struct InfiniteTabsScroller: View {
                     }
                 }
             )
-            .drawingGroup()
             .offset(x: reverse ? currentOffset - loopWidth : -currentOffset)
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
             .clipped()
@@ -568,7 +583,7 @@ struct TabPill: View {
     var body: some View {
         Text(title)
             .font(.system(size: 17, weight: .medium))
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundStyle(.white.opacity(0.7))
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, 14)
