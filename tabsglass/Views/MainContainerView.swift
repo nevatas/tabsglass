@@ -375,6 +375,8 @@ struct MainContainerView: View {
                     message.videoAspectRatios = newVideoAspectRatios
                     message.videoDurations = newVideoDurations
                     message.videoThumbnailFileNames = newVideoThumbnailFileNames
+                    try? modelContext.save()
+                    reloadTrigger += 1
 
                     messageToEdit = nil
                 },
@@ -581,6 +583,7 @@ struct MainContainerView: View {
             message.todoItems = newItems
         }
         try? modelContext.save()
+        reloadTrigger += 1
     }
 
     private func toggleTodoItem(message: Message, itemId: UUID, isCompleted: Bool) {
@@ -589,6 +592,7 @@ struct MainContainerView: View {
         items[index].isCompleted = isCompleted
         message.todoItems = items
         try? modelContext.save()
+        reloadTrigger += 1
     }
 
     private func saveReminder(message: Message, date: Date, repeatInterval: ReminderRepeatInterval) {
