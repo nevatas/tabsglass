@@ -13,19 +13,40 @@ struct PaywallView: View {
     @State private var contentReady = false
     @State private var titleVisible = false
     @State private var cardsVisible = [false, false, false, false]
+    @State private var ctaVisible = false
 
     private let backgroundColor = Color.black
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             backgroundColor
                 .ignoresSafeArea()
 
-            VStack(spacing: 32) {
-                Text("Taby Unlimited")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .padding(.top, 60)
+            VStack(spacing: 0) {
+                ZStack(alignment: .trailing) {
+                    Text("Taby Unlimited")
+                        .font(.system(.largeTitle, design: .rounded))
+                        .fontWeight(.bold)
+                        .frame(maxWidth: .infinity)
+
+                    Button {
+                        isPresented = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.2))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .opacity(titleVisible ? 1 : 0)
+                .offset(y: titleVisible ? 0 : 20)
+
+                Text("Make Your Own Space")
+                    .font(.system(.title3, design: .rounded))
+                    .foregroundStyle(.gray)
+                    .padding(.top, 6)
+                    .padding(.bottom, 28)
                     .opacity(titleVisible ? 1 : 0)
                     .offset(y: titleVisible ? 0 : 20)
 
@@ -59,22 +80,59 @@ struct PaywallView: View {
                 .padding(.horizontal, 16)
 
                 Spacer()
+
+                // CTA
+                VStack(spacing: 12) {
+                    Button {
+                        // TODO: Start purchase
+                    } label: {
+                        VStack(spacing: 4) {
+                            Text("Try 7 Days Free")
+                                .font(.system(size: 19, weight: .bold, design: .rounded))
+                            Text("then $2.99/month")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .opacity(0.7)
+                        }
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.white)
+                        .clipShape(Capsule())
+                    }
+
+                    HStack(spacing: 0) {
+                        Button {
+                            // TODO: Restore purchases
+                        } label: {
+                            Text("Restore")
+                        }
+
+                        Text("  ·  ")
+
+                        Button {
+                            // TODO: Open terms
+                        } label: {
+                            Text("Terms")
+                        }
+
+                        Text("  ·  ")
+
+                        Button {
+                            // TODO: Open privacy
+                        } label: {
+                            Text("Privacy")
+                        }
+                    }
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.3))
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+                .opacity(ctaVisible ? 1 : 0)
+                .offset(y: ctaVisible ? 0 : 20)
             }
             .opacity(contentReady ? 1 : 0.001)
 
-            // Close button
-            Button {
-                isPresented = false
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .glassEffect(.regular, in: .circle)
-            }
-            .padding(.top, 16)
-            .padding(.trailing, 16)
-            .opacity(titleVisible ? 1 : 0)
         }
         .preferredColorScheme(.dark)
         .environment(\.colorScheme, .dark)
@@ -98,6 +156,12 @@ struct PaywallView: View {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                     cardsVisible[index] = true
                 }
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+            withAnimation(.easeOut(duration: 0.4)) {
+                ctaVisible = true
             }
         }
     }
@@ -132,7 +196,7 @@ struct TabsFeatureCard: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("∞ Tabs")
-                .font(.system(size: 17, weight: .bold, design: .default))
+                .font(.system(size: 17, weight: .bold, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -190,7 +254,7 @@ struct TasksFeatureCard: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("∞ Tasks")
-                .font(.system(size: 17, weight: .bold, design: .default))
+                .font(.system(size: 17, weight: .bold, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -221,7 +285,7 @@ struct ThemesFeatureCard: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("Themes")
-                .font(.system(size: 17, weight: .bold, design: .default))
+                .font(.system(size: 17, weight: .bold, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -307,7 +371,7 @@ struct RemindersFeatureCard: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("Reminders")
-                .font(.system(size: 17, weight: .bold, design: .default))
+                .font(.system(size: 17, weight: .bold, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -324,7 +388,7 @@ struct RemindersFeatureCard: View {
                                         .fill(Color(red: 1, green: 0.18, blue: 0.18))
                                         .frame(width: 32, height: 32)
                                     Image(systemName: "bell.fill")
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                                         .foregroundStyle(.white)
                                 }
                                 .opacity(1)
@@ -366,7 +430,7 @@ struct RemindersFeatureCard: View {
         case .text:
             VStack(alignment: .leading, spacing: 6) {
                 Text("Don't forget to call grandma, she makes the best cookies and you promised last Sunday that you'd come over for tea and bring that photo album she's been asking about since forever 🍪")
-                    .font(.system(size: 16))
+                    .font(.system(size: 16, design: .rounded))
                     .foregroundStyle(.white)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -443,10 +507,10 @@ private struct ReminderTaskRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 18))
+                .font(.system(size: 18, design: .rounded))
                 .foregroundStyle(done ? .green : .white.opacity(0.4))
             Text(title)
-                .font(.system(size: 16))
+                .font(.system(size: 16, design: .rounded))
                 .foregroundStyle(done ? .white.opacity(0.5) : .white.opacity(0.8))
                 .strikethrough(done, color: .white.opacity(0.3))
                 .lineLimit(1)
@@ -525,11 +589,11 @@ struct TaskItem: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 20))
+                .font(.system(size: 20, design: .rounded))
                 .foregroundStyle(isCompleted ? .green : .white.opacity(0.5))
 
             Text(title)
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 17, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
                 .fixedSize()
@@ -582,7 +646,7 @@ struct TabPill: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 17, weight: .medium))
+            .font(.system(size: 17, weight: .medium, design: .rounded))
             .foregroundStyle(.white.opacity(0.7))
             .lineLimit(1)
             .fixedSize()
