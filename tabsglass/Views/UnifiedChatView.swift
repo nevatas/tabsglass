@@ -871,7 +871,17 @@ final class UnifiedChatViewController: UIViewController {
                 updateInputVisibility(animated: animated)
             }
 
-            pageViewController.setViewControllers([vc], direction: direction, animated: animated)
+            if animated {
+                // Disable interaction during programmatic page transition
+                // to prevent user from interrupting the animation and causing
+                // desync between tab bar selection and displayed content
+                pageViewController.view.isUserInteractionEnabled = false
+                pageViewController.setViewControllers([vc], direction: direction, animated: true) { [weak self] _ in
+                    self?.pageViewController.view.isUserInteractionEnabled = true
+                }
+            } else {
+                pageViewController.setViewControllers([vc], direction: direction, animated: false)
+            }
         } else {
             pageViewController.setViewControllers([vc], direction: .forward, animated: false)
             updateInputVisibility(animated: false)

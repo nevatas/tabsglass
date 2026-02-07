@@ -27,11 +27,11 @@ struct ContentView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
+            MainContainerView()
+
             if showPaywall {
                 PaywallView(isPresented: $showPaywall)
-            } else {
-                MainContainerView()
             }
         }
         .background(backgroundColor.ignoresSafeArea())
