@@ -67,10 +67,15 @@ struct TabBarView: View {
     let onDeleteTab: (Tab) -> Void
     var onGoToInbox: (() -> Void)? = nil  // Called when arrow button tapped on Search
 
+    @Environment(\.colorScheme) private var colorScheme
     private var themeManager: ThemeManager { ThemeManager.shared }
     @AppStorage("spaceName") private var spaceName = "Taby"
 
     private var isOnSearch: Bool { selectedIndex == 0 }
+
+    private var iconColor: Color {
+        themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black)
+    }
 
     /// Progress toward Search screen (0 = not on Search, 1 = fully on Search)
     /// Interpolates during swipe for smooth title/button transition
@@ -90,15 +95,13 @@ struct TabBarView: View {
             // Header buttons row - stays in place
             HStack {
                 // Settings button (left) - circular liquid glass
-                Button(action: onMenuTap) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 17, weight: .medium))
-                        .frame(width: 32, height: 32)
-                }
-                .tint(themeManager.currentTheme.accentColor)
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .shadow(color: .clear, radius: 0)
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+                    .onTapGesture { onMenuTap() }
+                    .glassEffect(.regular.interactive(), in: .circle)
 
                 Spacer()
 
@@ -120,31 +123,29 @@ struct TabBarView: View {
                 Spacer()
 
                 // Right button - icon morphs between plus and arrow during swipe
-                Button {
+                ZStack {
+                    Image(systemName: "plus")
+                        .opacity(1 - searchProgress)
+                        .scaleEffect(1 - searchProgress * 0.5)
+
+                    Image(systemName: "chevron.right")
+                        .opacity(searchProgress)
+                        .scaleEffect(0.5 + searchProgress * 0.5)
+                }
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(iconColor)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+                .onTapGesture {
                     if searchProgress >= 0.5 {
                         onGoToInbox?()
                     } else {
                         onAddTap()
                     }
-                } label: {
-                    ZStack {
-                        Image(systemName: "plus")
-                            .opacity(1 - searchProgress)
-                            .scaleEffect(1 - searchProgress * 0.5)
-
-                        Image(systemName: "chevron.right")
-                            .opacity(searchProgress)
-                            .scaleEffect(0.5 + searchProgress * 0.5)
-                    }
-                    .font(.system(size: 17, weight: .medium))
-                    .frame(width: 32, height: 32)
                 }
-                .tint(themeManager.currentTheme.accentColor)
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .shadow(color: .clear, radius: 0)
+                .glassEffect(.regular.interactive(), in: .circle)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 12)
 
             // Telegram-style unified tab bar - slides during Search transition
             TelegramTabBar(
