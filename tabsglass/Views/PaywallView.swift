@@ -14,6 +14,7 @@ struct PaywallView: View {
     @State private var titleVisible = false
     @State private var cardsVisible = [false, false, false, false]
     @State private var ctaVisible = false
+    @State private var selectedPlan = 0 // 0 = yearly, 1 = monthly
 
     private let backgroundColor = Color.black
 
@@ -83,21 +84,27 @@ struct PaywallView: View {
 
                 // CTA
                 VStack(spacing: 12) {
+                    // Plan picker
+                    PlanPicker(selectedPlan: $selectedPlan)
+
                     Button {
                         // TODO: Start purchase
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: 2) {
                             Text("Try 7 Days Free")
-                                .font(.system(size: 19, weight: .bold, design: .rounded))
-                            Text("then $2.99/month")
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                            Text(selectedPlan == 0 ? "then $29.99/year" : "then $9.99/month")
                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                 .opacity(0.7)
+                                .contentTransition(.numericText())
+                                .animation(.easeInOut(duration: 0.3), value: selectedPlan)
                         }
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .padding(.vertical, 12)
                         .background(.white)
                         .clipShape(Capsule())
+                        .contentTransition(.numericText())
                     }
 
                     HStack(spacing: 0) {
@@ -164,6 +171,75 @@ struct PaywallView: View {
                 ctaVisible = true
             }
         }
+    }
+}
+
+// MARK: - Plan Picker
+
+private struct PlanPicker: View {
+    @Binding var selectedPlan: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let inset: CGFloat = 5
+            let segmentWidth = (geo.size.width - inset * 2) / 2
+
+            ZStack(alignment: .topLeading) {
+                // Animated indicator
+                Capsule()
+                    .fill(.white.opacity(0.15))
+                    .frame(width: segmentWidth, height: geo.size.height - inset * 2)
+                    .offset(x: inset + CGFloat(selectedPlan) * segmentWidth, y: inset)
+                    .animation(.easeInOut(duration: 0.25), value: selectedPlan)
+
+                // Labels
+                HStack(spacing: 0) {
+                    PlanSegment(title: "Yearly", price: "$29.99", isSelected: selectedPlan == 0) {
+                        selectedPlan = 0
+                    }
+                    PlanSegment(title: "Monthly", price: "$9.99", isSelected: selectedPlan == 1) {
+                        selectedPlan = 1
+                    }
+                }
+            }
+        }
+        .frame(height: 56)
+        .glassEffect(.regular, in: .capsule)
+        .overlay(alignment: .topLeading) {
+            Text("-75%")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(selectedPlan == 0 ? Color.green : Color(white: 0.3))
+                .clipShape(Capsule())
+                .offset(x: 24, y: -10)
+                .animation(.easeInOut(duration: 0.3), value: selectedPlan)
+        }
+    }
+}
+
+private struct PlanSegment: View {
+    let title: String
+    let price: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.6 : 0.3))
+                Text(price)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(isSelected ? 1 : 0.4))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .animation(.easeInOut(duration: 0.2), value: isSelected)
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -29,6 +29,9 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             MainContainerView()
+                .onAppear {
+                    KeyboardWarmer.shared.warmUp()
+                }
 
             if showPaywall {
                 PaywallView(isPresented: $showPaywall)

@@ -19,8 +19,7 @@ struct tabsglassApp: App {
         _ = ThemeManager.shared
         _ = ImageCache.shared
 
-        // Warm up keyboard on app launch to avoid delay on first use
-        KeyboardWarmer.shared.warmUp()
+        // Keyboard warmup is deferred until after paywall dismissal (see ContentView)
 
         // Warm up Liquid Glass effects to avoid delay on first render
         GlassEffectWarmer.shared.warmUp()
