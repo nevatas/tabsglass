@@ -1023,7 +1023,6 @@ final class MessageTableCell: UITableViewCell {
         cachedMessage = nil
         lastLayoutWidth = 0
         reminderBadge.isHidden = true
-        bubbleContainerTopConstraint.constant = -4  // Reset to default
         // Reset constraints
         messageTextViewTopToMosaic.isActive = false
         messageTextViewTopToBubble.isActive = false
@@ -1049,10 +1048,8 @@ final class MessageTableCell: UITableViewCell {
             todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
         }
 
-        // Show/hide reminder badge and adjust top spacing
+        // Show/hide reminder badge (floating — no layout impact on cell height)
         reminderBadge.isHidden = !message.hasReminder
-        // Messages with reminders need extra top space so badge stays within cell bounds
-        bubbleContainerTopConstraint.constant = message.hasReminder ? 4 : -4
 
         updateBubbleColor()
 

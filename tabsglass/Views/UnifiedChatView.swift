@@ -133,12 +133,12 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         let newIds = Set(messages.map { $0.id })
         let idsChanged = oldIds != newIds
 
-        // Quick content hash check (catches todo toggles, edits, etc.)
-        // Filter deleted objects here — accessing .content on them can crash
-        let validOldMessages = uiViewController.allMessages.filter { $0.modelContext != nil }
-        let oldContentHash = makeMessagesContentHash(validOldMessages)
+        // Quick content hash check (catches todo toggles, edits, reminders, etc.)
+        // Compare against stored hash from previous reload — NOT recomputed from old array,
+        // because SwiftData uses reference types: old and new arrays contain the same objects,
+        // so recomputing the hash from the old array would reflect the already-mutated state.
         let newContentHash = makeMessagesContentHash(messages)
-        let contentChanged = oldContentHash != newContentHash
+        let contentChanged = newContentHash != uiViewController.lastContentHash
 
         // Explicit reload trigger for bulk operations (move/delete) where reference-type
         // mutations make change detection via hash comparison impossible
@@ -148,6 +148,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         if tabsChanged || idsChanged || contentChanged || forceReload {
             uiViewController.tabs = tabs
             uiViewController.allMessages = messages
+            uiViewController.lastContentHash = newContentHash
             uiViewController.reloadTrigger = reloadTrigger
         }
 
@@ -175,6 +176,7 @@ final class UnifiedChatViewController: UIViewController {
     var allMessages: [Message] = []  // All messages from SwiftUI
     var selectedIndex: Int = 1  // 0 = Search, 1 = Inbox, 2+ = real tabs
     var reloadTrigger: Int = 0
+    var lastContentHash: Int = 0
     var onSend: (() -> Void)?
     var onEntitiesExtracted: (([TextEntity]) -> Void)?
 
@@ -1589,8 +1591,7 @@ final class MessageListViewController: UIViewController {
                 let oldMsg = sortedMessages[index]
                 // Check if content that affects height has changed
                 if oldMsg.content != newMsg.content ||
-                   oldMsg.todoItems?.count != newMsg.todoItems?.count ||
-                   oldMsg.hasReminder != newMsg.hasReminder {
+                   oldMsg.todoItems?.count != newMsg.todoItems?.count {
                     heightCache.removeValue(forKey: newMsg.id)
                 }
             }
@@ -2011,8 +2012,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         if message.isTodoList, let items = message.todoItems {
             let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             height += todoHeight
-            // Extra space for reminder badge
-            if message.hasReminder { height += 8 }
             return max(height, 50)
         }
 
@@ -2051,9 +2050,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 height += 10 + ceil(textHeight) + 10
             }
         }
-
-        // Extra space for reminder badge
-        if message.hasReminder { height += 8 }
 
         return max(height, 50)  // Minimum height
     }
