@@ -213,6 +213,9 @@ struct TelegramTabBar: View {
 
     // Track frames of each tab for selection indicator positioning
     @State private var tabFrames: [Int: CGRect] = [:]
+    @State private var dragOffset: CGFloat = 0
+    @State private var dragStartOffset: CGFloat = 0
+    @State private var containerWidth: CGFloat = 0
 
     /// Combined list: Search + Inbox (virtual) + real tabs
     private var allItems: [TabDisplayItem] {
@@ -281,15 +284,72 @@ struct TelegramTabBar: View {
                 .coordinateSpace(name: "tabContent")
             }
             .onPreferenceChange(TabFramePreferenceKey.self) { frames in
-                tabFrames = frames
+                // Defer state update to avoid layout-loop (preference read + write in same pass)
+                DispatchQueue.main.async {
+                    if frames != tabFrames {
+                        tabFrames = frames
+                    }
+                }
             }
-            .offset(x: continuousScrollOffset(in: container.size.width))
+            .offset(x: continuousScrollOffset(in: container.size.width) + dragOffset)
             // Animate offset only on discrete tab changes (tap/swipe completion);
             // during swipes, switchFraction drives offset directly without animation
             .animation(.spring(duration: 0.3, bounce: 0.2), value: selectedIndex)
+            .onAppear { containerWidth = container.size.width }
+            .onChange(of: container.size.width) { _, newWidth in containerWidth = newWidth }
         }
         .frame(height: 46)
         .contentShape(Capsule()) // Absorb all taps within tab bar — prevent fall-through to content below
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in
+                    // Disable implicit animations — rapid offset changes must not
+                    // trigger glass-effect animation passes (causes freeze)
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
+                        let proposed = dragStartOffset + value.translation.width
+                        if contentTotalWidth > containerWidth {
+                            let base = continuousScrollOffset(in: containerWidth)
+                            let minDrag = (containerWidth - contentTotalWidth) - base
+                            let maxDrag = -base
+                            dragOffset = max(minDrag, min(maxDrag, proposed))
+                            print("[TabScroll] drag offset=\(String(format: "%.1f", dragOffset)) base=\(String(format: "%.1f", base)) range=[\(String(format: "%.0f", minDrag)),\(String(format: "%.0f", maxDrag))]")
+                        } else {
+                            dragOffset = 0
+                            dragStartOffset = 0
+                            print("[TabScroll] tabs fit in container, no scroll needed")
+                        }
+                    }
+                }
+                .onEnded { value in
+                    // Momentum: coast to predicted end position based on release velocity
+                    let predicted = dragStartOffset + value.predictedEndTranslation.width
+                    let base = continuousScrollOffset(in: containerWidth)
+
+                    let targetOffset: CGFloat
+                    if contentTotalWidth > containerWidth {
+                        let minDrag = (containerWidth - contentTotalWidth) - base
+                        let maxDrag = -base
+                        targetOffset = max(minDrag, min(maxDrag, predicted))
+                    } else {
+                        targetOffset = 0
+                    }
+
+                    withAnimation(.easeOut(duration: 0.35)) {
+                        dragOffset = targetOffset
+                    }
+                    dragStartOffset = targetOffset
+                    print("[TabScroll] drag ended with momentum, target=\(String(format: "%.1f", targetOffset))")
+                }
+        )
+        .onChange(of: selectedIndex) { _, newIndex in
+            print("[TabScroll] selectedIndex → \(newIndex), resetting drag offset")
+            withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                dragOffset = 0
+                dragStartOffset = 0
+            }
+        }
         .clipShape(Capsule())
         .background {
             // Unified glass background for the entire tab bar
@@ -421,7 +481,7 @@ struct TabLabelView: View {
     }
 
     var body: some View {
-        Button(action: onTap) {
+        Group {
             if item.isSearch {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 15, weight: .medium))
@@ -436,7 +496,8 @@ struct TabLabelView: View {
                     .padding(.vertical, 10)
             }
         }
-        .buttonStyle(TabPressStyle())
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
         .if(!item.isSearch) { view in
             view.contextMenu {
                 // Rename available for Inbox and real tabs
@@ -470,16 +531,6 @@ struct TabLabelView: View {
                     .padding(.vertical, 10)
             }
         }
-    }
-}
-
-// MARK: - Tab Press Style
-
-struct TabPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.spring(duration: 0.15), value: configuration.isPressed)
     }
 }
 
