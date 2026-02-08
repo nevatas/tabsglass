@@ -36,6 +36,8 @@ struct PaywallView: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .foregroundStyle(.white.opacity(0.2))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                 }
                 .padding(.horizontal, 16)
