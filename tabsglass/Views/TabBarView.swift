@@ -221,82 +221,76 @@ struct TelegramTabBar: View {
         return items
     }
 
+    /// Content width derived from tab frames (last tab's maxX + right padding)
+    private var contentTotalWidth: CGFloat {
+        (tabFrames.values.map(\.maxX).max() ?? 0) + 4
+    }
+
     var body: some View {
         // ONE glass container for the entire tab bar
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                // ZStack with indicator INSIDE ScrollView - frames relative to content
-                ZStack(alignment: .topLeading) {
-                    // Selection indicator FIRST (renders under tabs)
-                    SelectionIndicatorView(frame: interpolatedSelectionFrame)
+        // Uses direct offset instead of ScrollView for pixel-perfect finger tracking
+        GeometryReader { container in
+            ZStack(alignment: .topLeading) {
+                // Selection indicator FIRST (renders under tabs)
+                SelectionIndicatorView(frame: interpolatedSelectionFrame)
 
-                    // Tabs ABOVE the indicator
-                    HStack(spacing: 0) {
-                        ForEach(Array(allItems.enumerated()), id: \.element.id) { index, item in
-                            TabLabelView(
-                                item: item,
-                                selectionProgress: selectionProgress(for: index),
-                                showReorder: tabs.count > 1,
-                                onTap: {
-                                    withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
-                                        selectedIndex = index
-                                    }
-                                },
-                                onRename: {
-                                    if item.isInbox {
-                                        onRenameInbox()
-                                    } else if let tab = item.tab {
-                                        onRenameTab(tab)
-                                    }
-                                },
-                                onReorder: onReorderTabs,
-                                onDelete: {
-                                    if let tab = item.tab {
-                                        onDeleteTab(tab)
-                                    }
+                // Tabs ABOVE the indicator
+                HStack(spacing: 0) {
+                    ForEach(Array(allItems.enumerated()), id: \.element.id) { index, item in
+                        TabLabelView(
+                            item: item,
+                            selectionProgress: selectionProgress(for: index),
+                            showReorder: tabs.count > 1,
+                            onTap: {
+                                withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                                    selectedIndex = index
                                 }
-                            )
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: TabFramePreferenceKey.self,
-                                        value: [index: geo.frame(in: .named("tabContent"))]
-                                    )
+                            },
+                            onRename: {
+                                if item.isInbox {
+                                    onRenameInbox()
+                                } else if let tab = item.tab {
+                                    onRenameTab(tab)
                                 }
-                            )
-                            .id(item.id)
-                            .transition(.asymmetric(
-                                insertion: .opacity,
-                                removal: .scale(scale: 0.5).combined(with: .opacity)
-                            ))
-                        }
+                            },
+                            onReorder: onReorderTabs,
+                            onDelete: {
+                                if let tab = item.tab {
+                                    onDeleteTab(tab)
+                                }
+                            }
+                        )
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: TabFramePreferenceKey.self,
+                                    value: [index: geo.frame(in: .named("tabContent"))]
+                                )
+                            }
+                        )
+                        .id(item.id)
+                        .transition(.asymmetric(
+                            insertion: .opacity,
+                            removal: .scale(scale: 0.5).combined(with: .opacity)
+                        ))
                     }
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 6)
-                    .coordinateSpace(name: "tabContent")  // Coordinate space on HStack content
                 }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 4)
+                .fixedSize(horizontal: true, vertical: false)
+                .coordinateSpace(name: "tabContent")
             }
             .onPreferenceChange(TabFramePreferenceKey.self) { frames in
                 tabFrames = frames
             }
-            .onChange(of: selectedIndex) { _, newIndex in
-                if newIndex < allItems.count {
-                    withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
-                        proxy.scrollTo(allItems[newIndex].id, anchor: .center)
-                    }
-                }
-            }
-            .onChange(of: switchFraction) { _, _ in
-                // Scroll to interpolated position during swipe
-                let targetIndex = Int((CGFloat(selectedIndex) + switchFraction).rounded())
-                if targetIndex >= 0 && targetIndex < allItems.count && targetIndex != selectedIndex {
-                    withAnimation(.interactiveSpring) {
-                        proxy.scrollTo(allItems[targetIndex].id, anchor: .center)
-                    }
-                }
-            }
+            .offset(x: continuousScrollOffset(in: container.size.width))
+            // Animate offset only on discrete tab changes (tap/swipe completion);
+            // during swipes, switchFraction drives offset directly without animation
+            .animation(.spring(duration: 0.3, bounce: 0.2), value: selectedIndex)
         }
         .frame(height: 46)
+        .contentShape(Capsule()) // Absorb all taps within tab bar — prevent fall-through to content below
+        .clipShape(Capsule())
         .background {
             // Unified glass background for the entire tab bar
             Capsule()
@@ -304,7 +298,37 @@ struct TelegramTabBar: View {
                 .glassEffect(.regular, in: .capsule)
                 .id("tabbar-glass-\(colorScheme)")  // Force recreation when theme changes
         }
-        .clipShape(Capsule())
+    }
+
+    /// Continuous scroll offset that follows switchFraction for pixel-perfect finger tracking.
+    /// Centers the interpolated position between current and target tab.
+    private func continuousScrollOffset(in containerWidth: CGFloat) -> CGFloat {
+        guard let currentFrame = tabFrames[selectedIndex] else { return 0 }
+
+        // If all tabs fit within container, center the content
+        if contentTotalWidth <= containerWidth {
+            return (containerWidth - contentTotalWidth) / 2
+        }
+
+        // Interpolated center: follows switchFraction at 60-120fps
+        let center: CGFloat
+        if switchFraction != 0 {
+            let targetIdx = switchFraction > 0 ? selectedIndex + 1 : selectedIndex - 1
+            if targetIdx >= 0, targetIdx < allItems.count,
+               let targetFrame = tabFrames[targetIdx] {
+                let fraction = abs(switchFraction)
+                center = currentFrame.midX + (targetFrame.midX - currentFrame.midX) * fraction
+            } else {
+                center = currentFrame.midX
+            }
+        } else {
+            center = currentFrame.midX
+        }
+
+        // Offset to center the interpolated position, clamped to edges
+        let rawOffset = containerWidth / 2 - center
+        let minOffset = containerWidth - contentTotalWidth
+        return max(minOffset, min(0, rawOffset))
     }
 
     // Calculate selection progress for each tab (0 = not selected, 1 = fully selected)
@@ -369,7 +393,6 @@ struct SelectionIndicatorView: View {
             .glassEffect(.regular, in: .capsule)
             .frame(width: max(frame.width, 0), height: max(frame.height, 0))
             .offset(x: frame.minX, y: frame.minY)
-            .animation(.interactiveSpring, value: frame)
             .id("indicator-glass-\(colorScheme)")  // Force recreation when theme changes
     }
 }
