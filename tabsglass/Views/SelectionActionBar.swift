@@ -110,7 +110,11 @@ struct SelectionCancelBar: View {
 
                 Text(L10n.Selection.count(selectedCount))
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .glassEffect(.regular.tint(composerTint), in: .capsule)
+                    .id("\(glassId)-count")
 
                 Spacer()
 

@@ -1366,6 +1366,7 @@ final class MessageListViewController: UIViewController {
     private var pendingAppearAnimationIds: Set<UUID> = []
     private var isAnimatingFirstMessage = false
     private var isPrewarmed = false
+    private var selectionModeExitAnimationDeadline: CFTimeInterval = 0
 
     // Embedded search tabs for search tab
     private var searchTabsHostingController: UIHostingController<SearchTabsView>?
@@ -1614,12 +1615,63 @@ final class MessageListViewController: UIViewController {
         } else {
             // Check if this is a simple insertion of new messages at the beginning
             let oldIdSet = Set(oldIds)
+            let newIdSet = Set(newIds)
             let newMessageIds = newIds.filter { !oldIdSet.contains($0) }
+            let removedMessageIds = oldIds.filter { !newIdSet.contains($0) }
+            let isSimpleDeletion = !removedMessageIds.isEmpty &&
+                                   newMessageIds.isEmpty &&
+                                   oldIds.filter({ newIdSet.contains($0) }).elementsEqual(newIds)
             let isSimpleInsertion = !newMessageIds.isEmpty &&
                                     oldIdSet.subtracting(Set(newIds)).isEmpty &&
                                     newIds.dropFirst(newMessageIds.count).elementsEqual(oldIds)
 
-            if isSimpleInsertion && !sortedMessages.isEmpty {
+            if isSimpleDeletion {
+                let removedIdSet = Set(removedMessageIds)
+                let deleteIndexPaths = oldIds.enumerated().compactMap { index, id in
+                    removedIdSet.contains(id) ? IndexPath(row: index, section: 0) : nil
+                }
+
+                let visibleCellsToAnimate: [(cell: UITableViewCell, transform: CGAffineTransform)] = deleteIndexPaths.compactMap { indexPath in
+                    guard let cell = self.tableView.cellForRow(at: indexPath) else { return nil }
+                    return (cell, cell.transform)
+                }
+
+                let performDeletion = {
+                    self.sortedMessages = newMessages
+                    self.tableView.performBatchUpdates({
+                        self.tableView.deleteRows(at: deleteIndexPaths, with: .none)
+                    }) { _ in
+                        for item in visibleCellsToAnimate {
+                            item.cell.isHidden = false
+                            item.cell.alpha = 1
+                            item.cell.transform = item.transform
+                        }
+                        if self.sortedMessages.isEmpty && !self.isSearchTab {
+                            UIView.performWithoutAnimation {
+                                self.tableView.reloadData()
+                            }
+                        }
+                    }
+                }
+
+                guard !visibleCellsToAnimate.isEmpty else {
+                    performDeletion()
+                    return
+                }
+
+                UIView.animate(withDuration: 0.16, delay: 0, options: [.curveEaseOut]) {
+                    for item in visibleCellsToAnimate {
+                        item.cell.alpha = 0
+                        item.cell.transform = item.transform.scaledBy(x: 0.9, y: 0.9)
+                    }
+                } completion: { _ in
+                    for item in visibleCellsToAnimate {
+                        // Keep removed cells hidden during table re-layout to avoid ghost reappearance.
+                        item.cell.isHidden = true
+                    }
+                    performDeletion()
+                }
+            } else if isSimpleInsertion && !sortedMessages.isEmpty {
                 // New messages added at the top (row 0 in inverted table = newest)
                 // Mark these messages for appear animation (will be applied in cellForRowAt)
                 pendingAppearAnimationIds = Set(newMessageIds)
@@ -1842,9 +1894,17 @@ final class MessageListViewController: UIViewController {
     // MARK: - Selection Mode
 
     func updateSelectionMode(_ enabled: Bool) {
+        let wasEnabled = isSelectionMode
         isSelectionMode = enabled
         // Disable keyboard dismiss tap in selection mode so cell taps work
         dismissKeyboardTapGesture.isEnabled = !enabled
+        if wasEnabled && !enabled {
+            // Keep a short window so freshly reloaded cells can also animate
+            // from selection layout to normal width after bulk operations.
+            selectionModeExitAnimationDeadline = CACurrentMediaTime() + 0.35
+        } else if enabled {
+            selectionModeExitAnimationDeadline = 0
+        }
 
         for cell in tableView.visibleCells {
             if let messageCell = cell as? MessageTableCell {
@@ -1936,7 +1996,14 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
 
         // Selection mode
-        cell.setSelectionMode(isSelectionMode, animated: false)
+        let shouldAnimateSelectionExit =
+            !isSelectionMode && CACurrentMediaTime() < selectionModeExitAnimationDeadline
+        if shouldAnimateSelectionExit {
+            cell.setSelectionMode(true, animated: false)
+            cell.setSelectionMode(false, animated: true)
+        } else {
+            cell.setSelectionMode(isSelectionMode, animated: false)
+        }
         cell.setSelected(selectedMessageIds.contains(message.id))
         cell.onSelectionToggle = { [weak self] selected in
             self?.onToggleMessageSelection?(message.id, selected)
@@ -1960,10 +2027,15 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         // Ensure selection mode is correct for pre-fetched cells that missed updateSelectionMode
         guard let messageCell = cell as? MessageTableCell,
               indexPath.row < sortedMessages.count else { return }
-        messageCell.setSelectionMode(isSelectionMode, animated: false)
-        if isSelectionMode {
-            messageCell.setSelected(selectedMessageIds.contains(sortedMessages[indexPath.row].id))
+        let shouldAnimateSelectionExit =
+            !isSelectionMode && CACurrentMediaTime() < selectionModeExitAnimationDeadline
+        if shouldAnimateSelectionExit {
+            messageCell.setSelectionMode(true, animated: false)
+            messageCell.setSelectionMode(false, animated: true)
+        } else {
+            messageCell.setSelectionMode(isSelectionMode, animated: false)
         }
+        messageCell.setSelected(selectedMessageIds.contains(sortedMessages[indexPath.row].id))
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {

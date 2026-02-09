@@ -131,7 +131,7 @@
 
 "tips.title" = "Astuces";
 "tips.edge_swipe" = "Glisse depuis le bord gauche pour ouvrir la Recherche depuis n'importe quel onglet";
-"tips.shake_undo" = "Note supprimée par accident ? Secoue ton téléphone pour la récupérer";
+"tips.shake_undo" = "Note supprimée par accident ?\nSecoue ton téléphone pour la récupérer";
 "tips.formatting" = "Sélectionne du texte dans le champ de saisie pour appliquer Gras, Italique et plus";
 
 // MARK: - Search

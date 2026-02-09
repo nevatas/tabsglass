@@ -131,7 +131,7 @@
 
 "tips.title" = "Tipps";
 "tips.edge_swipe" = "Wische vom linken Rand, um die Suche von jedem Tab zu öffnen";
-"tips.shake_undo" = "Notiz versehentlich gelöscht? Schüttle dein Handy, um sie zurückzuholen";
+"tips.shake_undo" = "Notiz versehentlich gelöscht?\nSchüttle dein Handy, um sie zurückzuholen";
 "tips.formatting" = "Markiere Text im Eingabefeld, um Fett, Kursiv und andere Formatierung anzuwenden";
 
 // MARK: - Search

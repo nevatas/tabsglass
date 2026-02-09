@@ -128,10 +128,10 @@
 "share.where_to_save" = "Where to save?";
 
 // MARK: - Tips
-
+ 
 "tips.title" = "Tips";
 "tips.edge_swipe" = "Swipe from the left edge to open Search from any tab";
-"tips.shake_undo" = "Deleted a note by accident? Shake your phone to bring it back";
+"tips.shake_undo" = "Deleted a note by accident?\nShake your phone to bring it back";
 "tips.formatting" = "Select text in the composer to apply Bold, Italic, and other formatting";
 
 // MARK: - Search
