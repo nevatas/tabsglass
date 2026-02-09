@@ -46,6 +46,18 @@ enum SharedConstants {
         return videosPath
     }
 
+    /// Directory for storing message audio in shared container
+    static var audiosDirectory: URL? {
+        guard let container = containerURL else { return nil }
+        let audioPath = container.appendingPathComponent("MessageAudio", isDirectory: true)
+
+        if !FileManager.default.fileExists(atPath: audioPath.path) {
+            try? FileManager.default.createDirectory(at: audioPath, withIntermediateDirectories: true)
+        }
+
+        return audioPath
+    }
+
     /// SwiftData store URL in shared container
     static var sharedStoreURL: URL? {
         containerURL?.appendingPathComponent("default.store")

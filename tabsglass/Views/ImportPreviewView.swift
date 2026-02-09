@@ -34,6 +34,7 @@ struct ImportPreviewView: View {
                     LabeledContent(L10n.Data.previewMessages, value: "\(manifest.messageCount)")
                     LabeledContent(L10n.Data.previewPhotos, value: "\(manifest.photoCount)")
                     LabeledContent(L10n.Data.previewVideos, value: "\(manifest.videoCount)")
+                    LabeledContent(L10n.Data.previewAudios, value: "\(manifest.audioCount)")
                 } header: {
                     Text(L10n.Data.previewContents)
                 }
@@ -103,7 +104,7 @@ struct ImportPreviewView: View {
 
 #Preview {
     ImportPreviewView(
-        manifest: ExportManifest(tabCount: 5, messageCount: 42, photoCount: 15, videoCount: 3, deviceName: "iPhone"),
+        manifest: ExportManifest(tabCount: 5, messageCount: 42, photoCount: 15, videoCount: 3, audioCount: 4, deviceName: "iPhone"),
         onImport: { _ in },
         onCancel: {}
     )

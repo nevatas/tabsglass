@@ -17,6 +17,8 @@ struct DeletedMessageSnapshot {
     let videoAspectRatios: [Double]
     let videoDurations: [Double]
     let videoThumbnailFileNames: [String]
+    let audioFileName: String?
+    let audioDuration: Double?
     let tabId: UUID?  // nil = Inbox
     let createdAt: Date
     let deletedAt: Date
@@ -38,6 +40,8 @@ struct DeletedMessageSnapshot {
         self.videoAspectRatios = message.videoAspectRatios
         self.videoDurations = message.videoDurations
         self.videoThumbnailFileNames = message.videoThumbnailFileNames
+        self.audioFileName = message.audioFileName
+        self.audioDuration = message.audioDuration
         self.tabId = message.tabId
         self.createdAt = message.createdAt
         self.deletedAt = Date()

@@ -20,10 +20,11 @@ struct ExportManifest: Sendable {
     let messageCount: Int
     let photoCount: Int
     let videoCount: Int
+    let audioCount: Int
 
     static nonisolated let currentVersion = 1
 
-    init(tabCount: Int, messageCount: Int, photoCount: Int, videoCount: Int, deviceName: String) {
+    init(tabCount: Int, messageCount: Int, photoCount: Int, videoCount: Int, audioCount: Int, deviceName: String) {
         self.version = Self.currentVersion
         self.exportDate = Date()
         self.appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -32,6 +33,7 @@ struct ExportManifest: Sendable {
         self.messageCount = messageCount
         self.photoCount = photoCount
         self.videoCount = videoCount
+        self.audioCount = audioCount
     }
 }
 
@@ -46,10 +48,11 @@ extension ExportManifest: Codable {
         messageCount = try container.decode(Int.self, forKey: .messageCount)
         photoCount = try container.decode(Int.self, forKey: .photoCount)
         videoCount = try container.decode(Int.self, forKey: .videoCount)
+        audioCount = try container.decodeIfPresent(Int.self, forKey: .audioCount) ?? 0
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, exportDate, appVersion, deviceName, tabCount, messageCount, photoCount, videoCount
+        case version, exportDate, appVersion, deviceName, tabCount, messageCount, photoCount, videoCount, audioCount
     }
 }
 
@@ -101,6 +104,8 @@ struct ExportableMessage: Codable, Sendable {
     let videoAspectRatios: [Double]
     let videoDurations: [Double]
     let videoThumbnailFileNames: [String]
+    let audioFileName: String?
+    let audioDuration: Double?
     let todoItems: [TodoItem]?
     let todoTitle: String?
     let reminderDate: Date?
@@ -125,6 +130,8 @@ struct ExportableMessage: Codable, Sendable {
         self.videoAspectRatios = message.videoAspectRatios
         self.videoDurations = message.videoDurations
         self.videoThumbnailFileNames = message.videoThumbnailFileNames
+        self.audioFileName = message.audioFileName
+        self.audioDuration = message.audioDuration
         self.todoItems = message.todoItems
         self.todoTitle = message.todoTitle
         self.reminderDate = message.reminderDate
@@ -144,6 +151,8 @@ struct ExportableMessage: Codable, Sendable {
             videoAspectRatios: videoAspectRatios,
             videoDurations: videoDurations,
             videoThumbnailFileNames: videoThumbnailFileNames,
+            audioFileName: audioFileName,
+            audioDuration: audioDuration,
             position: position,
             sourceUrl: sourceUrl,
             linkPreview: linkPreview,

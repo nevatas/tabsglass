@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import AVFoundation
 
 // MARK: - Identifiable Image Wrapper
 
@@ -24,8 +25,22 @@ struct AttachedVideo: Identifiable {
     let duration: Double
 }
 
+enum VoiceComposerState {
+    case idle
+    case recording
+    case recorded
+}
+
+private func formatDuration(_ duration: TimeInterval) -> String {
+    let totalSeconds = max(Int(duration), 0)
+    let minutes = totalSeconds / 60
+    let seconds = totalSeconds % 60
+    return String(format: "%d:%02d", minutes, seconds)
+}
+
 // MARK: - Composer State (Observable)
 
+@MainActor
 @Observable
 final class ComposerState {
     var text: String = ""
@@ -41,9 +56,15 @@ final class ComposerState {
     var onShowPhotoPicker: (() -> Void)?
     var onShowCamera: (() -> Void)?
     var onShowTaskList: (() -> Void)?
+    var onVoiceDraftChange: ((RecordedVoiceDraft?) -> Void)?
+    var onRecordingPermissionDenied: (() -> Void)?
+    var voiceState: VoiceComposerState = .idle
+    var recordingElapsed: TimeInterval = 0
+    var recordedVoiceDraft: RecordedVoiceDraft?
 
     /// Reference to the formatting text view for extracting entities
     weak var formattingTextView: FormattingTextView?
+    private let recorderService = AudioRecorderService(maxDuration: 180)
 
     /// Height of media section (80 when visible, 0 when hidden)
     var mediaSectionHeight: CGFloat = 0
@@ -58,9 +79,111 @@ final class ComposerState {
         totalMediaCount < 10
     }
 
+    var isRecording: Bool {
+        voiceState == .recording
+    }
+
+    var hasVoiceDraft: Bool {
+        recordedVoiceDraft != nil
+    }
+
+    var hasText: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var shouldShowMicButton: Bool {
+        !hasText && totalMediaCount == 0 && !isRecording && !hasVoiceDraft
+    }
+
+    init() {
+        recorderService.onElapsedChange = { [weak self] elapsed in
+            guard let self = self else { return }
+            self.recordingElapsed = elapsed
+        }
+        recorderService.onAutoStop = { [weak self] draft in
+            self?.completeRecording(with: draft)
+        }
+    }
+
     /// Extract formatting entities from current text
     func extractEntities() -> [TextEntity] {
         return formattingTextView?.extractEntities() ?? []
+    }
+
+    @MainActor
+    func startVoiceRecording() async {
+        guard !isRecording else { return }
+        guard shouldShowMicButton else { return }
+
+        let granted = await recorderService.requestPermission()
+        guard granted else {
+            onRecordingPermissionDenied?()
+            return
+        }
+
+        do {
+            try recorderService.startRecording()
+            voiceState = .recording
+            recordingElapsed = 0
+            shouldFocus = false
+            _ = formattingTextView?.resignFirstResponder()
+        } catch {
+            voiceState = .idle
+            recordingElapsed = 0
+        }
+    }
+
+    func stopVoiceRecording() {
+        guard isRecording else { return }
+        let draft = recorderService.stopRecording()
+        completeRecording(with: draft)
+    }
+
+    func discardVoiceDraft() {
+        if let url = recordedVoiceDraft?.fileURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        recordedVoiceDraft = nil
+        voiceState = .idle
+        recordingElapsed = 0
+        onVoiceDraftChange?(nil)
+    }
+
+    private func completeRecording(with draft: RecordedVoiceDraft?) {
+        if let existingDraftURL = recordedVoiceDraft?.fileURL {
+            try? FileManager.default.removeItem(at: existingDraftURL)
+        }
+
+        guard let draft else {
+            recordedVoiceDraft = nil
+            voiceState = .idle
+            recordingElapsed = 0
+            onVoiceDraftChange?(nil)
+            return
+        }
+
+        let resolvedDuration = max(
+            draft.duration,
+            SharedAudioStorage.audioDuration(at: draft.fileURL),
+            recordingElapsed
+        )
+        let hasRecordedPayload = FileManager.default.fileExists(atPath: draft.fileURL.path)
+            || draft.duration > 0
+            || recordingElapsed > 0
+        guard hasRecordedPayload else {
+            recordedVoiceDraft = nil
+            voiceState = .idle
+            recordingElapsed = 0
+            onVoiceDraftChange?(nil)
+            return
+        }
+
+        let finalDuration = max(resolvedDuration, 0.15)
+
+        recordedVoiceDraft = RecordedVoiceDraft(fileURL: draft.fileURL, duration: finalDuration)
+        voiceState = .recorded
+        recordingElapsed = finalDuration
+        onVoiceDraftChange?(recordedVoiceDraft)
     }
 
     func removeImage(at index: Int) {
@@ -106,6 +229,7 @@ final class ComposerState {
     }
 
     func addImages(_ images: [UIImage]) {
+        if hasVoiceDraft { discardVoiceDraft() }
         let available = 10 - totalMediaCount
         let toAdd = images.prefix(available).map { IdentifiableImage(image: $0) }
         attachedImages.append(contentsOf: toAdd)
@@ -119,6 +243,7 @@ final class ComposerState {
     }
 
     func addVideo(_ video: AttachedVideo) {
+        if hasVoiceDraft { discardVoiceDraft() }
         guard canAddMedia else { return }
         attachedVideos.append(video)
         // Set height when adding first media
@@ -137,6 +262,15 @@ final class ComposerState {
     }
 
     func clearAll() {
+        if isRecording {
+            recorderService.cancelRecording()
+        }
+        if hasVoiceDraft {
+            discardVoiceDraft()
+        } else {
+            recordingElapsed = 0
+            voiceState = .idle
+        }
         text = ""
         attributedText = NSAttributedString()
         textViewHeight = 24
@@ -152,6 +286,7 @@ final class SwiftUIComposerContainer: UIView {
     var onTextChange: ((String) -> Void)?
     var onImagesChange: (([UIImage]) -> Void)?
     var onVideosChange: (([AttachedVideo]) -> Void)?
+    var onVoiceDraftChange: ((RecordedVoiceDraft?) -> Void)?
     var onSend: (() -> Void)? {
         didSet { composerState.onSend = onSend }
     }
@@ -166,6 +301,9 @@ final class SwiftUIComposerContainer: UIView {
     }
     var onShowTaskList: (() -> Void)? {
         didSet { composerState.onShowTaskList = onShowTaskList }
+    }
+    var onRecordingPermissionDenied: (() -> Void)? {
+        didSet { composerState.onRecordingPermissionDenied = onRecordingPermissionDenied }
     }
 
     /// Callback for height changes
@@ -233,6 +371,14 @@ final class SwiftUIComposerContainer: UIView {
                 self.updateHeight()
             }
         }
+
+        composerState.onVoiceDraftChange = { [weak self] draft in
+            guard let self = self else { return }
+            self.onVoiceDraftChange?(draft)
+            DispatchQueue.main.async {
+                self.updateHeight()
+            }
+        }
     }
 
     /// Get currently attached images
@@ -243,6 +389,10 @@ final class SwiftUIComposerContainer: UIView {
     /// Get currently attached videos
     var attachedVideos: [AttachedVideo] {
         composerState.attachedVideos
+    }
+
+    var recordedVoiceDraft: RecordedVoiceDraft? {
+        composerState.recordedVoiceDraft
     }
 
     /// Total media count (images + videos)
@@ -417,6 +567,13 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: FormattingTextView, context: Context) {
+        let shouldAllowEditing = !state.isRecording && !state.hasVoiceDraft
+        if uiView.isEditable != shouldAllowEditing {
+            uiView.isEditable = shouldAllowEditing
+            uiView.isSelectable = shouldAllowEditing
+            uiView.isUserInteractionEnabled = shouldAllowEditing
+        }
+
         // Update text color for theme
         let desiredColor: UIColor = colorScheme == .dark ? .white : .black
         if uiView.textColor != desiredColor {
@@ -457,6 +614,58 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
     }
 }
 
+struct VoiceRecordingStatusView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Bindable var state: ComposerState
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if state.isRecording {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 10, height: 10)
+                    .scaleEffect(pulse ? 1.0 : 0.7)
+                    .opacity(pulse ? 1.0 : 0.5)
+                    .onAppear { pulse = true }
+                    .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: pulse)
+            } else {
+                Image(systemName: "waveform")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
+            }
+
+            Text(L10n.Composer.voiceMessage)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(colorScheme == .dark ? .white : .black)
+
+            Spacer()
+
+            Text(formatDuration(state.recordingElapsed))
+                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .foregroundStyle(colorScheme == .dark ? .white : .black)
+
+            if state.hasVoiceDraft && !state.isRecording {
+                Button(action: {
+                    state.discardVoiceDraft()
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.Composer.deleteRecording)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background((colorScheme == .dark ? Color.white : Color.black).opacity(0.08))
+        .clipShape(.rect(cornerRadius: 12))
+    }
+}
+
 // MARK: - Embedded Composer
 
 struct EmbeddedComposerView: View {
@@ -465,11 +674,15 @@ struct EmbeddedComposerView: View {
     @Bindable var state: ComposerState
 
     private var canSend: Bool {
-        !state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || state.totalMediaCount > 0
+        (!state.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || state.totalMediaCount > 0 || state.hasVoiceDraft) && !state.isRecording
     }
 
     private var hasMedia: Bool {
         state.totalMediaCount > 0
+    }
+
+    private var isComposerInputLocked: Bool {
+        state.isRecording || state.hasVoiceDraft
     }
 
     private var composerTint: Color {
@@ -480,6 +693,54 @@ struct EmbeddedComposerView: View {
     /// Unique ID that changes with theme to force glassEffect refresh
     private var glassId: String {
         "\(themeManager.currentTheme.rawValue)-\(colorScheme == .dark ? "dark" : "light")"
+    }
+
+    @ViewBuilder
+    private var trailingActionButton: some View {
+        if state.isRecording {
+            Button(action: {
+                state.stopVoiceRecording()
+            }) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(.red)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.Composer.stop)
+        } else if state.shouldShowMicButton {
+            Button(action: {
+                Task {
+                    await state.startVoiceRecording()
+                }
+            }) {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(themeManager.currentTheme.accentColor ?? Color.accentColor)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.Composer.mic)
+        } else {
+            Button(action: {
+                if canSend {
+                    state.onSend?()
+                }
+            }) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(canSend ? (themeManager.currentTheme.accentColor ?? Color.accentColor) : Color.gray.opacity(0.4))
+                    .clipShape(Circle())
+            }
+            .disabled(!canSend)
+            .buttonStyle(.plain)
+        }
     }
 
     var body: some View {
@@ -523,7 +784,11 @@ struct EmbeddedComposerView: View {
 
                     // Bottom section with text field and buttons
                     VStack(spacing: 0) {
-                        FormattingTextViewWrapper(state: state, colorScheme: colorScheme)
+                        if state.isRecording || state.hasVoiceDraft {
+                            VoiceRecordingStatusView(state: state)
+                        } else {
+                            FormattingTextViewWrapper(state: state, colorScheme: colorScheme)
+                        }
 
                         Spacer().frame(height: 8) // Tighter spacing between textfield and buttons
 
@@ -554,23 +819,11 @@ struct EmbeddedComposerView: View {
                                     .padding(.trailing, 12)
                                     .contentShape(Rectangle())
                             }
+                            .disabled(isComposerInputLocked)
 
                             Spacer()
 
-                            Button(action: {
-                                if canSend {
-                                    state.onSend?()
-                                }
-                            }) {
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 32, height: 32)
-                                    .background(canSend ? (themeManager.currentTheme.accentColor ?? Color.accentColor) : Color.gray.opacity(0.4))
-                                    .clipShape(Circle())
-                            }
-                            .disabled(!canSend)
-                            .buttonStyle(.plain)
+                            trailingActionButton
                         }
                     }
                     .padding(.horizontal, 16)
@@ -580,7 +833,9 @@ struct EmbeddedComposerView: View {
             .padding(.bottom, 14)
             .contentShape(.rect(cornerRadius: 24))
             .onTapGesture {
-                state.shouldFocus = true
+                if !isComposerInputLocked {
+                    state.shouldFocus = true
+                }
             }
             .clipShape(.rect(cornerRadius: 24))
             .glassEffect(
@@ -692,6 +947,197 @@ struct AttachedVideoView: View {
     }
 }
 
+final class VoiceMessageBubbleView: UIView, AVAudioPlayerDelegate, VoicePlaybackControlling {
+    static let preferredHeight: CGFloat = 44
+
+    private let playButton = UIButton(type: .system)
+    private let progressView = UIProgressView(progressViewStyle: .default)
+    private let timeLabel = UILabel()
+
+    private var audioURL: URL?
+    private var duration: TimeInterval = 0
+    private var player: AVAudioPlayer?
+    private var progressTimer: Timer?
+    private var isPlaying = false
+    private var currentAudioFileName: String?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupView()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        stopPlayback(resetToStart: true)
+    }
+
+    func configure(audioFileName: String?, duration: Double?, isDarkMode: Bool) {
+        if currentAudioFileName != audioFileName {
+            stopPlayback(resetToStart: true)
+            currentAudioFileName = audioFileName
+        }
+
+        guard let audioFileName else {
+            self.audioURL = nil
+            self.duration = 0
+            updateAppearance(isDarkMode: isDarkMode)
+            updateUI(currentTime: 0)
+            playButton.isEnabled = false
+            return
+        }
+
+        let resolvedURL = SharedAudioStorage.audioURL(for: audioFileName)
+        self.audioURL = resolvedURL
+        self.duration = max(duration ?? SharedAudioStorage.audioDuration(at: resolvedURL), 0)
+        updateAppearance(isDarkMode: isDarkMode)
+        updateUI(currentTime: player?.currentTime ?? 0)
+        playButton.isEnabled = FileManager.default.fileExists(atPath: resolvedURL.path)
+    }
+
+    func reset() {
+        stopPlayback(resetToStart: true)
+        currentAudioFileName = nil
+        audioURL = nil
+        duration = 0
+        updateUI(currentTime: 0)
+    }
+
+    func setInnerInteractionEnabled(_ enabled: Bool) {
+        playButton.isUserInteractionEnabled = enabled
+    }
+
+    @objc
+    private func playTapped() {
+        if isPlaying {
+            pausePlayback()
+        } else {
+            startPlayback()
+        }
+    }
+
+    private func setupView() {
+        translatesAutoresizingMaskIntoConstraints = false
+        layer.cornerRadius = 14
+        clipsToBounds = true
+        isUserInteractionEnabled = true
+
+        playButton.translatesAutoresizingMaskIntoConstraints = false
+        playButton.setImage(UIImage(systemName: "play.fill"), for: .normal)
+        playButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
+        addSubview(playButton)
+
+        progressView.translatesAutoresizingMaskIntoConstraints = false
+        progressView.progress = 0
+        addSubview(progressView)
+
+        timeLabel.translatesAutoresizingMaskIntoConstraints = false
+        timeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        timeLabel.textAlignment = .right
+        addSubview(timeLabel)
+
+        NSLayoutConstraint.activate([
+            playButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            playButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            playButton.widthAnchor.constraint(equalToConstant: 28),
+            playButton.heightAnchor.constraint(equalToConstant: 28),
+
+            progressView.leadingAnchor.constraint(equalTo: playButton.trailingAnchor, constant: 10),
+            progressView.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            timeLabel.leadingAnchor.constraint(equalTo: progressView.trailingAnchor, constant: 8),
+            timeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            timeLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            timeLabel.widthAnchor.constraint(equalToConstant: 76)
+        ])
+    }
+
+    private func updateAppearance(isDarkMode: Bool) {
+        let accentColor = UIColor(ThemeManager.shared.currentTheme.accentColor ?? .accentColor)
+        backgroundColor = (isDarkMode ? UIColor.white : UIColor.black).withAlphaComponent(0.08)
+        playButton.tintColor = accentColor
+        progressView.progressTintColor = accentColor
+        progressView.trackTintColor = isDarkMode ? UIColor.white.withAlphaComponent(0.3) : UIColor.black.withAlphaComponent(0.18)
+        timeLabel.textColor = isDarkMode ? .white : .black
+    }
+
+    private func startPlayback() {
+        guard let audioURL, FileManager.default.fileExists(atPath: audioURL.path) else { return }
+
+        do {
+            if player == nil || player?.url != audioURL {
+                player = try AVAudioPlayer(contentsOf: audioURL)
+                player?.delegate = self
+                player?.prepareToPlay()
+            }
+
+            VoicePlaybackCoordinator.shared.activate(self)
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+
+            if player?.play() == true {
+                isPlaying = true
+                startProgressTimer()
+                updateUI(currentTime: player?.currentTime ?? 0)
+            }
+        } catch {
+            stopPlayback(resetToStart: true)
+        }
+    }
+
+    private func pausePlayback() {
+        player?.pause()
+        isPlaying = false
+        stopProgressTimer()
+        updateUI(currentTime: player?.currentTime ?? 0)
+        VoicePlaybackCoordinator.shared.deactivate(self)
+    }
+
+    private func stopPlayback(resetToStart: Bool) {
+        player?.stop()
+        if resetToStart {
+            player?.currentTime = 0
+        }
+        isPlaying = false
+        stopProgressTimer()
+        updateUI(currentTime: resetToStart ? 0 : (player?.currentTime ?? 0))
+        VoicePlaybackCoordinator.shared.deactivate(self)
+    }
+
+    private func startProgressTimer() {
+        stopProgressTimer()
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.updateUI(currentTime: self.player?.currentTime ?? 0)
+        }
+    }
+
+    private func stopProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = nil
+    }
+
+    private func updateUI(currentTime: TimeInterval) {
+        let totalDuration = max(duration, player?.duration ?? 0)
+        let safeCurrent = max(currentTime, 0)
+        let progress = totalDuration > 0 ? Float(min(safeCurrent / totalDuration, 1.0)) : 0
+        progressView.progress = progress
+        timeLabel.text = "\(formatDuration(safeCurrent))/\(formatDuration(totalDuration))"
+        let iconName = isPlaying ? "pause.fill" : "play.fill"
+        playButton.setImage(UIImage(systemName: iconName), for: .normal)
+    }
+
+    func stopPlaybackFromCoordinator() {
+        stopPlayback(resetToStart: true)
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        stopPlayback(resetToStart: true)
+    }
+}
+
 // MARK: - Message Cell
 
 final class MessageTableCell: UITableViewCell {
@@ -711,6 +1157,7 @@ final class MessageTableCell: UITableViewCell {
     private var selectionTapGesture: UITapGestureRecognizer?
     private let mosaicView = MosaicMediaView()
     private let messageTextView = UITextView()
+    private let voiceView = VoiceMessageBubbleView()
     private let todoView = TodoBubbleView()
     private let reminderBadge = UIView()
     private let reminderIcon = UIImageView()
@@ -734,6 +1181,9 @@ final class MessageTableCell: UITableViewCell {
     private var mosaicBottomToBubble: NSLayoutConstraint!
     private var todoViewHeightConstraint: NSLayoutConstraint!
     private var todoViewBottomToBubble: NSLayoutConstraint!
+    private var voiceViewTopToBubble: NSLayoutConstraint!
+    private var voiceViewBottomToBubble: NSLayoutConstraint!
+    private var voiceViewHeightConstraint: NSLayoutConstraint!
     private var bubbleContainerTopConstraint: NSLayoutConstraint!
     private var traitChangeRegistration: UITraitChangeRegistration?
 
@@ -753,6 +1203,10 @@ final class MessageTableCell: UITableViewCell {
             if let message = self?.cachedMessage, message.isTodoList, let items = message.todoItems {
                 let isDarkMode = cell.traitCollection.userInterfaceStyle == .dark
                 self?.todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
+            }
+            if let message = self?.cachedMessage, message.hasVoiceNote {
+                let isDarkMode = cell.traitCollection.userInterfaceStyle == .dark
+                self?.voiceView.configure(audioFileName: message.audioFileName, duration: message.audioDuration, isDarkMode: isDarkMode)
             }
         }
     }
@@ -854,6 +1308,11 @@ final class MessageTableCell: UITableViewCell {
         messageTextView.translatesAutoresizingMaskIntoConstraints = false
         bubbleView.addSubview(messageTextView)
 
+        // Voice message view
+        voiceView.translatesAutoresizingMaskIntoConstraints = false
+        voiceView.isHidden = true
+        bubbleView.addSubview(voiceView)
+
         // Todo view for task lists
         todoView.translatesAutoresizingMaskIntoConstraints = false
         todoView.onToggle = { [weak self] itemId, isCompleted in
@@ -865,6 +1324,10 @@ final class MessageTableCell: UITableViewCell {
         mosaicHeightConstraint.priority = UILayoutPriority(999)  // Slightly lower to avoid conflict with encapsulated height
         todoViewHeightConstraint = todoView.heightAnchor.constraint(equalToConstant: 0)
         todoViewBottomToBubble = todoView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
+        voiceViewTopToBubble = voiceView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 8)
+        voiceViewBottomToBubble = voiceView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -8)
+        voiceViewHeightConstraint = voiceView.heightAnchor.constraint(equalToConstant: VoiceMessageBubbleView.preferredHeight)
+        voiceViewHeightConstraint.constant = 0
         messageTextViewTopToMosaic = messageTextView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 10)
         messageTextViewTopToBubble = messageTextView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
         messageTextViewBottomToBubble = messageTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
@@ -901,6 +1364,12 @@ final class MessageTableCell: UITableViewCell {
             // Message text view - horizontal constraints always active
             messageTextView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
             messageTextView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
+
+            // Voice view constraints
+            voiceView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 10),
+            voiceView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -10),
+            voiceViewTopToBubble,
+            voiceViewHeightConstraint,
 
             // Todo view constraints
             todoView.topAnchor.constraint(equalTo: bubbleView.topAnchor),
@@ -957,6 +1426,7 @@ final class MessageTableCell: UITableViewCell {
         messageTextView.isUserInteractionEnabled = !enabled
         mosaicView.isUserInteractionEnabled = !enabled
         todoView.isUserInteractionEnabled = !enabled
+        voiceView.setInnerInteractionEnabled(!enabled)
 
         let changes = {
             self.checkboxView.isHidden = !enabled
@@ -982,6 +1452,10 @@ final class MessageTableCell: UITableViewCell {
     @objc private func handleThemeChange() {
         updateBubbleColor()
         updateCheckboxColor()
+        if let message = cachedMessage, message.hasVoiceNote {
+            let isDarkMode = traitCollection.userInterfaceStyle == .dark
+            voiceView.configure(audioFileName: message.audioFileName, duration: message.audioDuration, isDarkMode: isDarkMode)
+        }
     }
 
     private func updateCheckboxColor() {
@@ -1029,6 +1503,10 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
         todoViewBottomToBubble.isActive = false
+        voiceViewBottomToBubble.isActive = false
+        voiceViewHeightConstraint.constant = 0
+        voiceView.isHidden = true
+        voiceView.reset()
         // Reset selection state
         isMessageSelected = false
         checkboxView.image = UIImage(systemName: "circle")
@@ -1047,6 +1525,9 @@ final class MessageTableCell: UITableViewCell {
             let isDarkMode = traitCollection.userInterfaceStyle == .dark
             todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
         }
+
+        let isDarkMode = traitCollection.userInterfaceStyle == .dark
+        voiceView.configure(audioFileName: message.audioFileName, duration: message.audioDuration, isDarkMode: isDarkMode)
 
         // Show/hide reminder badge (floating — no layout impact on cell height)
         reminderBadge.isHidden = !message.hasReminder
@@ -1134,6 +1615,7 @@ final class MessageTableCell: UITableViewCell {
         let hasMedia = message.hasMedia && !aspectRatios.isEmpty
         let hasText = !message.content.isEmpty
         let hasTodo = message.isTodoList
+        let hasVoice = message.hasVoiceNote
 
         // Reset constraints first
         messageTextViewTopToMosaic.isActive = false
@@ -1141,6 +1623,8 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
         todoViewBottomToBubble.isActive = false
+        voiceViewBottomToBubble.isActive = false
+        voiceViewHeightConstraint.constant = 0
 
         // Calculate bubble width (cell width - 32 for margins)
         let bubbleWidth = max(width - 32, 0)
@@ -1183,25 +1667,36 @@ final class MessageTableCell: UITableViewCell {
             messageTextView.isHidden = true
             mosaicView.isHidden = true
             mosaicHeightConstraint.constant = 0
+            voiceView.isHidden = true
         } else {
             todoViewHeightConstraint.constant = 0
             todoView.isHidden = true
 
             // Configure layout based on content
-            if hasMedia && hasText {
+            if hasVoice && !hasMedia && !hasText {
+                messageTextView.isHidden = true
+                mosaicView.isHidden = true
+                mosaicHeightConstraint.constant = 0
+                voiceView.isHidden = false
+                voiceViewHeightConstraint.constant = VoiceMessageBubbleView.preferredHeight
+                voiceViewBottomToBubble.isActive = true
+            } else if hasMedia && hasText {
                 // Both media and text
                 messageTextViewTopToMosaic.isActive = true
                 messageTextViewBottomToBubble.isActive = true
                 messageTextView.isHidden = false
+                voiceView.isHidden = true
             } else if hasMedia && !hasText {
                 // Media only - mosaic fills to bottom
                 mosaicBottomToBubble.isActive = true
                 messageTextView.isHidden = true
+                voiceView.isHidden = true
             } else {
                 // Text only (or empty)
                 messageTextViewTopToBubble.isActive = true
                 messageTextViewBottomToBubble.isActive = true
                 messageTextView.isHidden = false
+                voiceView.isHidden = true
             }
         }
     }
@@ -1414,7 +1909,13 @@ final class SearchResultCell: UITableViewCell {
         // Set text for regular messages
         if message.content.isEmpty {
             messageLabel.attributedText = nil
-            messageLabel.text = message.hasMedia ? "📷 \(L10n.Composer.gallery)" : ""
+            if message.hasMedia {
+                messageLabel.text = "📷 \(L10n.Composer.gallery)"
+            } else if message.hasVoiceNote {
+                messageLabel.text = "🎤 \(L10n.Composer.voiceMessage)"
+            } else {
+                messageLabel.text = ""
+            }
         } else {
             messageLabel.attributedText = nil
             messageLabel.text = message.content
@@ -1640,7 +2141,14 @@ final class SearchResultCell: UITableViewCell {
             height += CGFloat(lines) * 20 // ~20pt per line
         } else {
             // Text height (max 3 lines)
-            let text = message.content.isEmpty && message.hasMedia ? "📷 \(L10n.Composer.gallery)" : message.content
+            let text: String
+            if message.content.isEmpty && message.hasMedia {
+                text = "📷 \(L10n.Composer.gallery)"
+            } else if message.content.isEmpty && message.hasVoiceNote {
+                text = "🎤 \(L10n.Composer.voiceMessage)"
+            } else {
+                text = message.content
+            }
             let textHeight = text.boundingRect(
                 with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
                 options: [.usesLineFragmentOrigin, .usesFontLeading],

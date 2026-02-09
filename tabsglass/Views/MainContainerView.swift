@@ -34,6 +34,7 @@ struct MainContainerView: View {
     @State private var attachedImages: [UIImage] = []
     @State private var attachedVideos: [AttachedVideo] = []
     @State private var formattingEntities: [TextEntity] = []
+    @State private var recordedVoiceDraft: RecordedVoiceDraft?
 
     // Selection mode
     @State private var isSelectionMode = false
@@ -97,6 +98,7 @@ struct MainContainerView: View {
             attachedImages: $attachedImages,
             attachedVideos: $attachedVideos,
             formattingEntities: $formattingEntities,
+            recordedVoiceDraft: $recordedVoiceDraft,
             onSend: { sendMessage() },
             onDeleteMessage: { message in
                 deleteMessage(message)
@@ -438,8 +440,9 @@ struct MainContainerView: View {
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasMedia = !attachedImages.isEmpty || !attachedVideos.isEmpty
+        let hasVoiceDraft = recordedVoiceDraft != nil
         // Allow sending if there's text OR media
-        guard !trimmedText.isEmpty || hasMedia else { return }
+        guard !trimmedText.isEmpty || hasMedia || hasVoiceDraft else { return }
 
         // Capture all data BEFORE clearing (for async Task)
         let imagesToSave = attachedImages
@@ -447,12 +450,45 @@ struct MainContainerView: View {
         let entitiesToSave = formattingEntities
         let originalText = messageText
         let tabId = currentTabId
+        let voiceDraftToSave = recordedVoiceDraft
 
         // Clear UI immediately for responsiveness
         messageText = ""
         attachedImages = []
         attachedVideos = []
         formattingEntities = []
+        recordedVoiceDraft = nil
+
+        // Send voice note as a separate message
+        if let voiceDraftToSave, trimmedText.isEmpty, !hasMedia {
+            defer {
+                try? FileManager.default.removeItem(at: voiceDraftToSave.fileURL)
+            }
+
+            guard let audioResult = SharedAudioStorage.saveAudio(from: voiceDraftToSave.fileURL, duration: voiceDraftToSave.duration) else {
+                return
+            }
+
+            let message = Message(
+                content: "",
+                tabId: tabId,
+                entities: nil,
+                photoFileNames: [],
+                photoAspectRatios: [],
+                videoFileNames: [],
+                videoAspectRatios: [],
+                videoDurations: [],
+                videoThumbnailFileNames: [],
+                audioFileName: audioResult.fileName,
+                audioDuration: audioResult.duration
+            )
+            modelContext.insert(message)
+            try? modelContext.save()
+            return
+        }
+        if let voiceDraftToSave {
+            try? FileManager.default.removeItem(at: voiceDraftToSave.fileURL)
+        }
 
         // Save photos synchronously (they're already in memory)
         var photoFileNames: [String] = []
@@ -541,6 +577,9 @@ struct MainContainerView: View {
             }
             for fileName in previousDeleted.videoThumbnailFileNames {
                 SharedPhotoStorage.deletePhoto(fileName)
+            }
+            if let audioFileName = previousDeleted.audioFileName {
+                SharedAudioStorage.deleteAudio(audioFileName)
             }
         }
 
@@ -640,6 +679,8 @@ struct MainContainerView: View {
             videoAspectRatios: snapshot.videoAspectRatios,
             videoDurations: snapshot.videoDurations,
             videoThumbnailFileNames: snapshot.videoThumbnailFileNames,
+            audioFileName: snapshot.audioFileName,
+            audioDuration: snapshot.audioDuration,
             position: snapshot.position,
             sourceUrl: snapshot.sourceUrl,
             linkPreview: snapshot.linkPreview,
@@ -696,12 +737,16 @@ struct MainContainerView: View {
             var photoFilesToDelete: [String] = []
             var videoFilesToDelete: [String] = []
             var thumbnailFilesToDelete: [String] = []
+            var audioFilesToDelete: [String] = []
             var notificationIdsToCancel: [String] = []
 
             for message in messages {
                 photoFilesToDelete.append(contentsOf: message.photoFileNames)
                 videoFilesToDelete.append(contentsOf: message.videoFileNames)
                 thumbnailFilesToDelete.append(contentsOf: message.videoThumbnailFileNames)
+                if let audioFileName = message.audioFileName {
+                    audioFilesToDelete.append(audioFileName)
+                }
                 if let notificationId = message.notificationId {
                     notificationIdsToCancel.append(notificationId)
                 }
@@ -736,6 +781,9 @@ struct MainContainerView: View {
             }
             for fileName in thumbnailFilesToDelete {
                 SharedPhotoStorage.deletePhoto(fileName)
+            }
+            for fileName in audioFilesToDelete {
+                SharedAudioStorage.deleteAudio(fileName)
             }
         } else {
             // No messages, just delete the tab
@@ -782,6 +830,9 @@ struct MainContainerView: View {
             }
             for fileName in previousDeleted.videoThumbnailFileNames {
                 SharedPhotoStorage.deletePhoto(fileName)
+            }
+            if let audioFileName = previousDeleted.audioFileName {
+                SharedAudioStorage.deleteAudio(audioFileName)
             }
         }
 

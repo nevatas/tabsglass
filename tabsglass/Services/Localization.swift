@@ -105,6 +105,13 @@ enum L10n {
         static var camera: String { NSLocalizedString("composer.camera", comment: "Camera option") }
         static var gallery: String { NSLocalizedString("composer.gallery", comment: "Gallery option") }
         static var list: String { NSLocalizedString("composer.list", comment: "List option") }
+        static var mic: String { NSLocalizedString("composer.mic", comment: "Voice recording start action") }
+        static var stop: String { NSLocalizedString("composer.stop", comment: "Voice recording stop action") }
+        static var voiceMessage: String { NSLocalizedString("composer.voice_message", comment: "Voice message label") }
+        static var deleteRecording: String { NSLocalizedString("composer.delete_recording", comment: "Delete recorded voice draft") }
+        static var recordingDeniedTitle: String { NSLocalizedString("composer.recording_denied_title", comment: "Microphone permission denied title") }
+        static var recordingDeniedMessage: String { NSLocalizedString("composer.recording_denied_message", comment: "Microphone permission denied message") }
+        static var openSettings: String { NSLocalizedString("composer.open_settings", comment: "Open settings action") }
     }
 
     // MARK: - Task List
@@ -208,6 +215,7 @@ enum L10n {
         static var previewMessages: String { NSLocalizedString("data.preview_messages", comment: "Messages count label") }
         static var previewPhotos: String { NSLocalizedString("data.preview_photos", comment: "Photos count label") }
         static var previewVideos: String { NSLocalizedString("data.preview_videos", comment: "Videos count label") }
+        static var previewAudios: String { NSLocalizedString("data.preview_audios", comment: "Voice notes count label") }
 
         // Import modes
         static var importMode: String { NSLocalizedString("data.import_mode", comment: "Import mode section") }

@@ -57,6 +57,7 @@ final class ExportImportService {
     private let dataFileName = "data.json"
     private let photosFolder = "MessagePhotos"
     private let videosFolder = "MessageVideos"
+    private let audiosFolder = "MessageAudio"
 
     // MARK: - Helpers
 
@@ -135,11 +136,15 @@ final class ExportImportService {
         var allPhotoFiles: Set<String> = []
         var allVideoFiles: Set<String> = []
         var allThumbnailFiles: Set<String> = []
+        var allAudioFiles: Set<String> = []
 
         for message in messages {
             allPhotoFiles.formUnion(message.photoFileNames)
             allVideoFiles.formUnion(message.videoFileNames)
             allThumbnailFiles.formUnion(message.videoThumbnailFileNames)
+            if let audioFileName = message.audioFileName {
+                allAudioFiles.insert(audioFileName)
+            }
         }
 
         // Create exportable models
@@ -152,6 +157,7 @@ final class ExportImportService {
             messageCount: messages.count,
             photoCount: allPhotoFiles.count + allThumbnailFiles.count,
             videoCount: allVideoFiles.count,
+            audioCount: allAudioFiles.count,
             deviceName: UIDevice.current.name
         )
 
@@ -220,6 +226,31 @@ final class ExportImportService {
                     }
                 }
                 videosCopied += 1
+            }
+        }
+
+        // Copy audios
+        if !allAudioFiles.isEmpty {
+            let audiosDir = tempDir.appendingPathComponent(audiosFolder)
+            try fileManager.createDirectory(at: audiosDir, withIntermediateDirectories: true)
+
+            var audiosCopied = 0
+            let totalAudios = allAudioFiles.count
+
+            for fileName in allAudioFiles {
+                progressHandler(ExportImportProgress(phase: .copyingVideos, current: audiosCopied, total: totalAudios))
+
+                let sourceURL = SharedAudioStorage.audioURL(for: fileName)
+                if fileManager.fileExists(atPath: sourceURL.path) {
+                    let destURL = audiosDir.appendingPathComponent(fileName)
+                    do {
+                        try fileManager.copyItem(at: sourceURL, to: destURL)
+                    } catch {
+                        logger.error("Failed to copy audio \(fileName): \(error.localizedDescription)")
+                        throw ExportImportError.fileAccessDenied
+                    }
+                }
+                audiosCopied += 1
             }
         }
 
@@ -397,12 +428,16 @@ final class ExportImportService {
             var photoFilesToDelete: [String] = []
             var videoFilesToDelete: [String] = []
             var thumbnailFilesToDelete: [String] = []
+            var audioFilesToDelete: [String] = []
             var notificationIdsToCancel: [String] = []
 
             for message in existingMessages {
                 photoFilesToDelete.append(contentsOf: message.photoFileNames)
                 videoFilesToDelete.append(contentsOf: message.videoFileNames)
                 thumbnailFilesToDelete.append(contentsOf: message.videoThumbnailFileNames)
+                if let audioFileName = message.audioFileName {
+                    audioFilesToDelete.append(audioFileName)
+                }
                 if let notificationId = message.notificationId {
                     notificationIdsToCancel.append(notificationId)
                 }
@@ -431,6 +466,9 @@ final class ExportImportService {
             for fileName in thumbnailFilesToDelete {
                 SharedPhotoStorage.deletePhoto(fileName)
             }
+            for fileName in audioFilesToDelete {
+                SharedAudioStorage.deleteAudio(fileName)
+            }
             for notificationId in notificationIdsToCancel {
                 NotificationService.shared.cancelReminder(notificationId: notificationId)
             }
@@ -456,9 +494,10 @@ final class ExportImportService {
         // Copy media files
         let photosSourceDir = archiveBase.appendingPathComponent(photosFolder)
         let videosSourceDir = archiveBase.appendingPathComponent(videosFolder)
+        let audiosSourceDir = archiveBase.appendingPathComponent(audiosFolder)
 
         var mediaFilesCopied = 0
-        let totalMediaFiles = manifest.photoCount + manifest.videoCount
+        let totalMediaFiles = manifest.photoCount + manifest.videoCount + manifest.audioCount
 
         // Copy photos
         if fileManager.fileExists(atPath: photosSourceDir.path) {
@@ -510,6 +549,34 @@ final class ExportImportService {
                     try fileManager.copyItem(at: sourceURL, to: destURL)
                 } catch {
                     logger.error("Failed to import video \(fileName): \(error.localizedDescription)")
+                    throw ExportImportError.fileAccessDenied
+                }
+                mediaFilesCopied += 1
+            }
+        }
+
+        // Copy audio
+        if fileManager.fileExists(atPath: audiosSourceDir.path) {
+            let audioFiles = try fileManager.contentsOfDirectory(atPath: audiosSourceDir.path)
+            for fileName in audioFiles {
+                progressHandler(ExportImportProgress(phase: .copyingMedia, current: mediaFilesCopied, total: totalMediaFiles))
+
+                let sourceURL = audiosSourceDir.appendingPathComponent(fileName)
+                let destURL = SharedAudioStorage.audiosDirectory.appendingPathComponent(fileName)
+
+                // Don't overwrite existing files in merge mode
+                if mode == .merge && fileManager.fileExists(atPath: destURL.path) {
+                    mediaFilesCopied += 1
+                    continue
+                }
+
+                if fileManager.fileExists(atPath: destURL.path) {
+                    try fileManager.removeItem(at: destURL)
+                }
+                do {
+                    try fileManager.copyItem(at: sourceURL, to: destURL)
+                } catch {
+                    logger.error("Failed to import audio \(fileName): \(error.localizedDescription)")
                     throw ExportImportError.fileAccessDenied
                 }
                 mediaFilesCopied += 1

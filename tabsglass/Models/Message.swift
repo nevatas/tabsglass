@@ -120,6 +120,8 @@ final class Message: Identifiable {
     var videoAspectRatios: [Double] = []
     var videoDurations: [Double] = []
     var videoThumbnailFileNames: [String] = []
+    var audioFileName: String?
+    var audioDuration: Double?
     var todoItems: [TodoItem]?      // Todo list items (nil = not a todo list)
     var todoTitle: String?          // Optional title for todo list
     var reminderDate: Date?         // When to send reminder notification
@@ -134,6 +136,13 @@ final class Message: Identifiable {
     /// Whether this message has any media (photos or videos)
     var hasMedia: Bool {
         !photoFileNames.isEmpty || !videoFileNames.isEmpty
+    }
+
+    /// Whether this message has a voice note.
+    var hasVoiceNote: Bool {
+        guard let audioFileName, !audioFileName.isEmpty else { return false }
+        let url = Message.audiosDirectory.appendingPathComponent(audioFileName)
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
     /// Total count of all media items (photos + videos)
@@ -167,6 +176,8 @@ final class Message: Identifiable {
         videoAspectRatios: [Double] = [],
         videoDurations: [Double] = [],
         videoThumbnailFileNames: [String] = [],
+        audioFileName: String? = nil,
+        audioDuration: Double? = nil,
         position: Int = 0,
         sourceUrl: String? = nil,
         linkPreview: LinkPreview? = nil,
@@ -188,6 +199,8 @@ final class Message: Identifiable {
         self.videoAspectRatios = videoAspectRatios
         self.videoDurations = videoDurations
         self.videoThumbnailFileNames = videoThumbnailFileNames
+        self.audioFileName = audioFileName
+        self.audioDuration = audioDuration
     }
 
     /// Get aspect ratios as CGFloat array (photos + videos combined)
@@ -229,7 +242,17 @@ final class Message: Identifiable {
             let url = Message.videosDirectory.appendingPathComponent(fileName)
             return FileManager.default.fileExists(atPath: url.path)
         }
-        return !hasValidVideos
+        if hasValidVideos { return false }
+
+        // Check if voice note file exists (without loading it)
+        if let audioFileName {
+            let url = Message.audiosDirectory.appendingPathComponent(audioFileName)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return false
+            }
+        }
+
+        return true
     }
 
     /// Directory for storing message photos (uses shared container for extension support)
@@ -240,6 +263,11 @@ final class Message: Identifiable {
     /// Directory for storing message videos (uses shared container for extension support)
     static var videosDirectory: URL {
         SharedVideoStorage.videosDirectory
+    }
+
+    /// Directory for storing message audio notes (uses shared container for extension support)
+    static var audiosDirectory: URL {
+        SharedAudioStorage.audiosDirectory
     }
 
     /// Save image and return file name and aspect ratio
@@ -276,9 +304,16 @@ final class Message: Identifiable {
         }
     }
 
-    /// Delete all media files (photos and videos)
+    /// Delete audio file when message is deleted
+    func deleteAudioFile() {
+        guard let audioFileName else { return }
+        SharedAudioStorage.deleteAudio(audioFileName)
+    }
+
+    /// Delete all attached files (photos, videos, audio)
     func deleteMediaFiles() {
         deletePhotoFiles()
         deleteVideoFiles()
+        deleteAudioFile()
     }
 }

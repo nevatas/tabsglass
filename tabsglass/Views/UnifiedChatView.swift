@@ -22,6 +22,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var attachedImages: [UIImage]
     @Binding var attachedVideos: [AttachedVideo]
     @Binding var formattingEntities: [TextEntity]  // Entities from formatting
+    @Binding var recordedVoiceDraft: RecordedVoiceDraft?
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
@@ -76,6 +77,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onEntitiesExtracted = { entities in
             formattingEntities = entities
         }
+        vc.onVoiceDraftChange = { draft in
+            recordedVoiceDraft = draft
+        }
         // Selection mode
         vc.isSelectionMode = isSelectionMode
         vc.selectedMessageIds = selectedMessageIds
@@ -96,6 +100,8 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             hasher.combine(message.hasReminder)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
+            hasher.combine(message.audioFileName)
+            hasher.combine(message.audioDuration?.bitPattern ?? 0)
         }
         return hasher.finalize()
     }
@@ -187,6 +193,7 @@ final class UnifiedChatViewController: UIViewController {
     var lastContentHash: Int = 0
     var onSend: (() -> Void)?
     var onEntitiesExtracted: (([TextEntity]) -> Void)?
+    var onVoiceDraftChange: ((RecordedVoiceDraft?) -> Void)?
 
     /// Total tab count including Search and virtual Inbox
     private var totalTabCount: Int { 2 + tabs.count }
@@ -262,6 +269,8 @@ final class UnifiedChatViewController: UIViewController {
             hasher.combine(message.hasReminder)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
+            hasher.combine(message.audioFileName)
+            hasher.combine(message.audioDuration?.bitPattern ?? 0)
         }
         return hasher.finalize()
     }
@@ -511,6 +520,14 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onVideosChange = { [weak self] videos in
             self?.onVideosChange?(videos)
+        }
+
+        inputContainer.onVoiceDraftChange = { [weak self] draft in
+            self?.onVoiceDraftChange?(draft)
+        }
+
+        inputContainer.onRecordingPermissionDenied = { [weak self] in
+            self?.presentMicrophoneAccessAlert()
         }
 
         // Bottom fade gradient (behind inputContainer, at screen/keyboard bottom)
@@ -1144,6 +1161,20 @@ final class UnifiedChatViewController: UIViewController {
         present(picker, animated: true)
     }
 
+    private func presentMicrophoneAccessAlert() {
+        let alert = UIAlertController(
+            title: L10n.Composer.recordingDeniedTitle,
+            message: L10n.Composer.recordingDeniedMessage,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: L10n.Tab.cancel, style: .cancel))
+        alert.addAction(UIAlertAction(title: L10n.Composer.openSettings, style: .default) { _ in
+            guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+            UIApplication.shared.open(settingsURL)
+        })
+        present(alert, animated: true)
+    }
+
     // MARK: - Gallery
 
     private func presentGallery(message: Message, startIndex: Int, sourceFrame: CGRect) {
@@ -1671,6 +1702,8 @@ final class MessageListViewController: UIViewController {
             hasher.combine(message.hasReminder)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
+            hasher.combine(message.audioFileName)
+            hasher.combine(message.audioDuration?.bitPattern ?? 0)
             hasher.combine(message.createdAt.timeIntervalSinceReferenceDate.bitPattern)
 
             if let items = message.todoItems {
@@ -2232,6 +2265,13 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
         let hasMedia = message.hasMedia && !message.aspectRatios.isEmpty
         let hasText = !message.content.isEmpty
+        let hasVoiceOnly = message.hasVoiceNote && !hasMedia && !hasText && !message.isTodoList
+
+        if hasVoiceOnly {
+            // Voice bubble with top/bottom insets inside bubble
+            height += 8 + VoiceMessageBubbleView.preferredHeight + 8
+            return max(height, 50)
+        }
 
         // Calculate mosaic height if has media
         if hasMedia {
@@ -2278,6 +2318,10 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             guard let self = self else { return nil }
 
             var actions: [UIMenuElement] = []
+            let isVoiceOnly = message.hasVoiceNote
+                && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !message.hasMedia
+                && !message.isTodoList
 
             // Copy action
             let copyAction = UIAction(
@@ -2299,13 +2343,15 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             actions.append(selectAction)
 
             // Edit action
-            let editAction = UIAction(
-                title: L10n.Menu.edit,
-                image: UIImage(systemName: "pencil")
-            ) { _ in
-                self.onEditMessage?(message)
+            if !isVoiceOnly {
+                let editAction = UIAction(
+                    title: L10n.Menu.edit,
+                    image: UIImage(systemName: "pencil")
+                ) { _ in
+                    self.onEditMessage?(message)
+                }
+                actions.append(editAction)
             }
-            actions.append(editAction)
 
             // Move action (show other tabs + Inbox if not already in Inbox)
             var moveMenuChildren: [UIAction] = []

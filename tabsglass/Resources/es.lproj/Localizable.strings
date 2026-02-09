@@ -88,6 +88,13 @@
 "composer.camera" = "Cámara";
 "composer.gallery" = "Galería";
 "composer.list" = "Lista";
+"composer.mic" = "Micrófono";
+"composer.stop" = "Detener";
+"composer.voice_message" = "Mensaje de voz";
+"composer.delete_recording" = "Eliminar grabación";
+"composer.recording_denied_title" = "Se necesita acceso al micrófono";
+"composer.recording_denied_message" = "Permite el acceso al micrófono en Ajustes para grabar notas de voz.";
+"composer.open_settings" = "Abrir Ajustes";
 
 // MARK: - Task List
 
@@ -173,6 +180,7 @@
 "data.preview_messages" = "Mensajes";
 "data.preview_photos" = "Fotos";
 "data.preview_videos" = "Videos";
+"data.preview_audios" = "Notas de voz";
 
 // Import Modes
 "data.import_mode" = "MODO DE IMPORTACIÓN";

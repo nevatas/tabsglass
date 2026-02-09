@@ -88,6 +88,13 @@
 "composer.camera" = "Камера";
 "composer.gallery" = "Галерея";
 "composer.list" = "Список";
+"composer.mic" = "Микрофон";
+"composer.stop" = "Стоп";
+"composer.voice_message" = "Голосовое сообщение";
+"composer.delete_recording" = "Удалить запись";
+"composer.recording_denied_title" = "Нужен доступ к микрофону";
+"composer.recording_denied_message" = "Разрешите доступ к микрофону в Настройках, чтобы записывать голосовые заметки.";
+"composer.open_settings" = "Открыть настройки";
 
 // MARK: - Task List
 
@@ -173,6 +180,7 @@
 "data.preview_messages" = "Сообщения";
 "data.preview_photos" = "Фото";
 "data.preview_videos" = "Видео";
+"data.preview_audios" = "Голосовые";
 
 // Import Modes
 "data.import_mode" = "РЕЖИМ ИМПОРТА";
