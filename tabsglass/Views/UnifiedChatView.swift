@@ -150,6 +150,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             uiViewController.allMessages = messages
             uiViewController.lastContentHash = newContentHash
             uiViewController.reloadTrigger = reloadTrigger
+            if tabsChanged || idsChanged || forceReload {
+                uiViewController.invalidateMediaWarmupState()
+            }
         }
 
         // Tab selection change (after data update so totalTabCount is current)
@@ -224,6 +227,7 @@ final class UnifiedChatViewController: UIViewController {
     private var searchText: String = ""
     private var pageScrollView: UIScrollView?
     private var isUserSwiping: Bool = false
+    private var pendingAdjacentPreloadAfterSwipe = false
 
     // MARK: - Input Container (Auto Layout)
     private var hasAutoFocused: Bool = false
@@ -318,6 +322,15 @@ final class UnifiedChatViewController: UIViewController {
     // MARK: - Performance Optimization: Cached per-tab messages
     private var cachedTabMessages: [UUID?: [Message]] = [:]
     private var cachedTabMessagesHash: Int = 0
+    private var warmedMediaTabIndices: Set<Int> = []
+    private let mediaWarmupQueue = DispatchQueue(label: "com.tabsglass.mediawarmup", qos: .utility)
+
+    private struct MediaWarmupSnapshot {
+        let photoFileNames: [String]
+        let videoFileNames: [String]
+        let videoThumbnailFileNames: [String]
+        let aspectRatios: [CGFloat]
+    }
 
     /// Get messages for a specific tab (cached for performance during swipes)
     private func messagesForTab(_ tabId: UUID?) -> [Message] {
@@ -344,6 +357,11 @@ final class UnifiedChatViewController: UIViewController {
     private func invalidateTabMessagesCache() {
         cachedTabMessages.removeAll()
         cachedTabMessagesHash = 0
+    }
+
+    /// Invalidate media thumbnail warmup state (called when tab/message structure changes).
+    func invalidateMediaWarmupState() {
+        warmedMediaTabIndices.removeAll()
     }
 
     /// Update search tab with filtered messages
@@ -834,18 +852,27 @@ final class UnifiedChatViewController: UIViewController {
 
     /// Preload view controllers for adjacent tabs to ensure smooth swiping
     private func preloadAdjacentTabs() {
-        // Skip preloading during active swipe to avoid competing with animation
-        guard !isUserSwiping else { return }
+        // If user started dragging, postpone preloading and retry after swipe completes.
+        guard !isUserSwiping else {
+            pendingAdjacentPreloadAfterSwipe = true
+            return
+        }
 
-        // Preload in next run loop to avoid blocking current frame
+        // Preload in next run loop to avoid blocking current frame.
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, !self.isUserSwiping else { return }
+            guard let self = self else { return }
+            guard !self.isUserSwiping else {
+                self.pendingAdjacentPreloadAfterSwipe = true
+                return
+            }
 
             let bounds = self.pageViewController.view.bounds
-            let indicesToPreload = [
-                self.selectedIndex - 1,
-                self.selectedIndex + 1
-            ].filter { $0 >= 0 && $0 < self.totalTabCount }
+            let preloadOrder = [-1, 1, -2, 2]
+            let indicesToPreload = preloadOrder
+                .map { self.selectedIndex + $0 }
+                .filter { $0 >= 0 && $0 < self.totalTabCount }
+
+            self.pendingAdjacentPreloadAfterSwipe = false
 
             for index in indicesToPreload {
                 let vc: MessageListViewController
@@ -855,6 +882,64 @@ final class UnifiedChatViewController: UIViewController {
                     vc = self.getMessageController(for: index)
                 }
                 vc.prewarmCells(in: bounds)
+                self.prewarmMediaThumbnailsIfNeeded(for: index, viewportWidth: bounds.width)
+            }
+        }
+    }
+
+    private func prewarmMediaThumbnailsIfNeeded(for index: Int, viewportWidth: CGFloat) {
+        guard index >= 1 && index < totalTabCount else { return } // Skip Search tab
+        guard warmedMediaTabIndices.insert(index).inserted else { return }
+
+        let tabMessages = messagesForTab(tabId(for: index))
+        let snapshots = tabMessages
+            .filter { $0.modelContext != nil && $0.hasMedia && !$0.aspectRatios.isEmpty }
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(10)
+            .map {
+                MediaWarmupSnapshot(
+                    photoFileNames: $0.photoFileNames,
+                    videoFileNames: $0.videoFileNames,
+                    videoThumbnailFileNames: $0.videoThumbnailFileNames,
+                    aspectRatios: $0.aspectRatios
+                )
+            }
+
+        guard !snapshots.isEmpty else { return }
+
+        let resolvedViewportWidth = viewportWidth > 0 ? viewportWidth : UIScreen.main.bounds.width
+        let bubbleWidth = max(resolvedViewportWidth - 32, 1)
+
+        mediaWarmupQueue.async {
+            let maxMediaItemsPerMessage = 6
+            for snapshot in snapshots {
+                let calculator = MosaicLayoutCalculator(maxWidth: bubbleWidth, maxHeight: 300, spacing: 2)
+                let layoutItems = calculator.calculateLayout(aspectRatios: snapshot.aspectRatios)
+                guard !layoutItems.isEmpty else { continue }
+
+                let loadLimit = min(layoutItems.count, maxMediaItemsPerMessage)
+                let photoCount = snapshot.photoFileNames.count
+
+                for itemIndex in 0..<loadLimit {
+                    let targetSize = layoutItems[itemIndex].frame.size
+                    if itemIndex < photoCount {
+                        ImageCache.shared.prefetchThumbnails(
+                            for: [snapshot.photoFileNames[itemIndex]],
+                            targetSize: targetSize
+                        )
+                        continue
+                    }
+
+                    let videoIndex = itemIndex - photoCount
+                    guard videoIndex < snapshot.videoFileNames.count,
+                          videoIndex < snapshot.videoThumbnailFileNames.count else { continue }
+
+                    ImageCache.shared.prefetchVideoThumbnails(
+                        videoFileNames: [snapshot.videoFileNames[videoIndex]],
+                        thumbnailFileNames: [snapshot.videoThumbnailFileNames[videoIndex]],
+                        targetSize: targetSize
+                    )
+                }
             }
         }
     }
@@ -1328,6 +1413,9 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
         isUserSwiping = false
         lastReportedFraction = 0
         onSwitchFraction?(0)  // Reset fraction when swipe completes
+        if pendingAdjacentPreloadAfterSwipe {
+            preloadAdjacentTabs()
+        }
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
@@ -1336,6 +1424,9 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
             isUserSwiping = false
             lastReportedFraction = 0
             onSwitchFraction?(0)  // Reset fraction when drag ends without deceleration
+            if pendingAdjacentPreloadAfterSwipe {
+                preloadAdjacentTabs()
+            }
         }
     }
 }
@@ -1380,6 +1471,7 @@ final class MessageListViewController: UIViewController {
     private var pendingAppearAnimationIds: Set<UUID> = []
     private var isAnimatingFirstMessage = false
     private var isPrewarmed = false
+    private var lastRenderedMessagesHash: Int = 0
     private var selectionModeExitAnimationDeadline: CFTimeInterval = 0
 
     // Embedded search tabs for search tab
@@ -1527,7 +1619,10 @@ final class MessageListViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        reloadMessages()
+        let currentHash = makeRenderHash(from: messages)
+        if currentHash != lastRenderedMessagesHash {
+            reloadMessages()
+        }
         refreshContentInset()
     }
 
@@ -1548,6 +1643,10 @@ final class MessageListViewController: UIViewController {
         loadViewIfNeeded()
         view.frame = bounds
         reloadMessages()
+
+        // Avoid forcing UITableView layout before it is attached to a window.
+        // UIKit warns about this and it can introduce extra layout work.
+        guard view.window != nil else { return }
         tableView.setNeedsLayout()
         tableView.layoutIfNeeded()
     }
@@ -1561,6 +1660,33 @@ final class MessageListViewController: UIViewController {
     /// Track last processed message IDs for quick change detection
     private var lastProcessedMessageIds: Set<UUID> = []
 
+    private func makeRenderHash(from messages: [Message]) -> Int {
+        var hasher = Hasher()
+        hasher.combine(messages.count)
+        for message in messages where message.modelContext != nil {
+            hasher.combine(message.id)
+            hasher.combine(message.tabId)
+            hasher.combine(message.content)
+            hasher.combine(message.todoTitle)
+            hasher.combine(message.hasReminder)
+            hasher.combine(message.photoFileNames.count)
+            hasher.combine(message.videoFileNames.count)
+            hasher.combine(message.createdAt.timeIntervalSinceReferenceDate.bitPattern)
+
+            if let items = message.todoItems {
+                hasher.combine(items.count)
+                for item in items {
+                    hasher.combine(item.id)
+                    hasher.combine(item.text)
+                    hasher.combine(item.isCompleted)
+                }
+            } else {
+                hasher.combine(-1)
+            }
+        }
+        return hasher.finalize()
+    }
+
     func reloadMessages(invalidateHeights: Bool = false) {
         // Skip if first message animation is in progress
         if isAnimatingFirstMessage { return }
@@ -1569,6 +1695,9 @@ final class MessageListViewController: UIViewController {
         if invalidateHeights {
             heightCache.removeAll()
         }
+
+        // Snapshot current content to avoid redundant reload on first appear after prewarm.
+        lastRenderedMessagesHash = makeRenderHash(from: messages)
 
         // Filter out deleted SwiftData objects first
         let validMessages = messages.filter { $0.modelContext != nil }

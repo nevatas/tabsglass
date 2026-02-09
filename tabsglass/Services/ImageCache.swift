@@ -227,4 +227,30 @@ extension ImageCache {
 
         return image
     }
+
+    /// Prefetch video thumbnails for upcoming cells.
+    func prefetchVideoThumbnails(
+        videoFileNames: [String],
+        thumbnailFileNames: [String],
+        targetSize: CGSize
+    ) {
+        guard !videoFileNames.isEmpty, !thumbnailFileNames.isEmpty else { return }
+
+        for (videoFileName, thumbnailFileName) in zip(videoFileNames, thumbnailFileNames) {
+            guard !thumbnailFileName.isEmpty else { continue }
+
+            let cacheKey = "video_\(videoFileName)_thumb_\(Int(targetSize.width))x\(Int(targetSize.height))" as NSString
+            if thumbnailCache.object(forKey: cacheKey) != nil {
+                continue
+            }
+
+            loadingQueue.async { [weak self] in
+                guard let self = self else { return }
+                let url = Message.photosDirectory.appendingPathComponent(thumbnailFileName)
+                if let image = self.downsample(imageAt: url, to: targetSize) {
+                    self.thumbnailCache.setObject(image, forKey: cacheKey)
+                }
+            }
+        }
+    }
 }

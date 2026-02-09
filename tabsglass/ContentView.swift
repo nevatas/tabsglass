@@ -10,7 +10,8 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showPaywall = true
+    // Keep paywall implementation in place, but disable automatic presentation on app launch for now.
+    @State private var showPaywall = false
     private var themeManager: ThemeManager { ThemeManager.shared }
 
     private var backgroundColor: Color {
