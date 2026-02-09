@@ -153,14 +153,19 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         }
 
         // Tab selection change (after data update so totalTabCount is current)
-        let indexChanged = uiViewController.selectedIndex != selectedIndex
+        let previousControllerIndex = uiViewController.selectedIndex
+        let indexChanged = previousControllerIndex != selectedIndex
         if indexChanged {
             uiViewController.selectedIndex = selectedIndex
         }
 
         if tabsChanged {
-            // Tabs structure changed - reset page view controller (handles selection too)
-            uiViewController.handleTabsStructureChange()
+            // Tabs structure changed - keep page transition animated when selection changed
+            // (e.g. deleting active tab should slide to neighbor instead of teleporting).
+            uiViewController.handleTabsStructureChange(
+                previousSelectedIndex: previousControllerIndex,
+                animateSelectionTransition: indexChanged
+            )
         } else if indexChanged {
             uiViewController.updatePageSelection(animated: true)
         } else if idsChanged || contentChanged || forceReload {
@@ -922,7 +927,10 @@ final class UnifiedChatViewController: UIViewController {
     }
 
     /// Called when tabs are added or removed - clears caches and resets page view controller
-    func handleTabsStructureChange() {
+    func handleTabsStructureChange(
+        previousSelectedIndex: Int? = nil,
+        animateSelectionTransition: Bool = false
+    ) {
         // Invalidate all caches
         invalidateTabMessagesCache()
 
@@ -942,9 +950,15 @@ final class UnifiedChatViewController: UIViewController {
             searchVC.reloadMessages()
         }
 
-        // Reset page view controller to current valid index
-        let vc = getMessageController(for: selectedIndex)
-        pageViewController.setViewControllers([vc], direction: .forward, animated: false)
+        let shouldAnimateSelectionTransition: Bool = {
+            guard animateSelectionTransition else { return false }
+            guard let previousSelectedIndex else { return false }
+            return previousSelectedIndex != selectedIndex
+        }()
+
+        // Reset page view controller to current valid index.
+        // Keep transition animated when selection changed with tab structure mutation.
+        updatePageSelection(animated: shouldAnimateSelectionTransition)
 
         // Update current tab
         reloadCurrentTab()

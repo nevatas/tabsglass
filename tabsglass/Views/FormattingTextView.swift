@@ -115,6 +115,9 @@ final class FormattingTextView: UITextView {
     @objc private func textDidChange() {
         pendingMenuDismissWorkItem?.cancel()
         isEditMenuVisible = false
+        // Text mutation means edit menu is no longer authoritative for layout,
+        // so release any post-dismiss lock to allow composer height updates now.
+        editMenuLockUntil = 0
         placeholderLabel.isHidden = !text.isEmpty
 
         // Reset formatting when text becomes empty

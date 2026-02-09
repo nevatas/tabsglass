@@ -600,11 +600,19 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
         }
 
         let layoutState = self.computeLayoutState()
+        let finalContentWidth = layoutState.contentWidth
+        let previousContentWidth = max(self.scrollView.contentSize.width, self.bounds.width)
+        let shouldKeepPreviousWidthDuringRemovalAnimation =
+            animated &&
+            !removedNodes.isEmpty &&
+            previousContentWidth > finalContentWidth + 0.5
+        let activeContentWidth =
+            shouldKeepPreviousWidthDuringRemovalAnimation ? previousContentWidth : finalContentWidth
         self.contentView.frame = CGRect(
             origin: .zero,
-            size: CGSize(width: layoutState.contentWidth, height: self.bounds.height)
+            size: CGSize(width: activeContentWidth, height: self.bounds.height)
         )
-        self.scrollView.contentSize = CGSize(width: layoutState.contentWidth, height: self.bounds.height)
+        self.scrollView.contentSize = CGSize(width: activeContentWidth, height: self.bounds.height)
 
         let selectedFrame = layoutState.framesByIndex[self.selectedIndex]
         let indicatorFrame = self.interpolatedSelectionFrame(framesByIndex: layoutState.framesByIndex) ?? selectedFrame
@@ -613,28 +621,28 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
         switch reason {
         case .tap, .selectionChange:
             if let selectedFrame {
-                targetOffset = self.centeredOffset(for: selectedFrame.midX, contentWidth: layoutState.contentWidth)
+                targetOffset = self.centeredOffset(for: selectedFrame.midX, contentWidth: finalContentWidth)
             } else {
-                targetOffset = self.clampedOffset(currentOffset, contentWidth: layoutState.contentWidth)
+                targetOffset = self.clampedOffset(currentOffset, contentWidth: finalContentWidth)
             }
         case .appendSelection:
             if let selectedFrame {
                 targetOffset = self.offsetEnsuringVisible(
                     frame: selectedFrame,
                     currentOffset: currentOffset,
-                    contentWidth: layoutState.contentWidth
+                    contentWidth: finalContentWidth
                 )
             } else {
-                targetOffset = self.clampedOffset(currentOffset, contentWidth: layoutState.contentWidth)
+                targetOffset = self.clampedOffset(currentOffset, contentWidth: finalContentWidth)
             }
         case .swipe:
             if let indicatorFrame {
-                targetOffset = self.centeredOffset(for: indicatorFrame.midX, contentWidth: layoutState.contentWidth)
+                targetOffset = self.centeredOffset(for: indicatorFrame.midX, contentWidth: finalContentWidth)
             } else {
-                targetOffset = self.clampedOffset(currentOffset, contentWidth: layoutState.contentWidth)
+                targetOffset = self.clampedOffset(currentOffset, contentWidth: finalContentWidth)
             }
         case .contentChange, .none:
-            targetOffset = self.clampedOffset(currentOffset, contentWidth: layoutState.contentWidth)
+            targetOffset = self.clampedOffset(currentOffset, contentWidth: finalContentWidth)
         }
 
         let shouldAnimate = animated && reason != .swipe && !self.isUserInteracting
@@ -645,7 +653,8 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
                 toOffsetX: targetOffset,
                 indicatorFrame: indicatorFrame,
                 insertedIDs: insertedIDs,
-                removedNodes: removedNodes
+                removedNodes: removedNodes,
+                finalContentWidth: finalContentWidth
             )
         } else {
             self.stopTransitionAnimation()
@@ -659,6 +668,7 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
             for node in removedNodes {
                 node.containerView.removeFromSuperview()
             }
+            self.finalizeScrollableGeometry(contentWidth: finalContentWidth)
         }
     }
 
@@ -668,7 +678,8 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
         toOffsetX: CGFloat,
         indicatorFrame: CGRect?,
         insertedIDs: Set<String>,
-        removedNodes: [TabHostedNode]
+        removedNodes: [TabHostedNode],
+        finalContentWidth: CGFloat
     ) {
         self.stopTransitionAnimation()
 
@@ -713,9 +724,27 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
         }
         animator.addCompletion { _ in
             self.removePendingRemovedNodes(removedNodes)
+            self.finalizeScrollableGeometry(contentWidth: finalContentWidth)
         }
         self.transitionAnimator = animator
         animator.startAnimation()
+    }
+
+    private func finalizeScrollableGeometry(contentWidth: CGFloat) {
+        let resolvedWidth = max(self.bounds.width, contentWidth)
+        if abs(self.contentView.bounds.width - resolvedWidth) > 0.5 ||
+            abs(self.scrollView.contentSize.width - resolvedWidth) > 0.5 {
+            self.contentView.frame = CGRect(
+                origin: .zero,
+                size: CGSize(width: resolvedWidth, height: self.bounds.height)
+            )
+            self.scrollView.contentSize = CGSize(width: resolvedWidth, height: self.bounds.height)
+        }
+
+        let clampedOffsetX = self.clampedOffset(self.scrollView.contentOffset.x, contentWidth: resolvedWidth)
+        if abs(clampedOffsetX - self.scrollView.contentOffset.x) > 0.5 {
+            self.scrollView.contentOffset = CGPoint(x: clampedOffsetX, y: 0)
+        }
     }
 
     private func applyFrames(_ framesByID: [String: CGRect]) {
