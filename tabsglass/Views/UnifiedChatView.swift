@@ -133,12 +133,12 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         let newIds = Set(messages.map { $0.id })
         let idsChanged = oldIds != newIds
 
-        // Quick content hash check (catches todo toggles, edits, etc.)
-        // Filter deleted objects here — accessing .content on them can crash
-        let validOldMessages = uiViewController.allMessages.filter { $0.modelContext != nil }
-        let oldContentHash = makeMessagesContentHash(validOldMessages)
+        // Quick content hash check (catches todo toggles, edits, reminders, etc.)
+        // Compare against stored hash from previous reload — NOT recomputed from old array,
+        // because SwiftData uses reference types: old and new arrays contain the same objects,
+        // so recomputing the hash from the old array would reflect the already-mutated state.
         let newContentHash = makeMessagesContentHash(messages)
-        let contentChanged = oldContentHash != newContentHash
+        let contentChanged = newContentHash != uiViewController.lastContentHash
 
         // Explicit reload trigger for bulk operations (move/delete) where reference-type
         // mutations make change detection via hash comparison impossible
@@ -148,18 +148,24 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         if tabsChanged || idsChanged || contentChanged || forceReload {
             uiViewController.tabs = tabs
             uiViewController.allMessages = messages
+            uiViewController.lastContentHash = newContentHash
             uiViewController.reloadTrigger = reloadTrigger
         }
 
         // Tab selection change (after data update so totalTabCount is current)
-        let indexChanged = uiViewController.selectedIndex != selectedIndex
+        let previousControllerIndex = uiViewController.selectedIndex
+        let indexChanged = previousControllerIndex != selectedIndex
         if indexChanged {
             uiViewController.selectedIndex = selectedIndex
         }
 
         if tabsChanged {
-            // Tabs structure changed - reset page view controller (handles selection too)
-            uiViewController.handleTabsStructureChange()
+            // Tabs structure changed - keep page transition animated when selection changed
+            // (e.g. deleting active tab should slide to neighbor instead of teleporting).
+            uiViewController.handleTabsStructureChange(
+                previousSelectedIndex: previousControllerIndex,
+                animateSelectionTransition: indexChanged
+            )
         } else if indexChanged {
             uiViewController.updatePageSelection(animated: true)
         } else if idsChanged || contentChanged || forceReload {
@@ -175,6 +181,7 @@ final class UnifiedChatViewController: UIViewController {
     var allMessages: [Message] = []  // All messages from SwiftUI
     var selectedIndex: Int = 1  // 0 = Search, 1 = Inbox, 2+ = real tabs
     var reloadTrigger: Int = 0
+    var lastContentHash: Int = 0
     var onSend: (() -> Void)?
     var onEntitiesExtracted: (([TextEntity]) -> Void)?
 
@@ -871,7 +878,17 @@ final class UnifiedChatViewController: UIViewController {
                 updateInputVisibility(animated: animated)
             }
 
-            pageViewController.setViewControllers([vc], direction: direction, animated: animated)
+            if animated {
+                // Disable interaction during programmatic page transition
+                // to prevent user from interrupting the animation and causing
+                // desync between tab bar selection and displayed content
+                pageViewController.view.isUserInteractionEnabled = false
+                pageViewController.setViewControllers([vc], direction: direction, animated: true) { [weak self] _ in
+                    self?.pageViewController.view.isUserInteractionEnabled = true
+                }
+            } else {
+                pageViewController.setViewControllers([vc], direction: direction, animated: false)
+            }
         } else {
             pageViewController.setViewControllers([vc], direction: .forward, animated: false)
             updateInputVisibility(animated: false)
@@ -910,7 +927,10 @@ final class UnifiedChatViewController: UIViewController {
     }
 
     /// Called when tabs are added or removed - clears caches and resets page view controller
-    func handleTabsStructureChange() {
+    func handleTabsStructureChange(
+        previousSelectedIndex: Int? = nil,
+        animateSelectionTransition: Bool = false
+    ) {
         // Invalidate all caches
         invalidateTabMessagesCache()
 
@@ -930,9 +950,15 @@ final class UnifiedChatViewController: UIViewController {
             searchVC.reloadMessages()
         }
 
-        // Reset page view controller to current valid index
-        let vc = getMessageController(for: selectedIndex)
-        pageViewController.setViewControllers([vc], direction: .forward, animated: false)
+        let shouldAnimateSelectionTransition: Bool = {
+            guard animateSelectionTransition else { return false }
+            guard let previousSelectedIndex else { return false }
+            return previousSelectedIndex != selectedIndex
+        }()
+
+        // Reset page view controller to current valid index.
+        // Keep transition animated when selection changed with tab structure mutation.
+        updatePageSelection(animated: shouldAnimateSelectionTransition)
 
         // Update current tab
         reloadCurrentTab()
@@ -1354,6 +1380,7 @@ final class MessageListViewController: UIViewController {
     private var pendingAppearAnimationIds: Set<UUID> = []
     private var isAnimatingFirstMessage = false
     private var isPrewarmed = false
+    private var selectionModeExitAnimationDeadline: CFTimeInterval = 0
 
     // Embedded search tabs for search tab
     private var searchTabsHostingController: UIHostingController<SearchTabsView>?
@@ -1579,8 +1606,7 @@ final class MessageListViewController: UIViewController {
                 let oldMsg = sortedMessages[index]
                 // Check if content that affects height has changed
                 if oldMsg.content != newMsg.content ||
-                   oldMsg.todoItems?.count != newMsg.todoItems?.count ||
-                   oldMsg.hasReminder != newMsg.hasReminder {
+                   oldMsg.todoItems?.count != newMsg.todoItems?.count {
                     heightCache.removeValue(forKey: newMsg.id)
                 }
             }
@@ -1603,12 +1629,63 @@ final class MessageListViewController: UIViewController {
         } else {
             // Check if this is a simple insertion of new messages at the beginning
             let oldIdSet = Set(oldIds)
+            let newIdSet = Set(newIds)
             let newMessageIds = newIds.filter { !oldIdSet.contains($0) }
+            let removedMessageIds = oldIds.filter { !newIdSet.contains($0) }
+            let isSimpleDeletion = !removedMessageIds.isEmpty &&
+                                   newMessageIds.isEmpty &&
+                                   oldIds.filter({ newIdSet.contains($0) }).elementsEqual(newIds)
             let isSimpleInsertion = !newMessageIds.isEmpty &&
                                     oldIdSet.subtracting(Set(newIds)).isEmpty &&
                                     newIds.dropFirst(newMessageIds.count).elementsEqual(oldIds)
 
-            if isSimpleInsertion && !sortedMessages.isEmpty {
+            if isSimpleDeletion {
+                let removedIdSet = Set(removedMessageIds)
+                let deleteIndexPaths = oldIds.enumerated().compactMap { index, id in
+                    removedIdSet.contains(id) ? IndexPath(row: index, section: 0) : nil
+                }
+
+                let visibleCellsToAnimate: [(cell: UITableViewCell, transform: CGAffineTransform)] = deleteIndexPaths.compactMap { indexPath in
+                    guard let cell = self.tableView.cellForRow(at: indexPath) else { return nil }
+                    return (cell, cell.transform)
+                }
+
+                let performDeletion = {
+                    self.sortedMessages = newMessages
+                    self.tableView.performBatchUpdates({
+                        self.tableView.deleteRows(at: deleteIndexPaths, with: .none)
+                    }) { _ in
+                        for item in visibleCellsToAnimate {
+                            item.cell.isHidden = false
+                            item.cell.alpha = 1
+                            item.cell.transform = item.transform
+                        }
+                        if self.sortedMessages.isEmpty && !self.isSearchTab {
+                            UIView.performWithoutAnimation {
+                                self.tableView.reloadData()
+                            }
+                        }
+                    }
+                }
+
+                guard !visibleCellsToAnimate.isEmpty else {
+                    performDeletion()
+                    return
+                }
+
+                UIView.animate(withDuration: 0.16, delay: 0, options: [.curveEaseOut]) {
+                    for item in visibleCellsToAnimate {
+                        item.cell.alpha = 0
+                        item.cell.transform = item.transform.scaledBy(x: 0.9, y: 0.9)
+                    }
+                } completion: { _ in
+                    for item in visibleCellsToAnimate {
+                        // Keep removed cells hidden during table re-layout to avoid ghost reappearance.
+                        item.cell.isHidden = true
+                    }
+                    performDeletion()
+                }
+            } else if isSimpleInsertion && !sortedMessages.isEmpty {
                 // New messages added at the top (row 0 in inverted table = newest)
                 // Mark these messages for appear animation (will be applied in cellForRowAt)
                 pendingAppearAnimationIds = Set(newMessageIds)
@@ -1831,9 +1908,17 @@ final class MessageListViewController: UIViewController {
     // MARK: - Selection Mode
 
     func updateSelectionMode(_ enabled: Bool) {
+        let wasEnabled = isSelectionMode
         isSelectionMode = enabled
         // Disable keyboard dismiss tap in selection mode so cell taps work
         dismissKeyboardTapGesture.isEnabled = !enabled
+        if wasEnabled && !enabled {
+            // Keep a short window so freshly reloaded cells can also animate
+            // from selection layout to normal width after bulk operations.
+            selectionModeExitAnimationDeadline = CACurrentMediaTime() + 0.35
+        } else if enabled {
+            selectionModeExitAnimationDeadline = 0
+        }
 
         for cell in tableView.visibleCells {
             if let messageCell = cell as? MessageTableCell {
@@ -1925,7 +2010,14 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
 
         // Selection mode
-        cell.setSelectionMode(isSelectionMode, animated: false)
+        let shouldAnimateSelectionExit =
+            !isSelectionMode && CACurrentMediaTime() < selectionModeExitAnimationDeadline
+        if shouldAnimateSelectionExit {
+            cell.setSelectionMode(true, animated: false)
+            cell.setSelectionMode(false, animated: true)
+        } else {
+            cell.setSelectionMode(isSelectionMode, animated: false)
+        }
         cell.setSelected(selectedMessageIds.contains(message.id))
         cell.onSelectionToggle = { [weak self] selected in
             self?.onToggleMessageSelection?(message.id, selected)
@@ -1949,10 +2041,15 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         // Ensure selection mode is correct for pre-fetched cells that missed updateSelectionMode
         guard let messageCell = cell as? MessageTableCell,
               indexPath.row < sortedMessages.count else { return }
-        messageCell.setSelectionMode(isSelectionMode, animated: false)
-        if isSelectionMode {
-            messageCell.setSelected(selectedMessageIds.contains(sortedMessages[indexPath.row].id))
+        let shouldAnimateSelectionExit =
+            !isSelectionMode && CACurrentMediaTime() < selectionModeExitAnimationDeadline
+        if shouldAnimateSelectionExit {
+            messageCell.setSelectionMode(true, animated: false)
+            messageCell.setSelectionMode(false, animated: true)
+        } else {
+            messageCell.setSelectionMode(isSelectionMode, animated: false)
         }
+        messageCell.setSelected(selectedMessageIds.contains(sortedMessages[indexPath.row].id))
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -2001,8 +2098,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         if message.isTodoList, let items = message.todoItems {
             let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             height += todoHeight
-            // Extra space for reminder badge
-            if message.hasReminder { height += 8 }
             return max(height, 50)
         }
 
@@ -2041,9 +2136,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 height += 10 + ceil(textHeight) + 10
             }
         }
-
-        // Extra space for reminder badge
-        if message.hasReminder { height += 8 }
 
         return max(height, 50)  // Minimum height
     }

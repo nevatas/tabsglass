@@ -7,6 +7,7 @@
 
 import UIKit
 import AVKit
+import SwiftUI
 
 // MARK: - Gallery Media Item
 
@@ -46,8 +47,8 @@ final class GalleryViewController: UIViewController {
     private let dismissScrollView = UIScrollView()
     private let contentView = UIView()
     private var pageViewController: UIPageViewController!
-    private let closeButton = UIButton(type: .system)
-    private let pageControl = UIPageControl()
+    private var closeButtonHost: UIHostingController<GalleryCloseButtonView>!
+    private var pageIndicatorHost: UIHostingController<GalleryPageIndicatorView>?
 
     // State
     private var isZoomed = false
@@ -161,44 +162,47 @@ final class GalleryViewController: UIViewController {
     }
 
     private func setupCloseButton() {
-        closeButton.setImage(UIImage(systemName: "xmark"), for: .normal)
-        closeButton.tintColor = .white
-        closeButton.backgroundColor = UIColor.black.withAlphaComponent(0.4)
-        closeButton.layer.cornerRadius = 16
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-        view.addSubview(closeButton)
+        let closeView = GalleryCloseButtonView { [weak self] in
+            self?.dismissGallery()
+        }
+        let hosting = UIHostingController(rootView: closeView)
+        hosting.view.backgroundColor = .clear
+        hosting.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(hosting)
+        view.addSubview(hosting.view)
+        hosting.didMove(toParent: self)
+        closeButtonHost = hosting
 
         NSLayoutConstraint.activate([
-            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            closeButton.widthAnchor.constraint(equalToConstant: 32),
-            closeButton.heightAnchor.constraint(equalToConstant: 32)
+            hosting.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            hosting.view.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            hosting.view.widthAnchor.constraint(equalToConstant: 44),
+            hosting.view.heightAnchor.constraint(equalToConstant: 44)
         ])
     }
 
     private func setupPageControl() {
         guard mediaItems.count > 1 else { return }
 
-        pageControl.numberOfPages = mediaItems.count
-        pageControl.currentPage = currentIndex
-        pageControl.currentPageIndicatorTintColor = .white
-        pageControl.pageIndicatorTintColor = UIColor.white.withAlphaComponent(0.3)
-        pageControl.translatesAutoresizingMaskIntoConstraints = false
-        pageControl.isUserInteractionEnabled = false
-        view.addSubview(pageControl)
+        let indicatorView = GalleryPageIndicatorView(
+            numberOfPages: mediaItems.count,
+            currentPage: currentIndex
+        )
+        let hosting = UIHostingController(rootView: indicatorView)
+        hosting.view.backgroundColor = .clear
+        hosting.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(hosting)
+        view.addSubview(hosting.view)
+        hosting.didMove(toParent: self)
+        pageIndicatorHost = hosting
 
         NSLayoutConstraint.activate([
-            pageControl.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            pageControl.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16)
+            hosting.view.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            hosting.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16)
         ])
     }
 
     // MARK: - Actions
-
-    @objc private func closeTapped() {
-        dismissGallery()
-    }
 
     private func dismissGallery() {
         onDismiss?()
@@ -236,10 +240,10 @@ final class GalleryViewController: UIViewController {
     }
 
     private func toggleUI() {
-        let newAlpha: CGFloat = closeButton.alpha > 0.5 ? 0 : 1
+        let newAlpha: CGFloat = closeButtonHost.view.alpha > 0.5 ? 0 : 1
         UIView.animate(withDuration: 0.2) {
-            self.closeButton.alpha = newAlpha
-            self.pageControl.alpha = newAlpha
+            self.closeButtonHost.view.alpha = newAlpha
+            self.pageIndicatorHost?.view.alpha = newAlpha
         }
     }
 }
@@ -296,8 +300,8 @@ extension GalleryViewController: UIScrollViewDelegate {
         UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, animations: {
             self.dismissScrollView.contentOffset.y = self.centerOffset + direction * self.view.bounds.height
             self.backgroundView.alpha = 0
-            self.closeButton.alpha = 0
-            self.pageControl.alpha = 0
+            self.closeButtonHost.view.alpha = 0
+            self.pageIndicatorHost?.view.alpha = 0
         }) { _ in
             self.dismissGallery()
         }
@@ -328,7 +332,10 @@ extension GalleryViewController: UIPageViewControllerDelegate {
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
         guard completed, let currentVC = pageViewController.viewControllers?.first as? GalleryPageProtocol else { return }
         currentIndex = currentVC.index
-        pageControl.currentPage = currentIndex
+        pageIndicatorHost?.rootView = GalleryPageIndicatorView(
+            numberOfPages: mediaItems.count,
+            currentPage: currentIndex
+        )
 
         // Pause video on previous page if it was a video
         for vc in previousViewControllers {
@@ -667,35 +674,36 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
             playPauseButton.heightAnchor.constraint(equalToConstant: 70)
         ])
 
-        // Scrubber container (above page indicator, no background)
+        // Scrubber container with Liquid Glass background
         scrubberContainer.translatesAutoresizingMaskIntoConstraints = false
         controlsContainer.addSubview(scrubberContainer)
 
+        let scrubberGlass = UIVisualEffectView(effect: UIGlassEffect())
+        scrubberGlass.translatesAutoresizingMaskIntoConstraints = false
+        scrubberGlass.cornerConfiguration = .capsule()
+        scrubberContainer.insertSubview(scrubberGlass, at: 0)
+
         NSLayoutConstraint.activate([
-            scrubberContainer.leadingAnchor.constraint(equalTo: controlsContainer.leadingAnchor),
-            scrubberContainer.trailingAnchor.constraint(equalTo: controlsContainer.trailingAnchor),
-            scrubberContainer.bottomAnchor.constraint(equalTo: controlsContainer.safeAreaLayoutGuide.bottomAnchor, constant: -50),
-            scrubberContainer.heightAnchor.constraint(equalToConstant: 44)
+            scrubberContainer.leadingAnchor.constraint(equalTo: controlsContainer.leadingAnchor, constant: 12),
+            scrubberContainer.trailingAnchor.constraint(equalTo: controlsContainer.trailingAnchor, constant: -12),
+            scrubberContainer.bottomAnchor.constraint(equalTo: controlsContainer.safeAreaLayoutGuide.bottomAnchor, constant: -64),
+            scrubberContainer.heightAnchor.constraint(equalToConstant: 44),
+            scrubberGlass.leadingAnchor.constraint(equalTo: scrubberContainer.leadingAnchor),
+            scrubberGlass.trailingAnchor.constraint(equalTo: scrubberContainer.trailingAnchor),
+            scrubberGlass.topAnchor.constraint(equalTo: scrubberContainer.topAnchor),
+            scrubberGlass.bottomAnchor.constraint(equalTo: scrubberContainer.bottomAnchor)
         ])
 
-        // Time labels with shadow for visibility
+        // Time labels
         currentTimeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        currentTimeLabel.textColor = .white
+        currentTimeLabel.textColor = .label
         currentTimeLabel.text = "0:00"
         currentTimeLabel.translatesAutoresizingMaskIntoConstraints = false
-        currentTimeLabel.layer.shadowColor = UIColor.black.cgColor
-        currentTimeLabel.layer.shadowOffset = .zero
-        currentTimeLabel.layer.shadowRadius = 4
-        currentTimeLabel.layer.shadowOpacity = 0.8
 
         remainingTimeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        remainingTimeLabel.textColor = .white
+        remainingTimeLabel.textColor = .label
         remainingTimeLabel.text = "-0:00"
         remainingTimeLabel.translatesAutoresizingMaskIntoConstraints = false
-        remainingTimeLabel.layer.shadowColor = UIColor.black.cgColor
-        remainingTimeLabel.layer.shadowOffset = .zero
-        remainingTimeLabel.layer.shadowRadius = 4
-        remainingTimeLabel.layer.shadowOpacity = 0.8
 
         scrubberContainer.addSubview(currentTimeLabel)
         scrubberContainer.addSubview(remainingTimeLabel)
@@ -704,8 +712,8 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
         scrubber.minimumValue = 0
         scrubber.maximumValue = 1
         scrubber.value = 0
-        scrubber.minimumTrackTintColor = .white
-        scrubber.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.3)
+        scrubber.minimumTrackTintColor = .label
+        scrubber.maximumTrackTintColor = UIColor.label.withAlphaComponent(0.3)
         scrubber.translatesAutoresizingMaskIntoConstraints = false
         scrubber.addTarget(self, action: #selector(scrubberValueChanged), for: .valueChanged)
         scrubber.addTarget(self, action: #selector(scrubberTouchDown), for: .touchDown)
@@ -713,7 +721,7 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
 
         // Custom thumb (smaller, like Telegram)
         let thumbSize: CGFloat = 12
-        let thumbImage = createThumbImage(size: thumbSize, color: .white)
+        let thumbImage = createThumbImage(size: thumbSize, color: .label)
         scrubber.setThumbImage(thumbImage, for: .normal)
         scrubber.setThumbImage(thumbImage, for: .highlighted)
 
@@ -1024,5 +1032,41 @@ final class GalleryCloseTransition: NSObject, UIViewControllerAnimatedTransition
             fromView.removeFromSuperview()
             transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
         }
+    }
+}
+
+// MARK: - Gallery Glass Controls (SwiftUI)
+
+struct GalleryCloseButtonView: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Image(systemName: "xmark")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+            .onTapGesture { onTap() }
+            .glassEffect(.regular.interactive(), in: .circle)
+    }
+}
+
+struct GalleryPageIndicatorView: View {
+    let numberOfPages: Int
+    let currentPage: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<numberOfPages, id: \.self) { index in
+                let isActive = index == currentPage
+                Circle()
+                    .foregroundStyle(isActive ? AnyShapeStyle(.foreground) : AnyShapeStyle(.quaternary))
+                    .frame(width: isActive ? 8 : 7, height: isActive ? 8 : 7)
+                    .animation(.easeInOut(duration: 0.2), value: currentPage)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .glassEffect(.regular, in: .capsule)
     }
 }

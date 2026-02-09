@@ -9,8 +9,9 @@ Messenger-style notes app with tabs. SwiftUI + UIKit hybrid, SwiftData, iOS 26+.
 
 ```
 tabsglass/
-├── tabsglassApp.swift      # App entry, warmup (keyboard, glass)
-├── ContentView.swift       # Root view
+├── tabsglassApp.swift      # App entry, warmup (glass)
+├── ContentView.swift       # Root view (ZStack: main + paywall overlay)
+├── Views/PaywallView.swift # Paywall screen (Taby Unlimited)
 ├── Models/
 │   ├── Tab.swift           # Tab model (SwiftData)
 │   ├── Message.swift       # Message model (SwiftData)
@@ -107,9 +108,10 @@ Virtual tab — messages with `tabId = nil`.
 ## View Architecture
 
 ```
-ContentView
+ContentView (ZStack: MainContainerView always mounted, paywall/onboarding overlay on top)
 └── MainContainerView (state, CRUD)
     ├── TabBarView (Liquid Glass tabs)
+    │   ├── Header buttons (onTapGesture + .glassEffect, NOT Button+.buttonStyle(.glass))
     │   └── TelegramTabBar (horizontal scroll, selection indicator)
     └── UnifiedChatView (UIViewControllerRepresentable)
         └── UnifiedChatViewController
@@ -121,6 +123,8 @@ ContentView
             ├── SwiftUIComposerContainer (message input)
             └── SearchInputContainer (search input)
 ```
+
+**ContentView pattern:** Use ZStack with MainContainerView always in hierarchy. Paywall/onboarding layers on top. This ensures all GeometryReaders measure frames and UIKit components initialize before overlays dismiss. Never use if/else to swap between paywall and main content — causes visual glitches (tab bar indicator jumps from .zero).
 
 ## Tab Navigation
 
@@ -187,6 +191,7 @@ Each theme provides:
 - Manages composer and search input visibility
 - Edge swipe gesture to Search
 - Keyboard handling with constraints
+- **Important:** `updatePageSelection(animated: true)` disables `isUserInteractionEnabled` during programmatic transitions to prevent user from interrupting the animation and causing tab bar / content desync
 
 ## Liquid Glass (iOS 26+)
 
@@ -207,6 +212,10 @@ GlassEffectContainer {
 ```
 
 **Note:** `.prominent` does NOT exist — use `.regular.tint()` for less transparency.
+
+**Circular glass buttons:** Do NOT use `Button` + `.buttonStyle(.glass)` — the glass chrome extends beyond the button's hit area, making edges untappable. Instead use `onTapGesture` + `.glassEffect(.regular.interactive(), in: .circle)` with `.contentShape(Circle())` for full tap coverage.
+
+**Icon colors:** Use `themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black)` — NOT `.accentColor` (which is system blue). The `accentColor` property is `Color?` (nil for system/light/dark themes).
 
 ## Localization
 
@@ -237,9 +246,9 @@ Located in `share/` directory. Shares App Group with main app for:
 
 ## Performance
 
-### Warmup (tabsglassApp.swift)
-- `KeyboardWarmer` — pre-initializes keyboard
-- `GlassEffectWarmer` — pre-renders glass effects
+### Warmup
+- `KeyboardWarmer` — pre-initializes keyboard (called in ContentView on MainContainerView.onAppear, warms up behind paywall)
+- `GlassEffectWarmer` — pre-renders glass effects (called in tabsglassApp.swift init)
 
 ### ImageCache
 - `NSCache` with size limit

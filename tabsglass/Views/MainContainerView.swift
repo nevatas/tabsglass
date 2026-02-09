@@ -149,43 +149,44 @@ struct MainContainerView: View {
             chatView
             .ignoresSafeArea(.keyboard)
 
-            // Header layer (floating on top) - hidden in selection mode
-            if !isSelectionMode {
-                TabBarView(
-                    tabs: tabs,
-                    selectedIndex: $selectedTabIndex,
-                    switchFraction: $switchFraction,
-                    tabsOffset: 0,
-                    tabsOpacity: tabBarOpacity,
-                    onAddTap: {
-                        newTabTitle = ""
-                        showNewTabAlert = true
-                    },
-                    onMenuTap: { showSettings = true },
-                    onRenameTab: { tab in
-                        tabToRename = tab
-                        renameTabTitle = tab.title
-                        showRenameAlert = true
-                    },
-                    onRenameInbox: {
-                        renameInboxTitle = AppSettings.shared.inboxTitle
-                        showRenameInboxAlert = true
-                    },
-                    onReorderTabs: {
-                        showReorderTabs = true
-                    },
-                    onDeleteTab: { tab in
-                        tabToDelete = tab
-                        showDeleteAlert = true
-                    },
-                    onGoToInbox: {
-                        withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
-                            selectedTabIndex = 1  // Go to Inbox
-                        }
+            // Header layer (floating on top).
+            // Keep it mounted to avoid UIKit tab bar re-creation glitches after selection mode.
+            TabBarView(
+                tabs: tabs,
+                selectedIndex: $selectedTabIndex,
+                switchFraction: $switchFraction,
+                tabsOffset: 0,
+                tabsOpacity: tabBarOpacity,
+                onAddTap: {
+                    newTabTitle = ""
+                    showNewTabAlert = true
+                },
+                onMenuTap: { showSettings = true },
+                onRenameTab: { tab in
+                    tabToRename = tab
+                    renameTabTitle = tab.title
+                    showRenameAlert = true
+                },
+                onRenameInbox: {
+                    renameInboxTitle = AppSettings.shared.inboxTitle
+                    showRenameInboxAlert = true
+                },
+                onReorderTabs: {
+                    showReorderTabs = true
+                },
+                onDeleteTab: { tab in
+                    tabToDelete = tab
+                    showDeleteAlert = true
+                },
+                onGoToInbox: {
+                    withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                        selectedTabIndex = 1  // Go to Inbox
                     }
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
+                }
+            )
+            .offset(y: isSelectionMode ? -24 : 0)
+            .opacity(isSelectionMode ? 0 : 1)
+            .allowsHitTesting(!isSelectionMode)
 
             // Selection UI - shown in selection mode
             if isSelectionMode {
@@ -290,9 +291,7 @@ struct MainContainerView: View {
         .onChange(of: selectedTabIndex) { _, _ in
             // Reset fraction when tab changes (from tap or swipe completion)
             if abs(switchFraction) > 0.01 {
-                withAnimation(.spring(duration: 0.2)) {
-                    switchFraction = 0
-                }
+                switchFraction = 0
             }
         }
         .onChange(of: newTabTitle) { _, newValue in
@@ -763,11 +762,14 @@ struct MainContainerView: View {
     }
 
     private func deleteSelectedMessages() {
-        let messagesToDelete = allMessages.filter { selectedMessageIds.contains($0.id) }
+        let idsToDelete = selectedMessageIds
+        let messagesToDelete = allMessages.filter { idsToDelete.contains($0.id) }
         guard !messagesToDelete.isEmpty else {
             exitSelectionMode()
             return
         }
+        // Start exit animation immediately so remaining rows can expand while deletion animates.
+        exitSelectionMode()
 
         // Clean up previous deleted message's media (if any)
         if let previousDeleted = DeletedMessageStore.shared.lastDeleted {
@@ -792,7 +794,6 @@ struct MainContainerView: View {
         }
         try? modelContext.save()
         reloadTrigger += 1
-        exitSelectionMode()
     }
 
     private func moveSelectedMessages(to targetTabId: UUID?) {

@@ -10,7 +10,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showPaywall = false
+    @State private var showPaywall = true
     private var themeManager: ThemeManager { ThemeManager.shared }
 
     private var backgroundColor: Color {
@@ -27,11 +27,14 @@ struct ContentView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
+            MainContainerView()
+                .onAppear {
+                    KeyboardWarmer.shared.warmUp()
+                }
+
             if showPaywall {
                 PaywallView(isPresented: $showPaywall)
-            } else {
-                MainContainerView()
             }
         }
         .background(backgroundColor.ignoresSafeArea())

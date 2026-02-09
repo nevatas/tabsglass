@@ -131,7 +131,7 @@
 
 "tips.title" = "Consejos";
 "tips.edge_swipe" = "Desliza desde el borde izquierdo para abrir Búsqueda desde cualquier pestaña";
-"tips.shake_undo" = "¿Eliminaste una nota por accidente? Agita tu teléfono para recuperarla";
+"tips.shake_undo" = "¿Eliminaste una nota por accidente?\nAgita tu teléfono para recuperarla";
 "tips.formatting" = "Selecciona texto en el campo de entrada para aplicar Negrita, Cursiva y más";
 
 // MARK: - Search
