@@ -235,6 +235,8 @@ final class UnifiedChatViewController: UIViewController {
     private var pageScrollView: UIScrollView?
     private var isUserSwiping: Bool = false
     private var pendingAdjacentPreloadAfterSwipe = false
+    private var didStartInteractivePageSwipe = false
+    private let tabSwipeFeedbackGenerator = UISelectionFeedbackGenerator()
 
     // MARK: - Input Container (Auto Layout)
     private var hasAutoFocused: Bool = false
@@ -387,6 +389,7 @@ final class UnifiedChatViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .clear
         view.clipsToBounds = false
+        tabSwipeFeedbackGenerator.prepare()
         setupPageViewController()
         setupInputView()
         setupSearchInput()
@@ -1365,6 +1368,12 @@ extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewC
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
         guard completed,
               let currentVC = pageViewController.viewControllers?.first as? MessageListViewController else { return }
+        let previousIndex = (previousViewControllers.first as? MessageListViewController)?.pageIndex ?? selectedIndex
+
+        if didStartInteractivePageSwipe, previousIndex != currentVC.pageIndex {
+            tabSwipeFeedbackGenerator.selectionChanged()
+            tabSwipeFeedbackGenerator.prepare()
+        }
 
         // IMPORTANT: Reset switchFraction BEFORE changing selectedIndex
         // This prevents the tab bar indicator from jumping to wrong position
@@ -1404,7 +1413,9 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
         isUserSwiping = true
+        didStartInteractivePageSwipe = true
         lastReportedFraction = 0
+        tabSwipeFeedbackGenerator.prepare()
 
         // Ensure all page containers have clipping disabled (for reminder badges)
         for subview in scrollView.subviews {
@@ -1442,6 +1453,7 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
         isUserSwiping = false
+        didStartInteractivePageSwipe = false
         lastReportedFraction = 0
         onSwitchFraction?(0)  // Reset fraction when swipe completes
         if pendingAdjacentPreloadAfterSwipe {
@@ -1453,6 +1465,7 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
         guard scrollView === pageScrollView else { return }
         if !decelerate {
             isUserSwiping = false
+            didStartInteractivePageSwipe = false
             lastReportedFraction = 0
             onSwitchFraction?(0)  // Reset fraction when drag ends without deceleration
             if pendingAdjacentPreloadAfterSwipe {
