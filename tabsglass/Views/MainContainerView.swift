@@ -294,9 +294,33 @@ struct MainContainerView: View {
                 switchFraction = 0
             }
         }
-        .onChange(of: newTabTitle) { _, newValue in
-            if newValue.count > 24 {
-                newTabTitle = String(newValue.prefix(24))
+        .onChange(of: newTabTitle) { oldValue, newValue in
+            var corrected = newValue
+
+            // Auto-space after leading emoji
+            if oldValue.isEmpty,
+               corrected.count == 1,
+               let first = corrected.first,
+               first.isEmoji {
+                corrected += " "
+            }
+
+            // Auto-capitalize first letter after "emoji "
+            if corrected.count >= 3,
+               let first = corrected.first, first.isEmoji,
+               corrected.dropFirst().first == " " {
+                let rest = corrected.dropFirst(2)
+                if let letter = rest.first, letter.isLowercase {
+                    corrected = String(corrected.prefix(2)) + letter.uppercased() + rest.dropFirst()
+                }
+            }
+
+            if corrected.count > 24 {
+                corrected = String(corrected.prefix(24))
+            }
+
+            if corrected != newValue {
+                newTabTitle = corrected
             }
         }
         .onChange(of: renameTabTitle) { _, newValue in
@@ -812,6 +836,18 @@ struct MainContainerView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
             TabsSync.saveTabs(Array(tabs))
         }
+    }
+}
+
+// MARK: - Character Emoji Detection
+
+extension Character {
+    var isEmoji: Bool {
+        guard let firstScalar = unicodeScalars.first else { return false }
+        // Single emoji scalar (exclude ASCII digits/symbols that technically have isEmoji)
+        if firstScalar.properties.isEmoji && firstScalar.value > 0x238C { return true }
+        // Combined emoji (flags, skin tones, ZWJ sequences)
+        return unicodeScalars.count > 1 && firstScalar.properties.isEmoji
     }
 }
 
