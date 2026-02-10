@@ -2031,7 +2031,7 @@ private struct TabContextMenuInteractionLayer: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate {
         private static let sourcePreviewIdentifier = "tab-context-source" as NSString
-        private let menuAnchorYOffset: CGFloat = 12
+        private let menuAnchorYOffset: CGFloat = 4
         private let hapticGenerator = UIImpactFeedbackGenerator(style: .rigid)
         var parent: TabContextMenuInteractionLayer
         weak var tapRecognizer: UITapGestureRecognizer?
