@@ -31,7 +31,7 @@ struct FastTextField: UIViewRepresentable {
         textField.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
         textField.autocorrectionType = .default
         textField.spellCheckingType = .default
-        textField.returnKeyType = .search
+        textField.returnKeyType = .done
         textField.clearButtonMode = .never // We handle clear button ourselves
         return textField
     }

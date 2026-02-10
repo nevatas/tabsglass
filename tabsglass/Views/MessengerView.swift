@@ -1265,10 +1265,21 @@ final class SearchResultCell: UITableViewCell {
     private let tabNameLabel = UILabel()
     private let messageLabel = UILabel()
     private let thumbnailStack = UIStackView()
-    private let dividerView = UIView()
+
+    private let glassBackgroundView: UIVisualEffectView = {
+        let effect = UIGlassEffect()
+        let view = UIVisualEffectView(effect: effect)
+        view.layer.cornerRadius = 16
+        view.clipsToBounds = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
 
     private static let thumbnailSize: CGFloat = 36
     private static let maxVisibleThumbnails = 5
+    private static let cardHorizontalInset: CGFloat = 12
+    private static let cardVerticalInset: CGFloat = 4
+    private static let contentPadding: CGFloat = 14
 
     var onTap: (() -> Void)?
 
@@ -1281,7 +1292,6 @@ final class SearchResultCell: UITableViewCell {
     private var labelBottomWithMedia: NSLayoutConstraint!
     private var thumbnailStackHeight: NSLayoutConstraint!
     private var labelTopNormal: NSLayoutConstraint!
-    private var labelTopCompact: NSLayoutConstraint!
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -1316,11 +1326,15 @@ final class SearchResultCell: UITableViewCell {
         backgroundColor = .clear
         selectionStyle = .none
 
+        // Glass card background
+        contentView.addSubview(glassBackgroundView)
+        let glassContent = glassBackgroundView.contentView
+
         // Tab name label
         tabNameLabel.font = .systemFont(ofSize: 13, weight: .medium)
         tabNameLabel.textColor = ThemeManager.shared.currentTheme.placeholderColor
         tabNameLabel.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(tabNameLabel)
+        glassContent.addSubview(tabNameLabel)
 
         // Message text label
         messageLabel.font = .systemFont(ofSize: 16)
@@ -1328,43 +1342,39 @@ final class SearchResultCell: UITableViewCell {
         messageLabel.numberOfLines = 3
         messageLabel.lineBreakMode = .byTruncatingTail
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(messageLabel)
+        glassContent.addSubview(messageLabel)
 
         // Thumbnail horizontal stack
         thumbnailStack.axis = .horizontal
         thumbnailStack.spacing = 6
         thumbnailStack.alignment = .center
         thumbnailStack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(thumbnailStack)
-
-        // Bottom divider
-        dividerView.backgroundColor = .separator.withAlphaComponent(0.15)
-        dividerView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(dividerView)
+        glassContent.addSubview(thumbnailStack)
 
         // Create dynamic constraints
-        labelBottomWithoutMedia = messageLabel.bottomAnchor.constraint(equalTo: dividerView.topAnchor, constant: -12)
+        labelBottomWithoutMedia = messageLabel.bottomAnchor.constraint(equalTo: glassContent.bottomAnchor, constant: -12)
         labelBottomWithMedia = thumbnailStack.topAnchor.constraint(equalTo: messageLabel.bottomAnchor, constant: 8)
         thumbnailStackHeight = thumbnailStack.heightAnchor.constraint(equalToConstant: Self.thumbnailSize)
         labelTopNormal = messageLabel.topAnchor.constraint(equalTo: tabNameLabel.bottomAnchor, constant: 4)
-        labelTopCompact = messageLabel.topAnchor.constraint(equalTo: tabNameLabel.bottomAnchor, constant: 0)
 
         NSLayoutConstraint.activate([
-            tabNameLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            tabNameLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            tabNameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            // Glass card margins
+            glassBackgroundView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Self.cardVerticalInset),
+            glassBackgroundView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Self.cardHorizontalInset),
+            glassBackgroundView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Self.cardHorizontalInset),
+            glassBackgroundView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -Self.cardVerticalInset),
+
+            // Content inside glass
+            tabNameLabel.topAnchor.constraint(equalTo: glassContent.topAnchor, constant: 10),
+            tabNameLabel.leadingAnchor.constraint(equalTo: glassContent.leadingAnchor, constant: Self.contentPadding),
+            tabNameLabel.trailingAnchor.constraint(equalTo: glassContent.trailingAnchor, constant: -Self.contentPadding),
 
             labelTopNormal,
-            messageLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            messageLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            messageLabel.leadingAnchor.constraint(equalTo: glassContent.leadingAnchor, constant: Self.contentPadding),
+            messageLabel.trailingAnchor.constraint(equalTo: glassContent.trailingAnchor, constant: -Self.contentPadding),
 
-            thumbnailStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            thumbnailStack.bottomAnchor.constraint(equalTo: dividerView.topAnchor, constant: -12),
-
-            dividerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            dividerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            dividerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            dividerView.heightAnchor.constraint(equalToConstant: 0.5),
+            thumbnailStack.leadingAnchor.constraint(equalTo: glassContent.leadingAnchor, constant: Self.contentPadding),
+            thumbnailStack.bottomAnchor.constraint(equalTo: glassContent.bottomAnchor, constant: -12),
         ])
 
         // Tap gesture
@@ -1394,10 +1404,6 @@ final class SearchResultCell: UITableViewCell {
             messageLabel.numberOfLines = 5
             messageLabel.attributedText = formatTodoList(title: message.todoTitle, items: todoItems)
 
-            // Compact spacing for todo lists
-            labelTopNormal.isActive = false
-            labelTopCompact.isActive = true
-
             // No thumbnails for task lists
             labelBottomWithMedia.isActive = false
             thumbnailStackHeight.isActive = false
@@ -1406,9 +1412,7 @@ final class SearchResultCell: UITableViewCell {
             return
         }
 
-        // Normal spacing and line limit for regular messages
-        labelTopCompact.isActive = false
-        labelTopNormal.isActive = true
+        // Normal line limit for regular messages
         messageLabel.numberOfLines = 3
 
         // Set text for regular messages
@@ -1613,8 +1617,9 @@ final class SearchResultCell: UITableViewCell {
 
     /// Calculate cell height for a message
     static func calculateHeight(for message: Message, maxWidth: CGFloat) -> CGFloat {
-        let textWidth = maxWidth - 32 // 16px padding on each side
-        var height: CGFloat = 12 // top padding
+        let textWidth = maxWidth - (cardHorizontalInset * 2) - (contentPadding * 2)
+        var height: CGFloat = cardVerticalInset // top card margin
+        height += 10 // top padding inside card
 
         // Tab name label height
         height += 16 // ~13pt font + some padding
@@ -1656,8 +1661,8 @@ final class SearchResultCell: UITableViewCell {
             }
         }
 
-        height += 12 // bottom padding before divider
-        height += 0.5 // divider
+        height += 12 // bottom padding inside card
+        height += cardVerticalInset // bottom card margin
 
         return height
     }
