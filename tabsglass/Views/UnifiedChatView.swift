@@ -2330,6 +2330,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
     func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
         guard !sortedMessages.isEmpty else { return nil }
+        // No context menu for search results
+        if isSearchTab { return nil }
 
         let message = sortedMessages[indexPath.row]
 
