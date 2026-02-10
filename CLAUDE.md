@@ -9,30 +9,32 @@ Messenger-style notes app with tabs. SwiftUI + UIKit hybrid, SwiftData, iOS 26+.
 
 ```
 tabsglass/
-├── tabsglassApp.swift      # App entry, warmup (glass)
+├── tabsglassApp.swift      # App entry, GlassEffectWarmer, KeyboardWarmer
 ├── ContentView.swift       # Root view (ZStack: main + paywall overlay)
-├── Views/PaywallView.swift # Paywall screen (Taby Unlimited)
 ├── Models/
 │   ├── Tab.swift           # Tab model (SwiftData)
 │   ├── Message.swift       # Message model (SwiftData)
 │   └── ExportableModels.swift  # Codable versions for export
 ├── Views/
-│   ├── MainContainerView.swift     # State orchestrator, CRUD
-│   ├── TabBarView.swift            # Telegram-style tab bar (Liquid Glass)
-│   ├── UnifiedChatView.swift       # UIPageViewController + composer
-│   ├── MessengerView.swift         # Message cells, composer UI
-│   ├── SearchInputView.swift       # Search field
-│   ├── SearchTabsView.swift        # Tab buttons on Search screen
+│   ├── MainContainerView.swift     # State orchestrator, CRUD, alerts/sheets
+│   ├── TabBarView.swift            # Telegram-style tab bar (Liquid Glass, UIKit engine)
+│   ├── UnifiedChatView.swift       # UIPageViewController + composer + message list
+│   ├── MessengerView.swift         # Message cells, composer UI, search result cells
+│   ├── SearchInputView.swift       # Search text field (UITextField wrapper)
+│   ├── SearchTabsView.swift        # Tab filter buttons on Search screen
 │   ├── FormattingTextView.swift    # Rich text editing (UITextView)
-│   ├── TodoBubbleView.swift        # Checklist rendering
+│   ├── TodoBubbleView.swift        # Checklist rendering in chat
 │   ├── MosaicLayout.swift          # Photo grid calculations
 │   ├── SettingsView.swift          # Settings screen
+│   ├── PaywallView.swift           # Paywall screen (Taby Unlimited)
 │   ├── TaskListSheet.swift         # Create/edit task list
 │   ├── EditMessageSheet.swift      # Edit message
 │   ├── ReminderSheet.swift         # Set reminder
 │   ├── MoveMessagesSheet.swift     # Move messages between tabs
-│   ├── SelectionActionBar.swift    # Bulk selection toolbar
-│   ├── GalleryViewController.swift # Full-screen photo viewer
+│   ├── SelectionActionBar.swift    # Bulk selection toolbar (Liquid Glass)
+│   ├── ExportProgressView.swift    # Export/import progress indicator
+│   ├── ImportPreviewView.swift     # Import preview with mode selection
+│   ├── GalleryViewController.swift # Full-screen photo viewer (Liquid Glass controls)
 │   └── VideoPlayerViewController.swift  # Video player
 ├── Services/
 │   ├── AppSettings.swift           # ThemeManager, AppTheme enum
@@ -65,6 +67,8 @@ tabsglass/
     var id: UUID
     var title: String
     var position: Int
+    var serverId: Int?        // Backend sync
+    var createdAt: Date
     @Relationship(deleteRule: .cascade) var messages: [Message]
 }
 ```
@@ -77,6 +81,8 @@ tabsglass/
     var tabId: UUID?              // nil = Inbox
     var position: Int
     var createdAt: Date
+    var serverId: Int?            // Backend sync
+    var sourceUrl: String?
 
     // Formatting
     var entities: [TextEntity]?   // bold, italic, links, code, spoiler
@@ -89,6 +95,7 @@ tabsglass/
     var videoAspectRatios: [Double]
     var videoDurations: [Double]
     var videoThumbnailFileNames: [String]
+    var mediaGroupId: String?
 
     // Tasks
     var todoItems: [TodoItem]?
@@ -99,6 +106,11 @@ tabsglass/
     var reminderDate: Date?
     var reminderRepeatInterval: ReminderRepeatInterval?
     var notificationId: String?
+
+    // Computed
+    var hasReminder: Bool { ... }
+    var hasMedia: Bool { ... }
+    var totalMediaCount: Int { ... }
 }
 ```
 
@@ -108,20 +120,25 @@ Virtual tab — messages with `tabId = nil`.
 ## View Architecture
 
 ```
-ContentView (ZStack: MainContainerView always mounted, paywall/onboarding overlay on top)
-└── MainContainerView (state, CRUD)
-    ├── TabBarView (Liquid Glass tabs)
-    │   ├── Header buttons (onTapGesture + .glassEffect, NOT Button+.buttonStyle(.glass))
-    │   └── TelegramTabBar (horizontal scroll, selection indicator)
+ContentView (ZStack: MainContainerView always mounted, paywall overlay on top)
+└── MainContainerView (state, CRUD, alerts/sheets)
+    ├── TabBarView (SwiftUI shell)
+    │   ├── Header: settings button + title + add button (glass circles)
+    │   └── TelegramTabBarV2 → TelegramTabBarEngineView (UIKit UIScrollView)
+    │       ├── TabLabelNode (UIHostingController per tab)
+    │       ├── TabContextMenuInteractionLayer (long press → context menu)
+    │       └── Glass capsule indicator (selection + morphing)
     └── UnifiedChatView (UIViewControllerRepresentable)
         └── UnifiedChatViewController
             ├── UIPageViewController (swipe between tabs)
-            │   └── MessageListViewController
+            │   └── MessageListViewController (one per visible tab)
             │       ├── UITableView (inverted for chat, normal for search)
-            │       ├── MessageTableCell / SearchResultCell
-            │       └── SearchTabsView (embedded, for search tab only)
-            ├── SwiftUIComposerContainer (message input)
-            └── SearchInputContainer (search input)
+            │       ├── MessageTableCell / SearchResultCell / EmptyTableCell
+            │       ├── TopFadeGradientView (search tab only)
+            │       └── SearchTabsView (embedded, search tab only)
+            ├── SwiftUIComposerContainer (message input, glass effect)
+            ├── SearchInputContainer (search input, glass capsule)
+            └── BottomFadeGradientView (fade above composer)
 ```
 
 **ContentView pattern:** Use ZStack with MainContainerView always in hierarchy. Paywall/onboarding layers on top. This ensures all GeometryReaders measure frames and UIKit components initialize before overlays dismiss. Never use if/else to swap between paywall and main content — causes visual glitches (tab bar indicator jumps from .zero).
@@ -133,65 +150,86 @@ ContentView (ZStack: MainContainerView always mounted, paywall/onboarding overla
 - `1` = Inbox (virtual)
 - `2+` = Real tabs
 
-**switchFraction:** `-1.0` to `1.0` during swipe for smooth animations.
+**switchFraction:** `-1.0` to `1.0` during swipe for smooth tab bar animations.
 
-## Key Features
+## Key Behaviors
+
+### Inverted UITableView (Chat Tabs)
+Chat tabs use `tableView.transform = CGAffineTransform(scaleX: 1, y: -1)` — newest messages at bottom. This means:
+- Visual top (header/tab bar) = `contentInset.bottom` in code
+- Visual bottom (composer) = `contentInset.top` in code
+- `headerHeight = 115` (safe area + header + tab bar)
+- Each cell also has inverted transform to display correctly
+
+### Message Insertion Animations (UnifiedChatView.swift ~line 1876)
+Three paths in `reloadMessages()`:
+
+1. **Subsequent messages** (`sortedMessages` not empty): `insertRows` with scale+fade animation (0.85→1.0, alpha 0→1, 0.25s)
+2. **First message** (`sortedMessages` empty): 3-phase — fade out EmptyTableCell (0.15s) → `reloadData()` → scale+fade in message (0.25s)
+3. **Search tab**: instant `reloadData()` without animation
+
+**Defensive path** (~line 1765): Checks `renderedRows == expectedRows` before incremental updates. When `sortedMessages` is empty and `!isSearchTab`, expected rows = 1 (EmptyTableCell placeholder), not 0.
 
 ### Search
 - Full-text search across all messages and tabs
 - Searches in: content, todo titles, todo items
-- Custom `SearchResultCell` with minimal design
+- `SearchResultCell` wrapped in `UIGlassEffect` glass cards (16pt corner radius)
+- No context menu on search results (long press disabled)
 - Shows tab name, text (3 lines), media thumbnails
-- Task lists shown with round checkboxes (○/●)
+- Task lists shown with round checkboxes (○/●), up to 2 items + "+N more"
 - Tap result → navigate to tab + scroll to message
 - Edge swipe from left → go to Search
+- Keyboard return key: `.done` (always)
+
+### Tab Creation (MainContainerView.swift)
+- Max 24 characters for tab title
+- **Emoji auto-space:** If first character is emoji, automatically appends a space
+- **Auto-capitalize:** First letter after "emoji + space" is uppercased
+- `Character.isEmoji` extension defined at bottom of MainContainerView.swift
 
 ### Messages
-- Up to 10 photos per message (`Documents/MessagePhotos/`)
+- Up to 10 photos per message
 - Videos with thumbnails
 - Telegram-style formatting (bold, italic, underline, strikethrough, links, code, spoiler)
 - Link previews
 - Task lists with optional title
 - Reminders with repeat intervals
+- Shake-to-undo deletion (30 sec window)
 
 ### Themes (AppTheme)
 `system`, `light`, `dark`, `pink`, `beige`, `green`, `blue`
 
 Each theme provides:
 - `backgroundColor` / `backgroundColorDark`
-- `accentColor`
+- `accentColor` (`Color?` — nil for system/light/dark)
 - `composerTintColor` / `composerTintColorDark`
 - `placeholderColor`
 
 ### Selection Mode
-- Long press to enter
+- Long press message to enter
 - Bulk move/delete
-- `SelectionActionBar` at bottom
+- `SelectionActionBar` at bottom (Liquid Glass)
 
 ### Export/Import
 - `.taby` archive (ZIP with JSON + media)
 - Modes: Replace all / Merge
+- `ExportProgressView` for progress, `ImportPreviewView` for preview
 
-## UIKit Components
+## Tab Bar (TabBarView.swift)
 
-### MessageListViewController
-- Inverted `UITableView` for chat (bottom-to-top)
-- Normal layout for search results (top-to-bottom)
-- Context menu with preview
-- Swipe actions
+**Two-layer architecture:**
+- `TelegramTabBarV2` (SwiftUI) — shell, delegates to UIKit
+- `TelegramTabBarEngineView` (UIKit UIScrollView) — actual scrolling, layout, animations
 
-### FormattingTextView
-- `UITextView` subclass
-- Entity-based formatting
-- Placeholder support
-- Theme-aware link colors
+**Key details:**
+- Horizontal finger scrolling with momentum (UIScrollView)
+- Tab nodes are `UIHostingController` instances (`TabLabelNode`)
+- Glass capsule selection indicator with morphing animations
+- Context menu via `TabContextMenuInteractionLayer` (UIContextMenuInteraction)
+- `menuAnchorYOffset = 4` — controls gap between tab and context menu
+- Haptic feedback on tab swipe completion (`UIImpactFeedbackGenerator`, style: `.soft`)
 
-### UnifiedChatViewController
-- `UIPageViewController` for tab swiping
-- Manages composer and search input visibility
-- Edge swipe gesture to Search
-- Keyboard handling with constraints
-- **Important:** `updatePageSelection(animated: true)` disables `isUserInteractionEnabled` during programmatic transitions to prevent user from interrupting the animation and causing tab bar / content desync
+**Header glass buttons:** Do NOT use `Button` + `.buttonStyle(.glass)` — glass chrome extends beyond hit area. Use `onTapGesture` + `.glassEffect(.regular.interactive(), in: .circle)` with `.contentShape(Circle())`.
 
 ## Liquid Glass (iOS 26+)
 
@@ -213,9 +251,24 @@ GlassEffectContainer {
 
 **Note:** `.prominent` does NOT exist — use `.regular.tint()` for less transparency.
 
-**Circular glass buttons:** Do NOT use `Button` + `.buttonStyle(.glass)` — the glass chrome extends beyond the button's hit area, making edges untappable. Instead use `onTapGesture` + `.glassEffect(.regular.interactive(), in: .circle)` with `.contentShape(Circle())` for full tap coverage.
+**Icon colors:** Use `themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black)` — NOT `.accentColor` (which is system blue).
 
-**Icon colors:** Use `themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black)` — NOT `.accentColor` (which is system blue). The `accentColor` property is `Color?` (nil for system/light/dark themes).
+### Scroll Edge Effect (iOS 26)
+System automatically applies gradient+blur where scroll content meets glass elements. Controlled per-edge via `UIScrollView`:
+```swift
+tableView.bottomEdgeEffect.isHidden = true  // Disable for specific edge
+tableView.bottomEdgeEffect.style = .soft    // .automatic, .soft, .hard
+```
+In SwiftUI: `.scrollEdgeEffectStyle(.none, for: .bottom)`
+
+### UIGlassEffect in UIKit
+```swift
+let effect = UIGlassEffect()
+let view = UIVisualEffectView(effect: effect)
+view.layer.cornerRadius = 16
+view.clipsToBounds = true
+// Add subviews to view.contentView (not view directly)
+```
 
 ## Localization
 
@@ -239,16 +292,19 @@ NSLocalizedString("search.tasks_more", comment: "")  // "+%d more"
 
 ## Share Extension
 
-Located in `share/` directory. Shares App Group with main app for:
-- SwiftData container
-- Photo/video storage
-- Pending items sync
+Located in `share/` directory:
+- `ShareViewController.swift` — Extension entry point
+- `ShareExtensionView.swift` — SwiftUI share UI
+- `SharedContent.swift` — Shared models/logic
+- `PendingShareItem.swift` — Pending items for sync
+
+Shares App Group with main app for SwiftData container, photo/video storage, pending items sync.
 
 ## Performance
 
-### Warmup
-- `KeyboardWarmer` — pre-initializes keyboard (called in ContentView on MainContainerView.onAppear, warms up behind paywall)
-- `GlassEffectWarmer` — pre-renders glass effects (called in tabsglassApp.swift init)
+### Warmup (tabsglassApp.swift)
+- `GlassEffectWarmer` — Creates off-screen window, renders glass view to trigger pipeline init, cleans up after 0.5s. Called in app `init`.
+- `KeyboardWarmer` — Creates invisible UITextField, focuses it to init keyboard subsystem with 0.25s timeout. Called on MainContainerView `.onAppear` (warms behind paywall).
 
 ### ImageCache
 - `NSCache` with size limit
@@ -260,19 +316,9 @@ Located in `share/` directory. Shares App Group with main app for:
 ### Theme Change Notification
 ```swift
 NotificationCenter.default.addObserver(
-    self,
-    selector: #selector(themeDidChange),
-    name: .themeDidChange,
-    object: nil
+    self, selector: #selector(themeDidChange),
+    name: .themeDidChange, object: nil
 )
-```
-
-### Constraint Animation
-```swift
-UIView.animate(withDuration: 0.25) {
-    self.bottomConstraint?.constant = newValue
-    self.view.layoutIfNeeded()
-}
 ```
 
 ### SwiftUI in UIKit
@@ -281,4 +327,12 @@ let hostingController = UIHostingController(rootView: SomeView())
 addChild(hostingController)
 view.addSubview(hostingController.view)
 hostingController.didMove(toParent: self)
+```
+
+### Constraint Animation
+```swift
+UIView.animate(withDuration: 0.25) {
+    self.bottomConstraint?.constant = newValue
+    self.view.layoutIfNeeded()
+}
 ```
