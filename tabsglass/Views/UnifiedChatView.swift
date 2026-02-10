@@ -228,6 +228,8 @@ final class UnifiedChatViewController: UIViewController {
     private var pageScrollView: UIScrollView?
     private var isUserSwiping: Bool = false
     private var pendingAdjacentPreloadAfterSwipe = false
+    private var didStartInteractivePageSwipe = false
+    private let tabSwipeFeedbackGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     // MARK: - Input Container (Auto Layout)
     private var hasAutoFocused: Bool = false
@@ -378,6 +380,7 @@ final class UnifiedChatViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .clear
         view.clipsToBounds = false
+        tabSwipeFeedbackGenerator.prepare()
         setupPageViewController()
         setupInputView()
         setupSearchInput()
@@ -415,6 +418,8 @@ final class UnifiedChatViewController: UIViewController {
         // Complete navigation if swiped enough or with enough velocity
         if translation > 50 || velocity > 300 {
             // Use animated callback to trigger SwiftUI animation (same as tapping search icon)
+            tabSwipeFeedbackGenerator.impactOccurred(intensity: 0.8)
+            tabSwipeFeedbackGenerator.prepare()
             onAnimatedIndexChange?(0)
         }
     }
@@ -1334,6 +1339,12 @@ extension UnifiedChatViewController: UIPageViewControllerDataSource, UIPageViewC
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
         guard completed,
               let currentVC = pageViewController.viewControllers?.first as? MessageListViewController else { return }
+        let previousIndex = (previousViewControllers.first as? MessageListViewController)?.pageIndex ?? selectedIndex
+
+        if didStartInteractivePageSwipe, previousIndex != currentVC.pageIndex {
+            tabSwipeFeedbackGenerator.impactOccurred(intensity: 0.8)
+            tabSwipeFeedbackGenerator.prepare()
+        }
 
         // IMPORTANT: Reset switchFraction BEFORE changing selectedIndex
         // This prevents the tab bar indicator from jumping to wrong position
@@ -1373,7 +1384,9 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
         isUserSwiping = true
+        didStartInteractivePageSwipe = true
         lastReportedFraction = 0
+        tabSwipeFeedbackGenerator.prepare()
 
         // Ensure all page containers have clipping disabled (for reminder badges)
         for subview in scrollView.subviews {
@@ -1411,6 +1424,7 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
         isUserSwiping = false
+        didStartInteractivePageSwipe = false
         lastReportedFraction = 0
         onSwitchFraction?(0)  // Reset fraction when swipe completes
         if pendingAdjacentPreloadAfterSwipe {
@@ -1422,6 +1436,7 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
         guard scrollView === pageScrollView else { return }
         if !decelerate {
             isUserSwiping = false
+            didStartInteractivePageSwipe = false
             lastReportedFraction = 0
             onSwitchFraction?(0)  // Reset fraction when drag ends without deceleration
             if pendingAdjacentPreloadAfterSwipe {
@@ -1723,10 +1738,54 @@ final class MessageListViewController: UIViewController {
                 .sorted { $0.createdAt > $1.createdAt }
         }
 
+        // Search results can change rapidly on each keystroke.
+        // Avoid incremental UITableView batch updates here to prevent
+        // update collisions and invalid table state assertions.
+        if isSearchTab {
+            sortedMessages = newMessages
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            UIView.performWithoutAnimation {
+                tableView.reloadData()
+            }
+            CATransaction.commit()
+            return
+        }
+
         // Compare against sortedMessages (what UITableView currently displays)
         // .id is safe to access on deleted SwiftData objects
         let oldIds = sortedMessages.map { $0.id }
         let newIds = newMessages.map { $0.id }
+
+        // Defensive path: if table and datasource drifted out of sync,
+        // avoid incremental updates and fully reconcile in one reload.
+        // Account for empty cell placeholder: when sortedMessages is empty,
+        // the table shows 1 row (EmptyTableCell), not 0.
+        let renderedRows = tableView.numberOfRows(inSection: 0)
+        let expectedRows = oldIds.isEmpty && !isSearchTab ? 1 : oldIds.count
+        if renderedRows != expectedRows {
+            sortedMessages = newMessages
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            UIView.performWithoutAnimation {
+                tableView.reloadData()
+            }
+            CATransaction.commit()
+            return
+        }
+
+        // Transition to empty state is safer with full reload than batched
+        // row deletions, especially when multiple delete events race.
+        if newMessages.isEmpty {
+            sortedMessages = []
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            UIView.performWithoutAnimation {
+                tableView.reloadData()
+            }
+            CATransaction.commit()
+            return
+        }
 
         if oldIds == newIds {
             // Same messages in same order — just reconfigure content
