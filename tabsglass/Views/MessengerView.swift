@@ -692,6 +692,26 @@ struct AttachedVideoView: View {
     }
 }
 
+// MARK: - Fade Gradient View
+
+private final class FadeGradientView: UIView {
+    let gradientLayer = CAGradientLayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        layer.addSublayer(gradientLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        gradientLayer.frame = bounds
+    }
+}
+
 // MARK: - Message Cell
 
 final class MessageTableCell: UITableViewCell {
@@ -716,6 +736,7 @@ final class MessageTableCell: UITableViewCell {
     private let reminderIcon = UIImageView()
 
     private let showMoreButton = UIButton(type: .system)
+    private let fadeGradientView = FadeGradientView()
     private var messageTextViewHeightConstraint: NSLayoutConstraint!
     private var showMoreTopToText: NSLayoutConstraint!
     private var showMoreBottomToBubble: NSLayoutConstraint!
@@ -868,9 +889,16 @@ final class MessageTableCell: UITableViewCell {
         }
         bubbleView.addSubview(todoView)
 
+        // Fade gradient overlay for truncated messages (added before button so button is on top)
+        fadeGradientView.translatesAutoresizingMaskIntoConstraints = false
+        fadeGradientView.isHidden = true
+        fadeGradientView.isUserInteractionEnabled = false
+        fadeGradientView.gradientLayer.locations = [0.0, 1.0]
+        bubbleView.addSubview(fadeGradientView)
+
         // Show more button for long messages
         showMoreButton.setTitle(L10n.Message.showMore, for: .normal)
-        showMoreButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
+        showMoreButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .medium)
         showMoreButton.contentHorizontalAlignment = .leading
         showMoreButton.translatesAutoresizingMaskIntoConstraints = false
         showMoreButton.isHidden = true
@@ -932,6 +960,12 @@ final class MessageTableCell: UITableViewCell {
             todoView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
             todoView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
             todoViewHeightConstraint,
+
+            // Fade gradient constraints — covers bottom of text area + button
+            fadeGradientView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
+            fadeGradientView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
+            fadeGradientView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor),
+            fadeGradientView.heightAnchor.constraint(equalToConstant: 100),
 
             // Show more button constraints (horizontal only — vertical managed dynamically)
             showMoreButton.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
@@ -1024,17 +1058,35 @@ final class MessageTableCell: UITableViewCell {
 
     private func updateBubbleColor() {
         let theme = ThemeManager.shared.currentTheme
+        let bubbleColor: UIColor
         if traitCollection.userInterfaceStyle == .dark {
-            bubbleView.backgroundColor = theme.bubbleColorDark
+            bubbleColor = theme.bubbleColorDark
             messageTextView.textColor = .white
         } else {
-            bubbleView.backgroundColor = theme.bubbleColor
+            bubbleColor = theme.bubbleColor
             messageTextView.textColor = .black
         }
+        bubbleView.backgroundColor = bubbleColor
+        // Update fade gradient colors
+        updateFadeGradientColors()
         // Update link color for current theme
         messageTextView.linkTextAttributes = [
             .foregroundColor: theme.linkColor,
             .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
+    }
+
+    private func updateFadeGradientColors() {
+        let theme = ThemeManager.shared.currentTheme
+        let bgColor: UIColor
+        if traitCollection.userInterfaceStyle == .dark {
+            bgColor = UIColor(theme.backgroundColorDark)
+        } else {
+            bgColor = UIColor(theme.backgroundColor)
+        }
+        fadeGradientView.gradientLayer.colors = [
+            bgColor.withAlphaComponent(0).cgColor,
+            bgColor.cgColor
         ]
     }
 
@@ -1078,6 +1130,7 @@ final class MessageTableCell: UITableViewCell {
         // Reset show more state
         isExpanded = false
         showMoreButton.isHidden = true
+        fadeGradientView.isHidden = true
         messageTextView.textContainer.maximumNumberOfLines = 0
         onShowMoreTapped = nil
         // Reset selection state
@@ -1289,6 +1342,7 @@ final class MessageTableCell: UITableViewCell {
             messageTextView.textContainer.maximumNumberOfLines = 0
             messageTextViewHeightConstraint.isActive = false
             showMoreButton.isHidden = true
+            fadeGradientView.isHidden = true
             return false
         }
 
@@ -1299,11 +1353,14 @@ final class MessageTableCell: UITableViewCell {
             messageTextViewHeightConstraint.constant = maxCollapsedHeight
             messageTextViewHeightConstraint.isActive = true
             showMoreButton.setTitle(L10n.Message.showMore, for: .normal)
+            fadeGradientView.isHidden = false
+            updateFadeGradientColors()
         } else {
             // Expanded mode — full text with "Show less"
             messageTextView.textContainer.maximumNumberOfLines = 0
             messageTextViewHeightConstraint.isActive = false
             showMoreButton.setTitle(L10n.Message.showLess, for: .normal)
+            fadeGradientView.isHidden = true
         }
 
         showMoreButton.isHidden = false
