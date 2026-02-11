@@ -10,7 +10,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showOnboarding = true // TODO: revert to !AppSettings.shared.hasCompletedOnboarding
+    @State private var showOnboarding = false // TODO: revert to !AppSettings.shared.hasCompletedOnboarding
     @State private var showPaywall = false // TODO: revert to AppSettings.shared.hasCompletedOnboarding
     private var themeManager: ThemeManager { ThemeManager.shared }
 

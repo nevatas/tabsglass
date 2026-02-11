@@ -350,7 +350,7 @@ struct ReorderTabsView: View {
             // Inbox section (virtual, not editable)
             Section {
                 HStack {
-                    Text(L10n.Reorder.inbox)
+                    Text(AppSettings.shared.inboxTitle)
                     Spacer()
                     Image(systemName: "lock.fill")
                         .font(.caption)
