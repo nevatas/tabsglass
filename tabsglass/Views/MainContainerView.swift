@@ -29,6 +29,7 @@ struct MainContainerView: View {
     @State private var newTabTitle = ""
     @State private var renameTabTitle = ""
     @State private var renameInboxTitle = ""
+    @State private var inboxTitle = AppSettings.shared.inboxTitle
     @State private var messageText = ""
     @State private var switchFraction: CGFloat = 0  // -1.0 to 1.0 swipe progress
     @State private var attachedImages: [UIImage] = []
@@ -153,6 +154,7 @@ struct MainContainerView: View {
             // Keep it mounted to avoid UIKit tab bar re-creation glitches after selection mode.
             TabBarView(
                 tabs: tabs,
+                inboxTitle: inboxTitle,
                 selectedIndex: $selectedTabIndex,
                 switchFraction: $switchFraction,
                 tabsOffset: 0,
@@ -250,6 +252,7 @@ struct MainContainerView: View {
                     initialText: renameInboxTitle
                 ) { result in
                     AppSettings.shared.inboxTitle = result
+                    inboxTitle = result
                 } onDismiss: {
                     withAnimation(.easeOut(duration: 0.1)) { showRenameInboxAlert = false }
                 }
@@ -432,7 +435,10 @@ struct MainContainerView: View {
     }
 
     private func sendMessage() {
-        let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Collapse excessive spaces (3+) and newlines (3+)
+        trimmedText = trimmedText.replacingOccurrences(of: " {4,}", with: "   ", options: .regularExpression)
+        trimmedText = trimmedText.replacingOccurrences(of: "\n{4,}", with: "\n\n\n", options: .regularExpression)
         let hasMedia = !attachedImages.isEmpty || !attachedVideos.isEmpty
         // Allow sending if there's text OR media
         guard !trimmedText.isEmpty || hasMedia else { return }
