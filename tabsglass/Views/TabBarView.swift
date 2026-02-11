@@ -1941,7 +1941,7 @@ struct TabLabelView: View {
             if item.isSearch {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(textColor)
+                    .foregroundStyle(Color(ThemeManager.shared.currentTheme.placeholderColor))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .accessibilityLabel(L10n.Search.title)

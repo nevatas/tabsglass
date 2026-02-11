@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var autoFocusInput = AppSettings.shared.autoFocusInput
     @AppStorage("spaceName") private var spaceName = "Taby"
     @State private var themeManager = ThemeManager.shared
+    @FocusState private var isSpaceNameFocused: Bool
 
     // Export/Import state
     @State private var isExporting = false
@@ -46,11 +47,17 @@ struct SettingsView: View {
                         TextField("Taby", text: $spaceName)
                             .multilineTextAlignment(.trailing)
                             .foregroundStyle(.secondary)
+                            .focused($isSpaceNameFocused)
+                            .allowsHitTesting(false)
                             .onChange(of: spaceName) { _, newValue in
                                 if newValue.count > 20 {
                                     spaceName = String(newValue.prefix(20))
                                 }
                             }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        isSpaceNameFocused = true
                     }
 
                     NavigationLink {

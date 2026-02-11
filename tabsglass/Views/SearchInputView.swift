@@ -119,7 +119,7 @@ struct SearchInputView: View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(placeholderColor))
 
             FastTextField(text: $searchText, isFocused: $isFocused, placeholder: L10n.Search.placeholder, placeholderColor: placeholderColor)
                 .frame(height: 24)
