@@ -1669,7 +1669,12 @@ final class MessageListViewController: UIViewController {
     private func refreshContentInset() {
         let bottomPadding = getBottomPadding?() ?? 80
         let safeAreaBottom = getSafeAreaBottom?() ?? 0
-        updateContentInset(bottomPadding: bottomPadding, safeAreaBottom: safeAreaBottom)
+        // Wrap in performWithoutAnimation to prevent empty cell height change
+        // from animating during tab transitions (viewWillAppear/viewDidAppear
+        // run inside UIPageViewController's transition animation context)
+        UIView.performWithoutAnimation {
+            updateContentInset(bottomPadding: bottomPadding, safeAreaBottom: safeAreaBottom)
+        }
     }
 
     /// Track last processed message IDs for quick change detection
