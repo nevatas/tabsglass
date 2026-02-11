@@ -314,6 +314,7 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
     private var itemNodes: [String: TabHostedNode] = [:]
     private var orderedIDs: [String] = []
     private var itemsByID: [String: TabDisplayItem] = [:]
+    private var snapshotTitlesByID: [String: String] = [:]
 
     private var selectedIndex: Int = 1
     private var switchFraction: CGFloat = 0
@@ -399,7 +400,6 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
         colorScheme: ColorScheme,
         showReorder: Bool
     ) {
-        let previousItemsByID = self.itemsByID
         let previousSwitchFraction = self.switchFraction
         let clampedSelectedIndex = max(0, min(selectedIndex, max(items.count - 1, 0)))
         if let pendingTapSelectionIndex, pendingTapSelectionIndex >= items.count {
@@ -422,7 +422,6 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
 
         let idsChanged = previousIDs != items.map(\.id)
         let contentMetricsChanged = self.hasContentMetricsChange(
-            previousItemsByID: previousItemsByID,
             newItems: items
         )
         let switchChanged = abs(previousSwitchFraction - switchFraction) > 0.0005
@@ -430,6 +429,7 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
         let appendedAndSelectedLast = items.count > previousCount && resolvedSelectedIndex == max(items.count - 1, 0)
 
         self.itemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        self.snapshotTitlesByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0.title) })
         self.orderedIDs = items.map(\.id)
         self.showReorder = showReorder
         self.switchFraction = switchFraction
@@ -487,13 +487,11 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
     }
 
     private func hasContentMetricsChange(
-        previousItemsByID: [String: TabDisplayItem],
         newItems: [TabDisplayItem]
     ) -> Bool {
         for item in newItems {
-            guard let oldItem = previousItemsByID[item.id] else { continue }
-            if oldItem.title != item.title { return true }
-            if oldItem.isSearch != item.isSearch { return true }
+            guard let oldTitle = self.snapshotTitlesByID[item.id] else { continue }
+            if oldTitle != item.title { return true }
         }
         return false
     }
@@ -641,7 +639,17 @@ private final class TelegramTabBarEngineView: UIView, UIScrollViewDelegate {
             } else {
                 targetOffset = self.clampedOffset(currentOffset, contentWidth: finalContentWidth)
             }
-        case .contentChange, .none:
+        case .contentChange:
+            if let selectedFrame {
+                targetOffset = self.offsetEnsuringVisible(
+                    frame: selectedFrame,
+                    currentOffset: currentOffset,
+                    contentWidth: finalContentWidth
+                )
+            } else {
+                targetOffset = self.clampedOffset(currentOffset, contentWidth: finalContentWidth)
+            }
+        case .none:
             targetOffset = self.clampedOffset(currentOffset, contentWidth: finalContentWidth)
         }
 
