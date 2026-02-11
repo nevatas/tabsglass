@@ -20,6 +20,8 @@ final class TodoBubbleView: UIView {
     private var items: [TodoItem] = []
     private var isDarkMode: Bool = false
     private var titleLabelHeightConstraint: NSLayoutConstraint!
+    private var titleTopConstraint: NSLayoutConstraint!
+    private var stackTopConstraint: NSLayoutConstraint!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -53,25 +55,25 @@ final class TodoBubbleView: UIView {
         titleLabelHeightConstraint.priority = .defaultHigh  // Lower priority to avoid conflict when hidden
 
         // Use lower priority for vertical chain so constraints don't conflict when height=0
-        let titleTop = titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12)
-        titleTop.priority = .defaultHigh
+        titleTopConstraint = titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12)
+        titleTopConstraint.priority = .defaultHigh
 
-        let stackTop = stackView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4)
-        stackTop.priority = .defaultHigh
+        stackTopConstraint = stackView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4)
+        stackTopConstraint.priority = .defaultHigh
 
-        let footerTop = footerLabel.topAnchor.constraint(equalTo: stackView.bottomAnchor, constant: 8)
+        let footerTop = footerLabel.topAnchor.constraint(equalTo: stackView.bottomAnchor, constant: 4)
         footerTop.priority = .defaultHigh
 
         let footerBottom = footerLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
         footerBottom.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
-            titleTop,
+            titleTopConstraint,
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             titleLabelHeightConstraint,
 
-            stackTop,
+            stackTopConstraint,
             stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
 
@@ -92,6 +94,8 @@ final class TodoBubbleView: UIView {
             titleLabel.text = title
             titleLabel.textColor = textColor
             titleLabel.isHidden = false
+            titleTopConstraint.constant = 12
+            stackTopConstraint.constant = 4
             // Calculate title height
             let titleWidth = bounds.width - 28  // 14 + 14 padding
             let titleHeight = title.boundingRect(
@@ -104,6 +108,8 @@ final class TodoBubbleView: UIView {
         } else {
             titleLabel.text = nil
             titleLabel.isHidden = true
+            titleTopConstraint.constant = 0
+            stackTopConstraint.constant = 4
             titleLabelHeightConstraint.constant = 0
         }
 
@@ -177,7 +183,7 @@ final class TodoBubbleView: UIView {
         let titleHorizontalPadding: CGFloat = 28  // 14 + 14
         let bottomPadding: CGFloat = 10
         let footerHeight: CGFloat = 20  // font 14 + some padding
-        let footerSpacing: CGFloat = 8
+        let footerSpacing: CGFloat = 4
         let separatorHeight: CGFloat = 1
         let availableWidth = maxWidth - horizontalPadding
 
@@ -194,7 +200,7 @@ final class TodoBubbleView: UIView {
             ).height
             totalHeight += 12 + ceil(titleHeight) + 4  // top padding + title + spacing to stack
         } else {
-            totalHeight += 4  // just top padding for stack
+            totalHeight += 4  // no title — small top padding before stack
         }
 
         for (index, item) in items.enumerated() {

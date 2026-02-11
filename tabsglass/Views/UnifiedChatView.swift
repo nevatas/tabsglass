@@ -2149,6 +2149,8 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if sortedMessages.isEmpty && !isSearchTab {
             let cell = tableView.dequeueReusableCell(withIdentifier: "EmptyCell", for: indexPath) as! EmptyTableCell
+            let tabTitle = allTabs.first(where: { $0.id == currentTabId })?.title
+            cell.configure(tabTitle: tabTitle)
             cell.transform = CGAffineTransform(scaleX: 1, y: -1)
             return cell
         }

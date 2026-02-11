@@ -1211,6 +1211,8 @@ final class MessageTableCell: UITableViewCell {
 
 final class EmptyTableCell: UITableViewCell {
     private let stackView = UIStackView()
+    private let emojiLabel = UILabel()
+    private static let fallbackEmojis = ["🤔", "👋", "🤙", "👀", "👻", "🥰", "🤭", "🤗", "🧠", "🩵", "❤️", "💛"]
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -1221,13 +1223,16 @@ final class EmptyTableCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
+    func configure(tabTitle: String?) {
+        let firstEmoji = tabTitle?.first(where: { $0.isEmoji })
+        emojiLabel.text = firstEmoji.map(String.init) ?? Self.fallbackEmojis.randomElement()
+    }
+
     private func setupCell() {
         backgroundColor = .clear
         selectionStyle = .none
 
-        let emojis = ["🤔", "👋", "🤙", "👀", "👻", "🥰", "🤭", "🤗", "🧠", "🩵", "❤️", "💛"]
-        let emojiLabel = UILabel()
-        emojiLabel.text = emojis.randomElement()
+        emojiLabel.text = Self.fallbackEmojis.randomElement()
         emojiLabel.font = .systemFont(ofSize: 48)
         emojiLabel.textAlignment = .center
 
