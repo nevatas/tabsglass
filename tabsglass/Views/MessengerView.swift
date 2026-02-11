@@ -715,6 +715,13 @@ final class MessageTableCell: UITableViewCell {
     private let reminderBadge = UIView()
     private let reminderIcon = UIImageView()
 
+    private let showMoreButton = UIButton(type: .system)
+    private var messageTextViewHeightConstraint: NSLayoutConstraint!
+    private var showMoreTopToText: NSLayoutConstraint!
+    private var showMoreBottomToBubble: NSLayoutConstraint!
+    private var isExpanded: Bool = false
+    var onShowMoreTapped: (() -> Void)?
+
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
 
@@ -861,6 +868,15 @@ final class MessageTableCell: UITableViewCell {
         }
         bubbleView.addSubview(todoView)
 
+        // Show more button for long messages
+        showMoreButton.setTitle(L10n.Message.showMore, for: .normal)
+        showMoreButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
+        showMoreButton.contentHorizontalAlignment = .leading
+        showMoreButton.translatesAutoresizingMaskIntoConstraints = false
+        showMoreButton.isHidden = true
+        showMoreButton.addTarget(self, action: #selector(showMoreTapped), for: .touchUpInside)
+        bubbleView.addSubview(showMoreButton)
+
         mosaicHeightConstraint = mosaicView.heightAnchor.constraint(equalToConstant: 0)
         mosaicHeightConstraint.priority = UILayoutPriority(999)  // Slightly lower to avoid conflict with encapsulated height
         todoViewHeightConstraint = todoView.heightAnchor.constraint(equalToConstant: 0)
@@ -869,6 +885,15 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewTopToBubble = messageTextView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
         messageTextViewBottomToBubble = messageTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
         mosaicBottomToBubble = mosaicView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
+
+        // Show more button constraints
+        showMoreTopToText = showMoreButton.topAnchor.constraint(equalTo: messageTextView.bottomAnchor, constant: 4)
+        showMoreBottomToBubble = showMoreButton.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -8)
+
+        // Height constraint for collapsing long messages (inactive by default)
+        messageTextViewHeightConstraint = messageTextView.heightAnchor.constraint(equalToConstant: 0)
+        messageTextViewHeightConstraint.priority = UILayoutPriority(999)
+        messageTextViewHeightConstraint.isActive = false
 
         // Two variants of leading constraint for bubble container
         bubbleContainerLeadingNormal = bubbleContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8)
@@ -907,6 +932,10 @@ final class MessageTableCell: UITableViewCell {
             todoView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
             todoView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
             todoViewHeightConstraint,
+
+            // Show more button constraints (horizontal only — vertical managed dynamically)
+            showMoreButton.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
+            showMoreButton.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
         ])
 
         // Activate normal leading constraint by default
@@ -982,6 +1011,7 @@ final class MessageTableCell: UITableViewCell {
     @objc private func handleThemeChange() {
         updateBubbleColor()
         updateCheckboxColor()
+        updateShowMoreButtonColor()
     }
 
     private func updateCheckboxColor() {
@@ -1008,6 +1038,15 @@ final class MessageTableCell: UITableViewCell {
         ]
     }
 
+    private func updateShowMoreButtonColor() {
+        let theme = ThemeManager.shared.currentTheme
+        if let accent = theme.accentColor {
+            showMoreButton.setTitleColor(UIColor(accent), for: .normal)
+        } else {
+            showMoreButton.setTitleColor(.systemBlue, for: .normal)
+        }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let message = cachedMessage else { return }
@@ -1016,6 +1055,10 @@ final class MessageTableCell: UITableViewCell {
             lastLayoutWidth = width
             applyLayout(for: message, width: width)
         }
+    }
+
+    @objc private func showMoreTapped() {
+        onShowMoreTapped?()
     }
 
     override func prepareForReuse() {
@@ -1029,14 +1072,23 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
         todoViewBottomToBubble.isActive = false
+        showMoreTopToText.isActive = false
+        showMoreBottomToBubble.isActive = false
+        messageTextViewHeightConstraint.isActive = false
+        // Reset show more state
+        isExpanded = false
+        showMoreButton.isHidden = true
+        messageTextView.textContainer.maximumNumberOfLines = 0
+        onShowMoreTapped = nil
         // Reset selection state
         isMessageSelected = false
         checkboxView.image = UIImage(systemName: "circle")
         onSelectionToggle = nil
     }
 
-    func configure(with message: Message) {
+    func configure(with message: Message, isExpanded: Bool = false) {
         cachedMessage = message
+        self.isExpanded = isExpanded
 
         // Create attributed string with entities (links, formatting)
         let attributedText = createAttributedString(for: message)
@@ -1052,6 +1104,7 @@ final class MessageTableCell: UITableViewCell {
         reminderBadge.isHidden = !message.hasReminder
 
         updateBubbleColor()
+        updateShowMoreButtonColor()
 
         let width = contentView.bounds.width
         if width > 0 {
@@ -1141,6 +1194,9 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewBottomToBubble.isActive = false
         mosaicBottomToBubble.isActive = false
         todoViewBottomToBubble.isActive = false
+        showMoreTopToText.isActive = false
+        showMoreBottomToBubble.isActive = false
+        messageTextViewHeightConstraint.isActive = false
 
         // Calculate bubble width (cell width - 32 for margins)
         let bubbleWidth = max(width - 32, 0)
@@ -1191,19 +1247,92 @@ final class MessageTableCell: UITableViewCell {
             if hasMedia && hasText {
                 // Both media and text
                 messageTextViewTopToMosaic.isActive = true
-                messageTextViewBottomToBubble.isActive = true
                 messageTextView.isHidden = false
+                if applyShowMoreIfNeeded(bubbleWidth: bubbleWidth) {
+                    // Show more button handles bottom constraint
+                } else {
+                    messageTextViewBottomToBubble.isActive = true
+                }
             } else if hasMedia && !hasText {
                 // Media only - mosaic fills to bottom
                 mosaicBottomToBubble.isActive = true
                 messageTextView.isHidden = true
+                showMoreButton.isHidden = true
             } else {
                 // Text only (or empty)
                 messageTextViewTopToBubble.isActive = true
-                messageTextViewBottomToBubble.isActive = true
                 messageTextView.isHidden = false
+                if applyShowMoreIfNeeded(bubbleWidth: bubbleWidth) {
+                    // Show more button handles bottom constraint
+                } else {
+                    messageTextViewBottomToBubble.isActive = true
+                }
             }
         }
+    }
+
+    /// Check if text needs truncation and configure show more button.
+    /// Returns true if collapsed mode was activated.
+    private func applyShowMoreIfNeeded(bubbleWidth: CGFloat) -> Bool {
+        let textWidth = bubbleWidth - 28 // 14px padding on each side
+        guard textWidth > 0 else { return false }
+
+        let maxCollapsedHeight = Self.maxCollapsedTextHeight(for: textWidth)
+        let fullTextHeight = messageTextView.attributedText?.boundingRect(
+            with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
+        ).height ?? 0
+
+        // Only applies to long messages
+        guard ceil(fullTextHeight) > maxCollapsedHeight else {
+            messageTextView.textContainer.maximumNumberOfLines = 0
+            messageTextViewHeightConstraint.isActive = false
+            showMoreButton.isHidden = true
+            return false
+        }
+
+        if !isExpanded {
+            // Collapsed mode
+            messageTextView.textContainer.maximumNumberOfLines = Self.collapsedLineCount
+            messageTextView.textContainer.lineBreakMode = .byTruncatingTail
+            messageTextViewHeightConstraint.constant = maxCollapsedHeight
+            messageTextViewHeightConstraint.isActive = true
+            showMoreButton.setTitle(L10n.Message.showMore, for: .normal)
+        } else {
+            // Expanded mode — full text with "Show less"
+            messageTextView.textContainer.maximumNumberOfLines = 0
+            messageTextViewHeightConstraint.isActive = false
+            showMoreButton.setTitle(L10n.Message.showLess, for: .normal)
+        }
+
+        showMoreButton.isHidden = false
+        showMoreTopToText.isActive = true
+        showMoreBottomToBubble.isActive = true
+        return true
+    }
+
+    // MARK: - Show More Helpers
+
+    static let collapsedLineCount = 25
+    /// Cached (textWidth → height) so we don't recompute boundingRect for every cell
+    private static var _collapsedHeightCache: (width: CGFloat, height: CGFloat)?
+
+    static func maxCollapsedTextHeight(for textWidth: CGFloat) -> CGFloat {
+        if let cached = _collapsedHeightCache, abs(cached.width - textWidth) < 0.5 {
+            return cached.height
+        }
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 2
+        let referenceText = String(repeating: "A\n", count: collapsedLineCount - 1) + "A"
+        let height = ceil(referenceText.boundingRect(
+            with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: UIFont.systemFont(ofSize: 16), .paragraphStyle: paragraphStyle],
+            context: nil
+        ).height)
+        _collapsedHeightCache = (textWidth, height)
+        return height
     }
 }
 

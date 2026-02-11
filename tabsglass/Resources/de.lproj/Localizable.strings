@@ -146,6 +146,11 @@
 "search.placeholder" = "Finden...";
 "search.tasks_more" = "+%d mehr";
 
+// MARK: - Message
+
+"message.show_more" = "Mehr anzeigen";
+"message.show_less" = "Weniger anzeigen";
+
 // MARK: - Selection
 
 "selection.select" = "Auswählen";

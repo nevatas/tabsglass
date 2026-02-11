@@ -171,6 +171,12 @@ enum L10n {
         static var continueButton: String { NSLocalizedString("onboarding.continue", comment: "") }
     }
 
+    // MARK: - Message
+    enum Message {
+        static var showMore: String { NSLocalizedString("message.show_more", comment: "Show more button") }
+        static var showLess: String { NSLocalizedString("message.show_less", comment: "Show less button") }
+    }
+
     // MARK: - Search
     enum Search {
         static var title: String { NSLocalizedString("search.title", comment: "Search screen title") }

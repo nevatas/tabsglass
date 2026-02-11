@@ -973,8 +973,19 @@ final class UnifiedChatViewController: UIViewController {
                 // to prevent user from interrupting the animation and causing
                 // desync between tab bar selection and displayed content
                 pageViewController.view.isUserInteractionEnabled = false
-                pageViewController.setViewControllers([vc], direction: direction, animated: true) { [weak self] _ in
-                    self?.pageViewController.view.isUserInteractionEnabled = true
+                pageViewController.setViewControllers([vc], direction: direction, animated: true) { [weak self] finished in
+                    guard let self = self else { return }
+                    if finished {
+                        // Workaround: UIPageViewController sometimes doesn't fully complete
+                        // the scroll animation, leaving adjacent pages partially visible.
+                        // Re-setting without animation forces the final position.
+                        DispatchQueue.main.async {
+                            self.pageViewController.setViewControllers([vc], direction: direction, animated: false)
+                            self.pageViewController.view.isUserInteractionEnabled = true
+                        }
+                    } else {
+                        self.pageViewController.view.isUserInteractionEnabled = true
+                    }
                 }
             } else {
                 pageViewController.setViewControllers([vc], direction: direction, animated: false)
@@ -1493,6 +1504,10 @@ final class MessageListViewController: UIViewController {
     private var searchTabsHostingController: UIHostingController<SearchTabsView>?
     private var topFadeGradient: TopFadeGradientView?
 
+    // MARK: - Show More: Expanded messages
+    /// IDs of messages whose "Show more" has been tapped (expanded text)
+    private var expandedMessageIds: Set<UUID> = []
+
     // MARK: - Performance: Height cache
     /// Cache for calculated row heights, keyed by message ID
     private var heightCache: [UUID: CGFloat] = [:]
@@ -1812,7 +1827,8 @@ final class MessageListViewController: UIViewController {
                     guard let messageCell = cell as? MessageTableCell,
                           let indexPath = tableView.indexPath(for: cell),
                           indexPath.row < sortedMessages.count else { continue }
-                    messageCell.configure(with: sortedMessages[indexPath.row])
+                    let msg = sortedMessages[indexPath.row]
+                    messageCell.configure(with: msg, isExpanded: expandedMessageIds.contains(msg.id))
                 }
                 // Force UITableView to recalculate row heights (e.g., after todo items change)
                 tableView.beginUpdates()
@@ -2201,13 +2217,53 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
 
         let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
-        cell.configure(with: message)
+        cell.configure(with: message, isExpanded: expandedMessageIds.contains(message.id))
         cell.onMediaTapped = { [weak self] index, sourceFrame, _, _, _ in
             // Open unified gallery with all media (photos + videos)
             self?.onOpenGallery?(message, index, sourceFrame)
         }
         cell.onTodoToggle = { [weak self] itemId, isCompleted in
             self?.onToggleTodoItem?(message, itemId, isCompleted)
+        }
+        cell.onShowMoreTapped = { [weak self] in
+            guard let self,
+                  let indexPath = self.tableView.indexPath(for: cell) else { return }
+
+            let wasExpanded = self.expandedMessageIds.contains(message.id)
+
+            // For expand: snapshot offset & cell position to keep visual top stable
+            let oldOffset = wasExpanded ? nil : self.tableView.contentOffset
+            let oldCellMaxY = wasExpanded ? CGFloat(0) : self.tableView.rectForRow(at: indexPath).maxY
+
+            // Toggle state
+            if wasExpanded {
+                self.expandedMessageIds.remove(message.id)
+            } else {
+                self.expandedMessageIds.insert(message.id)
+            }
+            self.heightCache.removeValue(forKey: message.id)
+            cell.configure(with: message, isExpanded: !wasExpanded)
+            let newHeight = self.calculateMessageHeight(for: message, cellWidth: self.tableView.bounds.width)
+            self.heightCache[message.id] = newHeight
+
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.tableView.beginUpdates()
+            self.tableView.endUpdates()
+            self.tableView.layoutIfNeeded()
+
+            if !wasExpanded, let oldOffset {
+                // Expand: fix offset so the cell's visual top stays in place
+                // and new text appears below (pushing newer messages down).
+                let newCellMaxY = self.tableView.rectForRow(at: indexPath).maxY
+                let delta = newCellMaxY - oldCellMaxY
+                self.tableView.contentOffset = CGPoint(x: oldOffset.x, y: oldOffset.y + delta)
+            }
+            // Collapse: no offset correction — the inverted table naturally
+            // shrinks the cell from the visual top while the button (visual
+            // bottom) stays in place on screen.
+
+            CATransaction.commit()
         }
 
         // Selection mode
@@ -2329,12 +2385,23 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 context: nil
             ).height
 
-            if hasMedia {
-                // Media + text: spacing (10) + text + bottom padding (10)
-                height += 10 + ceil(textHeight) + 10
+            let maxCollapsedHeight = MessageTableCell.maxCollapsedTextHeight(for: textWidth)
+            let isMessageExpanded = expandedMessageIds.contains(message.id)
+            let isLongText = ceil(textHeight) > maxCollapsedHeight
+
+            if isLongText {
+                // Long text: button always visible (Show more / Show less)
+                let effectiveTextHeight = isMessageExpanded ? ceil(textHeight) : ceil(maxCollapsedHeight)
+                let buttonHeight: CGFloat = 4 + 20 + 8 // gap + button + bottom padding
+                height += 10 + effectiveTextHeight + buttonHeight
             } else {
-                // Text only: top padding (10) + text + bottom padding (10)
-                height += 10 + ceil(textHeight) + 10
+                if hasMedia {
+                    // Media + text: spacing (10) + text + bottom padding (10)
+                    height += 10 + ceil(textHeight) + 10
+                } else {
+                    // Text only: top padding (10) + text + bottom padding (10)
+                    height += 10 + ceil(textHeight) + 10
+                }
             }
         }
 

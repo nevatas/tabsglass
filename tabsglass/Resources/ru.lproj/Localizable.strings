@@ -146,6 +146,11 @@
 "search.placeholder" = "Найти...";
 "search.tasks_more" = "+%d ещё";
 
+// MARK: - Message
+
+"message.show_more" = "Показать ещё";
+"message.show_less" = "Свернуть";
+
 // MARK: - Selection
 
 "selection.select" = "Выбрать";
