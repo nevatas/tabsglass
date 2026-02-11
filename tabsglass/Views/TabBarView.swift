@@ -646,11 +646,7 @@ private final class ScrollingTabBarEngine: UIView, UIScrollViewDelegate {
             }
         case .contentChange:
             if let selectedFrame {
-                targetOffset = self.offsetEnsuringVisible(
-                    frame: selectedFrame,
-                    currentOffset: currentOffset,
-                    contentWidth: finalContentWidth
-                )
+                targetOffset = self.centeredOffset(for: selectedFrame.midX, contentWidth: finalContentWidth)
             } else {
                 targetOffset = self.clampedOffset(currentOffset, contentWidth: finalContentWidth)
             }
