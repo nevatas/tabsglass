@@ -1224,8 +1224,10 @@ final class EmptyTableCell: UITableViewCell {
     }
 
     func configure(tabTitle: String?) {
-        let firstEmoji = tabTitle?.first(where: { $0.isEmoji })
-        emojiLabel.text = firstEmoji.map(String.init) ?? Self.fallbackEmojis.randomElement()
+        if let firstEmoji = tabTitle?.first(where: { $0.isEmoji }) {
+            emojiLabel.text = String(firstEmoji)
+        }
+        // Otherwise keep the random emoji assigned in setupCell (stable across reloadData)
     }
 
     private func setupCell() {
