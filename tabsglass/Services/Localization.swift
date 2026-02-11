@@ -164,6 +164,13 @@ enum L10n {
         static var formatting: String { NSLocalizedString("tips.formatting", comment: "Tip: text formatting") }
     }
 
+    // MARK: - Onboarding
+    enum Onboarding {
+        static var title: String { NSLocalizedString("onboarding.title", comment: "") }
+        static var subtitle: String { NSLocalizedString("onboarding.subtitle", comment: "") }
+        static var continueButton: String { NSLocalizedString("onboarding.continue", comment: "") }
+    }
+
     // MARK: - Search
     enum Search {
         static var title: String { NSLocalizedString("search.title", comment: "Search screen title") }

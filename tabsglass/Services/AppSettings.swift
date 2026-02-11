@@ -257,6 +257,7 @@ final class AppSettings {
         static let theme = "appTheme"
         static let inboxTitle = "inboxTitle"
         static let spaceName = "spaceName"
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
     }
 
     private init() {}
@@ -277,6 +278,12 @@ final class AppSettings {
     var autoFocusInput: Bool {
         get { defaults.bool(forKey: Keys.autoFocusInput) }
         set { defaults.set(newValue, forKey: Keys.autoFocusInput) }
+    }
+
+    /// Whether the user has completed the onboarding flow
+    var hasCompletedOnboarding: Bool {
+        get { defaults.bool(forKey: Keys.hasCompletedOnboarding) }
+        set { defaults.set(newValue, forKey: Keys.hasCompletedOnboarding) }
     }
 
     /// Selected app theme

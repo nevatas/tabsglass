@@ -134,6 +134,12 @@
 "tips.shake_undo" = "Note supprimée par accident ?\nSecoue ton téléphone pour la récupérer";
 "tips.formatting" = "Sélectionne du texte dans le champ de saisie pour appliquer Gras, Italique et plus";
 
+// MARK: - Onboarding
+
+"onboarding.title" = "Les notes ressemblent à des messages de messagerie";
+"onboarding.subtitle" = "Comme un chat avec soi-même";
+"onboarding.continue" = "Continuer";
+
 // MARK: - Search
 
 "search.title" = "Recherche";

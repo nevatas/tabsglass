@@ -134,6 +134,12 @@
 "tips.shake_undo" = "¿Eliminaste una nota por accidente?\nAgita tu teléfono para recuperarla";
 "tips.formatting" = "Selecciona texto en el campo de entrada para aplicar Negrita, Cursiva y más";
 
+// MARK: - Onboarding
+
+"onboarding.title" = "Las notas parecen mensajes de mensajería";
+"onboarding.subtitle" = "Como un chat contigo mismo";
+"onboarding.continue" = "Continuar";
+
 // MARK: - Search
 
 "search.title" = "Búsqueda";

@@ -134,6 +134,12 @@
 "tips.shake_undo" = "Deleted a note by accident?\nShake your phone to bring it back";
 "tips.formatting" = "Select text in the composer to apply Bold, Italic, and other formatting";
 
+// MARK: - Onboarding
+
+"onboarding.title" = "Notes look like messages in messengers";
+"onboarding.subtitle" = "Like a chat with yourself";
+"onboarding.continue" = "Continue";
+
 // MARK: - Search
 
 "search.title" = "Search";

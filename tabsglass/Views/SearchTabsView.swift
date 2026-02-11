@@ -245,6 +245,11 @@ struct FlowLayout: Layout {
 struct SearchTipsView: View {
     let keyboardHeight: CGFloat
     @State private var currentTipIndex: Int
+    private var themeManager: ThemeManager { ThemeManager.shared }
+
+    private var tipsColor: Color {
+        Color(uiColor: themeManager.currentTheme.placeholderColor)
+    }
 
     private var tips: [String] {
         [
@@ -263,13 +268,13 @@ struct SearchTipsView: View {
         VStack(spacing: 12) {
             Text(L10n.Tips.title)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(tipsColor)
                 .textCase(.uppercase)
                 .tracking(0.5)
 
             Text(tips[currentTipIndex])
                 .font(.system(size: 15))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(tipsColor)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -212,43 +212,54 @@ struct MainContainerView: View {
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+
+            // Tab input dialogs (overlays, not sheets — keyboard appears instantly)
+            if showNewTabAlert {
+                TabInputSheet(
+                    title: L10n.Tab.new,
+                    subtitle: L10n.Tab.newHint,
+                    buttonTitle: L10n.Tab.create,
+                    initialText: ""
+                ) { result in
+                    createTab(title: result)
+                } onDismiss: {
+                    withAnimation(.easeOut(duration: 0.1)) { showNewTabAlert = false }
+                }
+                .transition(.opacity.combined(with: .offset(y: 10)))
+            }
+
+            if showRenameAlert {
+                TabInputSheet(
+                    title: L10n.Tab.rename,
+                    buttonTitle: L10n.Tab.save,
+                    initialText: renameTabTitle
+                ) { result in
+                    if let tab = tabToRename {
+                        renameTab(tab, to: result)
+                    }
+                } onDismiss: {
+                    withAnimation(.easeOut(duration: 0.1)) { showRenameAlert = false }
+                }
+                .transition(.opacity.combined(with: .offset(y: 10)))
+            }
+
+            if showRenameInboxAlert {
+                TabInputSheet(
+                    title: L10n.Tab.renameInbox,
+                    buttonTitle: L10n.Tab.save,
+                    initialText: renameInboxTitle
+                ) { result in
+                    AppSettings.shared.inboxTitle = result
+                } onDismiss: {
+                    withAnimation(.easeOut(duration: 0.1)) { showRenameInboxAlert = false }
+                }
+                .transition(.opacity.combined(with: .offset(y: 10)))
+            }
         }
         .animation(.easeOut(duration: 0.25), value: isSelectionMode)
         .sheet(isPresented: $showMoveSheet) {
             MoveMessagesSheet(tabs: tabs, currentTabId: currentTabId) { targetTabId in
                 moveSelectedMessages(to: targetTabId)
-            }
-        }
-        .alert(L10n.Tab.new, isPresented: $showNewTabAlert) {
-            TextField(L10n.Tab.titlePlaceholder, text: $newTabTitle)
-            Button(L10n.Tab.cancel, role: .cancel) { }
-            Button(L10n.Tab.create) {
-                let trimmed = String(newTabTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
-                if !trimmed.isEmpty {
-                    createTab(title: trimmed)
-                }
-            }
-        } message: {
-            Text(L10n.Tab.newHint)
-        }
-        .alert(L10n.Tab.rename, isPresented: $showRenameAlert) {
-            TextField(L10n.Tab.titlePlaceholder, text: $renameTabTitle)
-            Button(L10n.Tab.cancel, role: .cancel) { }
-            Button(L10n.Tab.save) {
-                let trimmed = String(renameTabTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
-                if !trimmed.isEmpty, let tab = tabToRename {
-                    renameTab(tab, to: trimmed)
-                }
-            }
-        }
-        .alert(L10n.Tab.renameInbox, isPresented: $showRenameInboxAlert) {
-            TextField(L10n.Tab.titlePlaceholder, text: $renameInboxTitle)
-            Button(L10n.Tab.cancel, role: .cancel) { }
-            Button(L10n.Tab.save) {
-                let trimmed = String(renameInboxTitle.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
-                if !trimmed.isEmpty {
-                    AppSettings.shared.inboxTitle = trimmed
-                }
             }
         }
         .alert(L10n.Tab.deleteTitle, isPresented: $showDeleteAlert) {
@@ -292,45 +303,6 @@ struct MainContainerView: View {
             // Reset fraction when tab changes (from tap or swipe completion)
             if abs(switchFraction) > 0.01 {
                 switchFraction = 0
-            }
-        }
-        .onChange(of: newTabTitle) { oldValue, newValue in
-            var corrected = newValue
-
-            // Auto-space after leading emoji
-            if oldValue.isEmpty,
-               corrected.count == 1,
-               let first = corrected.first,
-               first.isEmoji {
-                corrected += " "
-            }
-
-            // Auto-capitalize first letter after "emoji "
-            if corrected.count >= 3,
-               let first = corrected.first, first.isEmoji,
-               corrected.dropFirst().first == " " {
-                let rest = corrected.dropFirst(2)
-                if let letter = rest.first, letter.isLowercase {
-                    corrected = String(corrected.prefix(2)) + letter.uppercased() + rest.dropFirst()
-                }
-            }
-
-            if corrected.count > 24 {
-                corrected = String(corrected.prefix(24))
-            }
-
-            if corrected != newValue {
-                newTabTitle = corrected
-            }
-        }
-        .onChange(of: renameTabTitle) { _, newValue in
-            if newValue.count > 24 {
-                renameTabTitle = String(newValue.prefix(24))
-            }
-        }
-        .onChange(of: renameInboxTitle) { _, newValue in
-            if newValue.count > 24 {
-                renameInboxTitle = String(newValue.prefix(24))
             }
         }
         .sheet(item: $messageToEdit) { message in
@@ -835,6 +807,149 @@ struct MainContainerView: View {
         // Delay slightly to ensure SwiftData has updated
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
             TabsSync.saveTabs(Array(tabs))
+        }
+    }
+}
+
+// MARK: - Tab Input Sheet (Custom dialog replacing UIAlertController)
+
+struct TabInputSheet: View {
+    let title: String
+    var subtitle: String? = nil
+    let buttonTitle: String
+    let initialText: String
+    let onDone: (String) -> Void
+    var onDismiss: () -> Void = {}
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var text = ""
+    @State private var shouldShake = false
+    @FocusState private var isFocused: Bool
+
+    @ViewBuilder
+    private func controlBackground() -> some View {
+        if colorScheme == .light {
+            Capsule().fill(Color.black.opacity(0.12))
+        } else {
+            Capsule().fill(.ultraThinMaterial)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.clear
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { dismissWithKeyboard() }
+
+            VStack(spacing: 16) {
+                // Title
+                Text(title)
+                    .font(.body.weight(.semibold))
+
+                // Subtitle
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                // Text field
+                TextField(L10n.Tab.titlePlaceholder, text: $text)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background { controlBackground() }
+                    .focused($isFocused)
+                    .shake(trigger: $shouldShake)
+                    .onSubmit { validateAndSubmit() }
+                    .onChange(of: text) { oldValue, newValue in
+                        var corrected = newValue
+
+                        // Auto-space after leading emoji
+                        if oldValue.isEmpty,
+                           corrected.count == 1,
+                           let first = corrected.first,
+                           first.isEmoji {
+                            corrected += " "
+                        }
+
+                        // Auto-capitalize first letter after "emoji "
+                        if corrected.count >= 3,
+                           let first = corrected.first, first.isEmoji,
+                           corrected.dropFirst().first == " " {
+                            let rest = corrected.dropFirst(2)
+                            if let letter = rest.first, letter.isLowercase {
+                                corrected = String(corrected.prefix(2)) + letter.uppercased() + rest.dropFirst()
+                            }
+                        }
+
+                        // Length limit
+                        if corrected.count > 24 {
+                            corrected = String(corrected.prefix(24))
+                        }
+
+                        if corrected != newValue {
+                            text = corrected
+                        }
+                    }
+
+                // Buttons
+                HStack(spacing: 12) {
+                    Button {
+                        dismissWithKeyboard()
+                    } label: {
+                        Text(L10n.Tab.cancel)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(colorScheme == .light ? Color.primary : .white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .background { controlBackground() }
+
+                    Button {
+                        validateAndSubmit()
+                    } label: {
+                        Text(buttonTitle)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(colorScheme == .light ? Color.primary : .white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .background { controlBackground() }
+                }
+            }
+            .padding(24)
+            .background {
+                RoundedRectangle(cornerRadius: 36)
+                    .fill(.clear)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 36))
+            }
+            .padding(.horizontal, 40)
+        }
+        .onAppear {
+            text = initialText
+            isFocused = true
+        }
+    }
+
+    private func dismissWithKeyboard() {
+        isFocused = false
+        onDismiss()
+    }
+
+    private func validateAndSubmit() {
+        let trimmed = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
+        guard !trimmed.isEmpty else {
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+            shouldShake = true
+            return
+        }
+        isFocused = false
+        onDismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            onDone(trimmed)
         }
     }
 }

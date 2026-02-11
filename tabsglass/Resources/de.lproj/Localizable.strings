@@ -134,6 +134,12 @@
 "tips.shake_undo" = "Notiz versehentlich gelöscht?\nSchüttle dein Handy, um sie zurückzuholen";
 "tips.formatting" = "Markiere Text im Eingabefeld, um Fett, Kursiv und andere Formatierung anzuwenden";
 
+// MARK: - Onboarding
+
+"onboarding.title" = "Notizen sehen aus wie Nachrichten in Messengern";
+"onboarding.subtitle" = "Wie ein Chat mit sich selbst";
+"onboarding.continue" = "Weiter";
+
 // MARK: - Search
 
 "search.title" = "Suche";
