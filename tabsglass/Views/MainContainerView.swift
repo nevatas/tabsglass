@@ -35,6 +35,7 @@ struct MainContainerView: View {
     @State private var attachedImages: [UIImage] = []
     @State private var attachedVideos: [AttachedVideo] = []
     @State private var formattingEntities: [TextEntity] = []
+    @State private var composerContent: FormattingTextView.ComposerContent?
 
     // Selection mode
     @State private var isSelectionMode = false
@@ -98,6 +99,7 @@ struct MainContainerView: View {
             attachedImages: $attachedImages,
             attachedVideos: $attachedVideos,
             formattingEntities: $formattingEntities,
+            composerContent: $composerContent,
             onSend: { sendMessage() },
             onDeleteMessage: { message in
                 deleteMessage(message)
@@ -106,10 +108,10 @@ struct MainContainerView: View {
                 moveMessage(message, toTabId: targetTabId)
             },
             onEditMessage: { message in
-                if message.isTodoList {
-                    taskListToEdit = message
+                if message.isTodoList && !message.hasContentBlocks {
+                    taskListToEdit = message  // Old-style todo list → TaskListSheet
                 } else {
-                    messageToEdit = message
+                    messageToEdit = message   // Regular or mixed content → EditMessageSheet
                 }
             },
             onRestoreMessage: {
@@ -310,8 +312,8 @@ struct MainContainerView: View {
         }
         .sheet(item: $messageToEdit) { message in
             EditMessageSheet(
-                originalText: message.content,
-                originalEntities: message.entities,
+                originalText: message.hasContentBlocks ? message.composerText : message.content,
+                originalEntities: message.hasContentBlocks ? nil : message.entities,
                 originalPhotoFileNames: message.photoFileNames,
                 originalVideoFileNames: message.videoFileNames,
                 originalVideoThumbnailFileNames: message.videoThumbnailFileNames,
@@ -364,9 +366,27 @@ struct MainContainerView: View {
                         return 1.0
                     }
 
-                    // Update message
-                    message.content = newText
-                    message.entities = newEntities
+                    // Update message — handle contentBlocks if present
+                    if message.hasContentBlocks {
+                        let parsed = ContentBlock.parse(composerText: newText)
+                        if parsed.hasTodos {
+                            message.content = parsed.plainText
+                            message.contentBlocks = parsed.blocks
+                            message.todoItems = parsed.todoItems
+                            let urlEntities = TextEntity.detectURLs(in: parsed.plainText)
+                            message.entities = urlEntities.isEmpty ? nil : urlEntities
+                        } else {
+                            // All todos removed — revert to regular message
+                            message.content = newText
+                            message.entities = newEntities
+                            message.contentBlocks = nil
+                            message.todoItems = nil
+                            message.todoTitle = nil
+                        }
+                    } else {
+                        message.content = newText
+                        message.entities = newEntities
+                    }
                     message.photoFileNames = newPhotoFileNames
                     message.photoAspectRatios = newPhotoAspectRatios
                     message.videoFileNames = newVideoFileNames
@@ -450,11 +470,15 @@ struct MainContainerView: View {
         let originalText = messageText
         let tabId = currentTabId
 
+        // Extract composer content for inline checkboxes
+        let extractedComposerContent = composerContent
+
         // Clear UI immediately for responsiveness
         messageText = ""
         attachedImages = []
         attachedVideos = []
         formattingEntities = []
+        composerContent = nil
 
         // Save photos synchronously (they're already in memory)
         var photoFileNames: [String] = []
@@ -485,35 +509,57 @@ struct MainContainerView: View {
             }
 
             await MainActor.run {
-                // Calculate leading whitespace offset for entity adjustment
-                let leadingWhitespaceUTF16 = originalText
-                    .prefix(while: { $0.isWhitespace || $0.isNewline })
-                    .utf16
-                    .count
-                let trimmedTextUTF16Count = trimmedText.utf16.count
-
-                // Adjust formatting entity offsets for trimmed text
+                var contentForMessage = trimmedText
                 var allEntities: [TextEntity] = []
-                for entity in entitiesToSave {
-                    let newOffset = entity.offset - leadingWhitespaceUTF16
-                    // Only include entities that are within the trimmed text bounds
-                    if newOffset >= 0 && newOffset + entity.length <= trimmedTextUTF16Count {
-                        allEntities.append(TextEntity(
-                            type: entity.type,
-                            offset: newOffset,
-                            length: entity.length,
-                            url: entity.url
-                        ))
+                var contentBlocks: [ContentBlock]? = nil
+                var todoItems: [TodoItem]? = nil
+
+                if let cc = extractedComposerContent, cc.hasTodos {
+                    // Mixed content: use extracted content
+                    contentForMessage = cc.plainTextForSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+                    contentBlocks = cc.contentBlocks
+                    todoItems = cc.todoItems.isEmpty ? nil : cc.todoItems
+
+                    // Collect entities from text blocks
+                    for block in cc.contentBlocks where block.type == "text" {
+                        if let blockEntities = block.entities {
+                            allEntities.append(contentsOf: blockEntities)
+                        }
                     }
+                } else {
+                    // Regular text message (old path)
+                    // Calculate leading whitespace offset for entity adjustment
+                    let leadingWhitespaceUTF16 = originalText
+                        .prefix(while: { $0.isWhitespace || $0.isNewline })
+                        .utf16
+                        .count
+                    let trimmedTextUTF16Count = trimmedText.utf16.count
+
+                    // Adjust formatting entity offsets for trimmed text
+                    for entity in entitiesToSave {
+                        let newOffset = entity.offset - leadingWhitespaceUTF16
+                        if newOffset >= 0 && newOffset + entity.length <= trimmedTextUTF16Count {
+                            allEntities.append(TextEntity(
+                                type: entity.type,
+                                offset: newOffset,
+                                length: entity.length,
+                                url: entity.url
+                            ))
+                        }
+                    }
+
+                    // Add URL entities (already relative to trimmed text)
+                    let urlEntities = TextEntity.detectURLs(in: trimmedText)
+                    allEntities.append(contentsOf: urlEntities)
                 }
 
-                // Add URL entities (already relative to trimmed text)
-                let urlEntities = TextEntity.detectURLs(in: trimmedText)
-                allEntities.append(contentsOf: urlEntities)
+                // Allow sending if there's content or media
+                let hasContent = !contentForMessage.isEmpty || (todoItems != nil && !todoItems!.isEmpty) || !photoFileNames.isEmpty || !videoFileNames.isEmpty
+                guard hasContent else { return }
 
                 // tabId = nil for Inbox, or actual tab ID
                 let message = Message(
-                    content: trimmedText,
+                    content: contentForMessage,
                     tabId: tabId,
                     entities: allEntities.isEmpty ? nil : allEntities,
                     photoFileNames: photoFileNames,
@@ -523,6 +569,14 @@ struct MainContainerView: View {
                     videoDurations: videoDurations,
                     videoThumbnailFileNames: videoThumbnailFileNames
                 )
+
+                if let items = todoItems {
+                    message.todoItems = items
+                }
+                if let blocks = contentBlocks {
+                    message.contentBlocks = blocks
+                }
+
                 modelContext.insert(message)
                 try? modelContext.save()
             }
@@ -592,6 +646,14 @@ struct MainContainerView: View {
               let index = items.firstIndex(where: { $0.id == itemId }) else { return }
         items[index].isCompleted = isCompleted
         message.todoItems = items
+
+        // Also update contentBlocks if present (new format)
+        if var blocks = message.contentBlocks,
+           let blockIndex = blocks.firstIndex(where: { $0.id == itemId }) {
+            blocks[blockIndex].isCompleted = isCompleted
+            message.contentBlocks = blocks
+        }
+
         try? modelContext.save()
         reloadTrigger += 1
     }
@@ -651,6 +713,7 @@ struct MainContainerView: View {
         message.createdAt = snapshot.createdAt
         message.todoItems = snapshot.todoItems
         message.todoTitle = snapshot.todoTitle
+        message.contentBlocks = snapshot.contentBlocks
         message.reminderDate = nil
         message.reminderRepeatInterval = nil
         message.notificationId = nil

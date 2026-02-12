@@ -249,25 +249,30 @@ final class TodoCheckboxRow: UIView {
         // Text label
         textLabel.font = .systemFont(ofSize: 16)
         textLabel.numberOfLines = 0
-        textLabel.isUserInteractionEnabled = true
         textLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(textLabel)
 
-        // Tap on text also toggles checkbox
+        // Tap anywhere on the row toggles checkbox
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(checkboxTapped))
-        textLabel.addGestureRecognizer(tapGesture)
+        addGestureRecognizer(tapGesture)
 
         NSLayoutConstraint.activate([
             checkboxButton.leadingAnchor.constraint(equalTo: leadingAnchor),
-            checkboxButton.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            checkboxButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             checkboxButton.widthAnchor.constraint(equalToConstant: 30),
             checkboxButton.heightAnchor.constraint(equalToConstant: 30),
 
             textLabel.leadingAnchor.constraint(equalTo: checkboxButton.trailingAnchor, constant: 10),
             textLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
-            textLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            textLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12)
+            textLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            textLabel.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 10),
+            textLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
+
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
         ])
+
+        // Resist stretching in stack views so extra space goes to text blocks
+        setContentHuggingPriority(.defaultHigh, for: .vertical)
     }
 
     func configure(with item: TodoItem, isDarkMode: Bool) {
@@ -339,7 +344,7 @@ final class TodoCheckboxRow: UIView {
     static func calculateHeight(for text: String, maxWidth: CGFloat) -> CGFloat {
         let checkboxWidth: CGFloat = 30
         let spacing: CGFloat = 10
-        let verticalPadding: CGFloat = 24  // 12 top + 12 bottom
+        let verticalPadding: CGFloat = 20  // 10 top + 10 bottom
         let textWidth = maxWidth - checkboxWidth - spacing
 
         let textHeight = text.boundingRect(

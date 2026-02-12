@@ -22,6 +22,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var attachedImages: [UIImage]
     @Binding var attachedVideos: [AttachedVideo]
     @Binding var formattingEntities: [TextEntity]  // Entities from formatting
+    @Binding var composerContent: FormattingTextView.ComposerContent?
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
@@ -76,6 +77,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onEntitiesExtracted = { entities in
             formattingEntities = entities
         }
+        vc.onComposerContentExtracted = { content in
+            composerContent = content
+        }
         // Selection mode
         vc.isSelectionMode = isSelectionMode
         vc.selectedMessageIds = selectedMessageIds
@@ -93,6 +97,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             hasher.combine(message.content)
             hasher.combine(message.todoTitle)
             hasher.combine(message.todoItems?.count ?? -1)
+            hasher.combine(message.contentBlocks?.count ?? -1)
             hasher.combine(message.hasReminder)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
@@ -187,6 +192,7 @@ final class UnifiedChatViewController: UIViewController {
     var lastContentHash: Int = 0
     var onSend: (() -> Void)?
     var onEntitiesExtracted: (([TextEntity]) -> Void)?
+    var onComposerContentExtracted: ((FormattingTextView.ComposerContent?) -> Void)?
 
     /// Total tab count including Search and virtual Inbox
     private var totalTabCount: Int { 2 + tabs.count }
@@ -261,6 +267,7 @@ final class UnifiedChatViewController: UIViewController {
             hasher.combine(message.content)
             hasher.combine(message.todoTitle)
             hasher.combine(message.todoItems?.count ?? -1)
+            hasher.combine(message.contentBlocks?.count ?? -1)
             hasher.combine(message.hasReminder)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
@@ -481,8 +488,9 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onSend = { [weak self] in
             guard let self = self else { return }
-            // Extract formatting entities before clearing
+            // Extract formatting entities and composer content before clearing
             self.onEntitiesExtracted?(self.inputContainer.extractEntities())
+            self.onComposerContentExtracted?(self.inputContainer.extractComposerContent())
             self.onSend?()
             self.inputContainer.clearText()
             self.reloadCurrentTab()
@@ -2351,7 +2359,17 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
         var height: CGFloat = 8  // Cell padding (4 top + 4 bottom)
 
-        // Todo list message
+        // Mixed content with ordered blocks (new format)
+        if message.hasContentBlocks, let blocks = message.contentBlocks {
+            let hasMedia = message.hasMedia && !message.aspectRatios.isEmpty
+            if hasMedia {
+                height += MosaicMediaView.calculateHeight(for: message.aspectRatios, maxWidth: bubbleWidth)
+            }
+            height += MixedContentView.calculateHeight(for: blocks, maxWidth: bubbleWidth)
+            return max(height, 50)
+        }
+
+        // Todo list message (old format)
         if message.isTodoList, let items = message.todoItems {
             let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             height += todoHeight

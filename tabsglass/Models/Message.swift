@@ -21,6 +21,73 @@ enum ReminderRepeatInterval: String, Codable, CaseIterable {
     case yearly
 }
 
+// MARK: - Content Block (ordered mixed content)
+
+struct ContentBlock: Codable, Hashable {
+    let id: UUID
+    let type: String        // "text" or "todo"
+    var text: String
+    var isCompleted: Bool
+    var entities: [TextEntity]?
+
+    init(id: UUID = UUID(), type: String, text: String, isCompleted: Bool = false, entities: [TextEntity]? = nil) {
+        self.id = id
+        self.type = type
+        self.text = text
+        self.isCompleted = isCompleted
+        self.entities = entities
+    }
+
+    /// Checkbox prefix used in composer text
+    static let checkboxPrefix = "\u{25CB} "  // "○ "
+
+    /// Reconstruct composer-format text from content blocks
+    static func composerText(from blocks: [ContentBlock]) -> String {
+        blocks.map { block in
+            block.type == "todo" ? checkboxPrefix + block.text : block.text
+        }.joined(separator: "\n")
+    }
+
+    /// Parse composer text into structured content blocks
+    static func parse(composerText: String) -> (blocks: [ContentBlock], todoItems: [TodoItem], plainText: String, hasTodos: Bool) {
+        let prefix = checkboxPrefix
+        let prefixCount = prefix.count
+        let lines = composerText.components(separatedBy: "\n")
+        var blocks: [ContentBlock] = []
+        var todoItems: [TodoItem] = []
+        var textLines: [String] = []
+        var hasTodos = false
+
+        func flushTextLines() {
+            let joined = textLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !joined.isEmpty {
+                let entities = TextEntity.detectURLs(in: joined)
+                blocks.append(ContentBlock(type: "text", text: joined, entities: entities.isEmpty ? nil : entities))
+            }
+            textLines.removeAll()
+        }
+
+        for line in lines {
+            if line.hasPrefix(prefix) {
+                flushTextLines()
+                let todoText = String(line.dropFirst(prefixCount)).trimmingCharacters(in: .whitespaces)
+                if !todoText.isEmpty {
+                    let itemId = UUID()
+                    blocks.append(ContentBlock(id: itemId, type: "todo", text: todoText))
+                    todoItems.append(TodoItem(id: itemId, text: todoText))
+                    hasTodos = true
+                }
+            } else {
+                textLines.append(line)
+            }
+        }
+        flushTextLines()
+
+        let plainText = blocks.filter { $0.type == "text" }.map { $0.text }.joined(separator: "\n")
+        return (blocks, todoItems, plainText, hasTodos)
+    }
+}
+
 // MARK: - Todo Item
 
 struct TodoItem: Codable, Hashable, Identifiable {
@@ -122,6 +189,7 @@ final class Message: Identifiable {
     var videoThumbnailFileNames: [String] = []
     var todoItems: [TodoItem]?      // Todo list items (nil = not a todo list)
     var todoTitle: String?          // Optional title for todo list
+    var contentBlocks: [ContentBlock]?  // Ordered mixed content blocks (nil = old format)
     var reminderDate: Date?         // When to send reminder notification
     var reminderRepeatInterval: ReminderRepeatInterval?  // How often to repeat
     var notificationId: String?     // ID for canceling scheduled notification
@@ -154,6 +222,17 @@ final class Message: Identifiable {
     /// Check if this message is a todo list
     var isTodoList: Bool {
         todoItems != nil && !(todoItems?.isEmpty ?? true)
+    }
+
+    /// Whether this message uses the new ordered content blocks format
+    var hasContentBlocks: Bool {
+        contentBlocks != nil && !(contentBlocks?.isEmpty ?? true)
+    }
+
+    /// Reconstruct composer-format text from content blocks (text + "○ " prefixed todos)
+    var composerText: String {
+        guard let blocks = contentBlocks, !blocks.isEmpty else { return content }
+        return ContentBlock.composerText(from: blocks)
     }
 
     /// Create a message in a specific tab (or Inbox if tabId is nil)

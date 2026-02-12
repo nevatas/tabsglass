@@ -348,6 +348,11 @@ final class SwiftUIComposerContainer: UIView {
         return composerState.extractEntities()
     }
 
+    /// Extract structured composer content (text blocks + todo items)
+    func extractComposerContent() -> FormattingTextView.ComposerContent? {
+        return composerState.formattingTextView?.extractComposerContent()
+    }
+
     /// Focus the composer text field
     func focus() {
         composerState.shouldFocus = true
@@ -555,6 +560,16 @@ struct EmbeddedComposerView: View {
                                     .contentShape(Rectangle())
                             }
 
+                            Button {
+                                state.formattingTextView?.insertCheckbox()
+                            } label: {
+                                Image(systemName: "checkmark.square")
+                                    .font(.system(size: 20, weight: .medium))
+                                    .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
+                                    .padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                            }
+
                             Spacer()
 
                             Button(action: {
@@ -732,6 +747,7 @@ final class MessageTableCell: UITableViewCell {
     private let mosaicView = MosaicMediaView()
     private let messageTextView = UITextView()
     private let todoView = TodoBubbleView()
+    private let mixedContentView = MixedContentView()
     private let reminderBadge = UIView()
     private let reminderIcon = UIImageView()
 
@@ -755,6 +771,10 @@ final class MessageTableCell: UITableViewCell {
     /// Callback when a todo item is toggled: (itemId, isCompleted)
     var onTodoToggle: ((UUID, Bool) -> Void)?
 
+    private var mixedContentTopToMosaic: NSLayoutConstraint!
+    private var mixedContentTopToBubble: NSLayoutConstraint!
+    private var mixedContentBottomToBubble: NSLayoutConstraint!
+    private var mixedContentHeightConstraint: NSLayoutConstraint!
     private var messageTextViewTopToMosaic: NSLayoutConstraint!
     private var messageTextViewTopToBubble: NSLayoutConstraint!
     private var messageTextViewBottomToBubble: NSLayoutConstraint!
@@ -778,8 +798,12 @@ final class MessageTableCell: UITableViewCell {
     private func registerTraitChanges() {
         traitChangeRegistration = registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (cell: MessageTableCell, _) in
             self?.updateBubbleColor()
-            if let message = self?.cachedMessage, message.isTodoList, let items = message.todoItems {
-                let isDarkMode = cell.traitCollection.userInterfaceStyle == .dark
+            guard let message = self?.cachedMessage else { return }
+            let isDarkMode = cell.traitCollection.userInterfaceStyle == .dark
+            if message.hasContentBlocks, let blocks = message.contentBlocks {
+                let bubbleWidth = max(cell.contentView.bounds.width - 32, 0)
+                self?.mixedContentView.configure(with: blocks, isDarkMode: isDarkMode, maxWidth: bubbleWidth)
+            } else if message.isTodoList, let items = message.todoItems {
                 self?.todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
             }
         }
@@ -889,6 +913,11 @@ final class MessageTableCell: UITableViewCell {
         }
         bubbleView.addSubview(todoView)
 
+        // Mixed content view for ordered text + todo blocks
+        mixedContentView.translatesAutoresizingMaskIntoConstraints = false
+        mixedContentView.isHidden = true
+        bubbleView.addSubview(mixedContentView)
+
         // Fade gradient overlay for truncated messages (added before button so button is on top)
         fadeGradientView.translatesAutoresizingMaskIntoConstraints = false
         fadeGradientView.isHidden = true
@@ -913,6 +942,13 @@ final class MessageTableCell: UITableViewCell {
         messageTextViewTopToBubble = messageTextView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10)
         messageTextViewBottomToBubble = messageTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10)
         mosaicBottomToBubble = mosaicView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
+
+        // Mixed content view constraints
+        mixedContentTopToMosaic = mixedContentView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor)
+        mixedContentTopToBubble = mixedContentView.topAnchor.constraint(equalTo: bubbleView.topAnchor)
+        mixedContentBottomToBubble = mixedContentView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor)
+        mixedContentHeightConstraint = mixedContentView.heightAnchor.constraint(equalToConstant: 0)
+        mixedContentHeightConstraint.priority = UILayoutPriority(999)
 
         // Show more button constraints
         showMoreTopToText = showMoreButton.topAnchor.constraint(equalTo: messageTextView.bottomAnchor, constant: 4)
@@ -960,6 +996,11 @@ final class MessageTableCell: UITableViewCell {
             todoView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
             todoView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
             todoViewHeightConstraint,
+
+            // Mixed content view constraints (horizontal always active)
+            mixedContentView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
+            mixedContentView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
+            mixedContentHeightConstraint,
 
             // Fade gradient constraints — covers bottom of text area + button
             fadeGradientView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
@@ -1020,6 +1061,7 @@ final class MessageTableCell: UITableViewCell {
         messageTextView.isUserInteractionEnabled = !enabled
         mosaicView.isUserInteractionEnabled = !enabled
         todoView.isUserInteractionEnabled = !enabled
+        mixedContentView.isUserInteractionEnabled = !enabled
 
         let changes = {
             self.checkboxView.isHidden = !enabled
@@ -1127,6 +1169,11 @@ final class MessageTableCell: UITableViewCell {
         showMoreTopToText.isActive = false
         showMoreBottomToBubble.isActive = false
         messageTextViewHeightConstraint.isActive = false
+        // Reset mixed content constraints
+        mixedContentTopToMosaic.isActive = false
+        mixedContentTopToBubble.isActive = false
+        mixedContentBottomToBubble.isActive = false
+        mixedContentView.isHidden = true
         // Reset show more state
         isExpanded = false
         showMoreButton.isHidden = true
@@ -1147,8 +1194,18 @@ final class MessageTableCell: UITableViewCell {
         let attributedText = createAttributedString(for: message)
         messageTextView.attributedText = attributedText
 
-        // Configure todo view if this is a todo list
-        if message.isTodoList, let items = message.todoItems {
+        // Configure mixed content view if message uses content blocks
+        if message.hasContentBlocks, let blocks = message.contentBlocks {
+            let isDarkMode = traitCollection.userInterfaceStyle == .dark
+            let bubbleWidth = max(contentView.bounds.width - 32, 0)
+            mixedContentView.configure(with: blocks, isDarkMode: isDarkMode, maxWidth: bubbleWidth)
+            mixedContentView.onTodoToggle = { [weak self] itemId, isCompleted in
+                self?.onTodoToggle?(itemId, isCompleted)
+            }
+        }
+
+        // Configure todo view if this is a todo list (old format)
+        if !message.hasContentBlocks && message.isTodoList, let items = message.todoItems {
             let isDarkMode = traitCollection.userInterfaceStyle == .dark
             todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
         }
@@ -1250,6 +1307,9 @@ final class MessageTableCell: UITableViewCell {
         showMoreTopToText.isActive = false
         showMoreBottomToBubble.isActive = false
         messageTextViewHeightConstraint.isActive = false
+        mixedContentTopToMosaic.isActive = false
+        mixedContentTopToBubble.isActive = false
+        mixedContentBottomToBubble.isActive = false
 
         // Calculate bubble width (cell width - 32 for margins)
         let bubbleWidth = max(width - 32, 0)
@@ -1282,7 +1342,27 @@ final class MessageTableCell: UITableViewCell {
             mosaicView.isHidden = true
         }
 
-        // Configure todo view
+        // Mixed content with ordered blocks (new format)
+        if message.hasContentBlocks, let blocks = message.contentBlocks {
+            let mixedHeight = MixedContentView.calculateHeight(for: blocks, maxWidth: bubbleWidth)
+            mixedContentHeightConstraint.constant = mixedHeight
+            mixedContentView.isHidden = false
+            messageTextView.isHidden = true
+            todoView.isHidden = true
+            todoViewHeightConstraint.constant = 0
+            showMoreButton.isHidden = true
+            fadeGradientView.isHidden = true
+
+            if hasMedia {
+                mixedContentTopToMosaic.isActive = true
+            } else {
+                mixedContentTopToBubble.isActive = true
+            }
+            mixedContentBottomToBubble.isActive = true
+            return
+        }
+
+        // Configure todo view (old format)
         if hasTodo, let items = message.todoItems {
             let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             todoViewHeightConstraint.constant = todoHeight
@@ -1452,6 +1532,198 @@ final class EmptyTableCell: UITableViewCell {
     }
 }
 
+// MARK: - Mixed Content View (ordered text + todo blocks)
+
+final class MixedContentView: UIView {
+    var onTodoToggle: ((UUID, Bool) -> Void)?
+    private let stackView = UIStackView()
+    private var checkboxRows: [TodoCheckboxRow] = []
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        stackView.axis = .vertical
+        stackView.spacing = 0
+        stackView.alignment = .fill
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stackView)
+        NSLayoutConstraint.activate([
+            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(with blocks: [ContentBlock], isDarkMode: Bool, maxWidth: CGFloat) {
+        stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        checkboxRows.removeAll()
+
+        let textColor: UIColor = isDarkMode ? .white : .black
+        var previousBlockType: String?
+
+        for block in blocks {
+            switch block.type {
+            case "text":
+                let textView = UITextView()
+                textView.backgroundColor = .clear
+                textView.isEditable = false
+                textView.isScrollEnabled = false
+                textView.isSelectable = true
+                textView.dataDetectorTypes = []
+                textView.textContainerInset = UIEdgeInsets(top: 4, left: 2, bottom: 4, right: 2)
+                textView.textContainer.lineFragmentPadding = 0
+                textView.linkTextAttributes = [
+                    .foregroundColor: ThemeManager.shared.currentTheme.linkColor,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue
+                ]
+                textView.textColor = textColor
+                textView.font = .systemFont(ofSize: 16)
+
+                // Build attributed string with entities
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.lineSpacing = 2
+                let baseAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 16),
+                    .foregroundColor: textColor,
+                    .paragraphStyle: paragraphStyle
+                ]
+                let attrStr = NSMutableAttributedString(string: block.text, attributes: baseAttrs)
+
+                if let entities = block.entities {
+                    let nsString = block.text as NSString
+                    for entity in entities {
+                        guard entity.offset >= 0, entity.length > 0,
+                              entity.offset + entity.length <= nsString.length else { continue }
+                        let range = NSRange(location: entity.offset, length: entity.length)
+                        switch entity.type {
+                        case "url":
+                            let urlString = entity.url ?? nsString.substring(with: range)
+                            if let url = URL(string: urlString) {
+                                attrStr.addAttribute(.link, value: url, range: range)
+                            }
+                        case "text_link":
+                            if let urlString = entity.url, let url = URL(string: urlString) {
+                                attrStr.addAttribute(.link, value: url, range: range)
+                            }
+                        case "bold":
+                            attrStr.addAttribute(.font, value: UIFont.boldSystemFont(ofSize: 16), range: range)
+                        case "italic":
+                            attrStr.addAttribute(.font, value: UIFont.italicSystemFont(ofSize: 16), range: range)
+                        case "underline":
+                            attrStr.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                        case "strikethrough":
+                            attrStr.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                        default: break
+                        }
+                    }
+                }
+
+                textView.attributedText = attrStr
+                textView.translatesAutoresizingMaskIntoConstraints = false
+
+                // Calculate height
+                let textWidth = maxWidth - 28
+                let textHeight = attrStr.boundingRect(
+                    with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                ).height
+
+                let heightConstraint = textView.heightAnchor.constraint(equalToConstant: ceil(textHeight) + 8)
+                heightConstraint.priority = UILayoutPriority(999)
+                heightConstraint.isActive = true
+
+                stackView.addArrangedSubview(textView)
+                previousBlockType = "text"
+
+            case "todo":
+                // Add separator between consecutive todo items
+                if previousBlockType == "todo" {
+                    stackView.addArrangedSubview(createSeparator(isDarkMode: isDarkMode))
+                }
+
+                let row = TodoCheckboxRow()
+                let item = TodoItem(id: block.id, text: block.text, isCompleted: block.isCompleted)
+                row.configure(with: item, isDarkMode: isDarkMode)
+                row.onToggle = { [weak self] itemId, isCompleted in
+                    self?.onTodoToggle?(itemId, isCompleted)
+                }
+                row.translatesAutoresizingMaskIntoConstraints = false
+
+                // Set explicit height to match calculateHeight and prevent stack stretching
+                let availableWidth = maxWidth - 24
+                let todoHeight = TodoCheckboxRow.calculateHeight(for: block.text, maxWidth: availableWidth)
+                let todoHeightConstraint = row.heightAnchor.constraint(equalToConstant: todoHeight)
+                todoHeightConstraint.priority = UILayoutPriority(999)
+                todoHeightConstraint.isActive = true
+
+                stackView.addArrangedSubview(row)
+                checkboxRows.append(row)
+                previousBlockType = "todo"
+
+            default:
+                break
+            }
+        }
+    }
+
+    private func createSeparator(isDarkMode: Bool) -> UIView {
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        let line = UIView()
+        line.backgroundColor = isDarkMode ? UIColor.white.withAlphaComponent(0.15) : UIColor.black.withAlphaComponent(0.1)
+        line.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(line)
+        NSLayoutConstraint.activate([
+            container.heightAnchor.constraint(equalToConstant: 1),
+            line.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 40),
+            line.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            line.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            line.heightAnchor.constraint(equalToConstant: 0.5)
+        ])
+        return container
+    }
+
+    static func calculateHeight(for blocks: [ContentBlock], maxWidth: CGFloat) -> CGFloat {
+        var height: CGFloat = 0
+        let horizontalPadding: CGFloat = 24  // 12 + 12 for todo rows
+        let availableWidth = maxWidth - horizontalPadding
+        var previousBlockType: String?
+
+        for block in blocks {
+            switch block.type {
+            case "text":
+                let textWidth = maxWidth - 28
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.lineSpacing = 2
+                let textHeight = block.text.boundingRect(
+                    with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    attributes: [.font: UIFont.systemFont(ofSize: 16), .paragraphStyle: paragraphStyle],
+                    context: nil
+                ).height
+                height += ceil(textHeight) + 8  // 4 top + 4 bottom inset
+                previousBlockType = "text"
+            case "todo":
+                if previousBlockType == "todo" {
+                    height += 1  // separator
+                }
+                height += TodoCheckboxRow.calculateHeight(for: block.text, maxWidth: availableWidth)
+                previousBlockType = "todo"
+            default:
+                break
+            }
+        }
+
+        height += 16  // vertical padding (8 top + 8 bottom)
+        return height
+    }
+}
+
 // MARK: - Search Result Cell
 
 final class SearchResultCell: UITableViewCell {
@@ -1591,7 +1863,29 @@ final class SearchResultCell: UITableViewCell {
         // Clear old thumbnails
         thumbnailStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
-        // Handle task lists
+        // Handle mixed content (new format)
+        if message.hasContentBlocks, let blocks = message.contentBlocks {
+            messageLabel.numberOfLines = 5
+            messageLabel.attributedText = formatMixedContent(blocks: blocks)
+
+            labelBottomWithMedia.isActive = false
+            thumbnailStackHeight.isActive = false
+            labelBottomWithoutMedia.isActive = true
+            thumbnailStack.isHidden = true
+
+            // Show thumbnails if has media
+            let totalMedia = message.photoFileNames.count + message.videoFileNames.count
+            if totalMedia > 0 {
+                labelBottomWithoutMedia.isActive = false
+                labelBottomWithMedia.isActive = true
+                thumbnailStackHeight.isActive = true
+                thumbnailStack.isHidden = false
+                configureThumbnails(for: message)
+            }
+            return
+        }
+
+        // Handle task lists (old format)
         if message.isTodoList, let todoItems = message.todoItems {
             // Allow more lines for todo lists (title + 3 items + "+N more")
             messageLabel.numberOfLines = 5
@@ -1627,51 +1921,12 @@ final class SearchResultCell: UITableViewCell {
             labelBottomWithMedia.isActive = true
             thumbnailStackHeight.isActive = true
             thumbnailStack.isHidden = false
+            configureThumbnails(for: message)
         } else {
             labelBottomWithMedia.isActive = false
             thumbnailStackHeight.isActive = false
             labelBottomWithoutMedia.isActive = true
             thumbnailStack.isHidden = true
-            return
-        }
-
-        // Calculate how many thumbnails to show
-        let visibleCount = min(totalMedia, Self.maxVisibleThumbnails)
-        let hiddenCount = totalMedia - visibleCount
-
-        // Add photo thumbnails
-        for (index, fileName) in message.photoFileNames.prefix(visibleCount).enumerated() {
-            let isLast = (index == visibleCount - 1) && hiddenCount > 0
-            let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount)
-            thumbnailStack.addArrangedSubview(thumbnailView)
-
-            // Load image asynchronously
-            let thumbSize = CGSize(width: Self.thumbnailSize * 2, height: Self.thumbnailSize * 2)
-            ImageCache.shared.loadThumbnail(for: fileName, targetSize: thumbSize) { [weak thumbnailView] image in
-                DispatchQueue.main.async {
-                    guard let imageView = thumbnailView?.subviews.first as? UIImageView else { return }
-                    imageView.image = image
-                }
-            }
-        }
-
-        // Add video thumbnails if we have room
-        let remainingSlots = visibleCount - message.photoFileNames.count
-        if remainingSlots > 0 {
-            for (index, thumbFileName) in message.videoThumbnailFileNames.prefix(remainingSlots).enumerated() {
-                let actualIndex = message.photoFileNames.count + index
-                let isLast = (actualIndex == visibleCount - 1) && hiddenCount > 0
-                let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount, isVideo: true)
-                thumbnailStack.addArrangedSubview(thumbnailView)
-
-                let thumbSize = CGSize(width: Self.thumbnailSize * 2, height: Self.thumbnailSize * 2)
-                ImageCache.shared.loadThumbnail(for: thumbFileName, targetSize: thumbSize) { [weak thumbnailView] image in
-                    DispatchQueue.main.async {
-                        guard let imageView = thumbnailView?.subviews.first as? UIImageView else { return }
-                        imageView.image = image
-                    }
-                }
-            }
         }
     }
 
@@ -1808,6 +2063,93 @@ final class SearchResultCell: UITableViewCell {
         return result
     }
 
+    /// Format mixed content blocks for search results
+    private func formatMixedContent(blocks: [ContentBlock]) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 0
+        paragraphStyle.paragraphSpacing = 0
+        paragraphStyle.lineHeightMultiple = 1.0
+
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 16),
+            .foregroundColor: UIColor.label,
+            .paragraphStyle: paragraphStyle
+        ]
+        let completedAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 15),
+            .foregroundColor: UIColor.secondaryLabel,
+            .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+            .paragraphStyle: paragraphStyle
+        ]
+        let itemAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 15),
+            .foregroundColor: UIColor.label,
+            .paragraphStyle: paragraphStyle
+        ]
+        let checkboxAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 14),
+            .foregroundColor: UIColor.tertiaryLabel,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        for (index, block) in blocks.enumerated() {
+            if index > 0 { result.append(NSAttributedString(string: "\n", attributes: textAttrs)) }
+            switch block.type {
+            case "text":
+                // Truncate to first 2 lines
+                let truncated = block.text.components(separatedBy: "\n").prefix(2).joined(separator: "\n")
+                result.append(NSAttributedString(string: truncated, attributes: textAttrs))
+            case "todo":
+                let checkbox = block.isCompleted ? "● " : "○ "
+                result.append(NSAttributedString(string: checkbox, attributes: checkboxAttrs))
+                result.append(NSAttributedString(string: block.text, attributes: block.isCompleted ? completedAttrs : itemAttrs))
+            default: break
+            }
+        }
+
+        return result
+    }
+
+    /// Configure thumbnail images for search result
+    private func configureThumbnails(for message: Message) {
+        let totalMedia = message.photoFileNames.count + message.videoFileNames.count
+        let visibleCount = min(totalMedia, Self.maxVisibleThumbnails)
+        let hiddenCount = totalMedia - visibleCount
+
+        for (index, fileName) in message.photoFileNames.prefix(visibleCount).enumerated() {
+            let isLast = (index == visibleCount - 1) && hiddenCount > 0
+            let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount)
+            thumbnailStack.addArrangedSubview(thumbnailView)
+
+            let thumbSize = CGSize(width: Self.thumbnailSize * 2, height: Self.thumbnailSize * 2)
+            ImageCache.shared.loadThumbnail(for: fileName, targetSize: thumbSize) { [weak thumbnailView] image in
+                DispatchQueue.main.async {
+                    guard let imageView = thumbnailView?.subviews.first as? UIImageView else { return }
+                    imageView.image = image
+                }
+            }
+        }
+
+        let remainingSlots = visibleCount - message.photoFileNames.count
+        if remainingSlots > 0 {
+            for (index, thumbFileName) in message.videoThumbnailFileNames.prefix(remainingSlots).enumerated() {
+                let actualIndex = message.photoFileNames.count + index
+                let isLast = (actualIndex == visibleCount - 1) && hiddenCount > 0
+                let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount, isVideo: true)
+                thumbnailStack.addArrangedSubview(thumbnailView)
+
+                let thumbSize = CGSize(width: Self.thumbnailSize * 2, height: Self.thumbnailSize * 2)
+                ImageCache.shared.loadThumbnail(for: thumbFileName, targetSize: thumbSize) { [weak thumbnailView] image in
+                    DispatchQueue.main.async {
+                        guard let imageView = thumbnailView?.subviews.first as? UIImageView else { return }
+                        imageView.image = image
+                    }
+                }
+            }
+        }
+    }
+
     /// Calculate cell height for a message
     static func calculateHeight(for message: Message, maxWidth: CGFloat) -> CGFloat {
         let textWidth = maxWidth - (cardHorizontalInset * 2) - (contentPadding * 2)
@@ -1818,8 +2160,25 @@ final class SearchResultCell: UITableViewCell {
         height += 16 // ~13pt font + some padding
         height += 4 // spacing between tab name and message
 
-        // Handle task lists
-        if message.isTodoList, let todoItems = message.todoItems {
+        // Handle mixed content (new format)
+        if message.hasContentBlocks, let blocks = message.contentBlocks {
+            var lines = 0
+            for block in blocks {
+                switch block.type {
+                case "text": lines += min(block.text.components(separatedBy: "\n").count, 2)
+                case "todo": lines += 1
+                default: break
+                }
+            }
+            height += CGFloat(min(lines, 5)) * 20
+
+            let totalMedia = message.photoFileNames.count + message.videoFileNames.count
+            if totalMedia > 0 {
+                height += 8 + thumbnailSize
+            }
+        }
+        // Handle task lists (old format)
+        else if message.isTodoList, let todoItems = message.todoItems {
             var lines = 0
 
             // Title line

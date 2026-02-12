@@ -26,6 +26,7 @@ struct DeletedMessageSnapshot {
     let mediaGroupId: String?
     let todoItems: [TodoItem]?
     let todoTitle: String?
+    let contentBlocks: [ContentBlock]?
     let reminderDate: Date?
     let reminderRepeatInterval: ReminderRepeatInterval?
 
@@ -47,6 +48,7 @@ struct DeletedMessageSnapshot {
         self.mediaGroupId = message.mediaGroupId
         self.todoItems = message.todoItems
         self.todoTitle = message.todoTitle
+        self.contentBlocks = message.contentBlocks
         self.reminderDate = message.reminderDate
         self.reminderRepeatInterval = message.reminderRepeatInterval
     }

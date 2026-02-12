@@ -13,6 +13,9 @@ import UIKit
 /// Custom UITextView that replaces AutoFill with Formatting submenu
 final class FormattingTextView: UITextView {
 
+    static let checkboxPrefix = "\u{25CB} "  // "○ "
+    private static let checkboxPrefixCount = 2  // "○" + " "
+
     var onTextChange: ((NSAttributedString) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     private(set) var isEditMenuVisible: Bool = false
@@ -485,6 +488,208 @@ final class FormattingTextView: UITextView {
         }
 
         return entities
+    }
+
+    // MARK: - Inline Checkbox Support
+
+    /// Insert or toggle a checkbox prefix on the current line
+    func insertCheckbox() {
+        let nsText = text as NSString
+        let cursorPos = selectedRange.location
+
+        // Find start of current line
+        var lineStart = cursorPos
+        while lineStart > 0 && nsText.character(at: lineStart - 1) != 0x0A /* \n */ {
+            lineStart -= 1
+        }
+
+        let prefix = Self.checkboxPrefix
+        let lineEnd = min(lineStart + Self.checkboxPrefixCount, nsText.length)
+        let linePrefix = lineEnd > lineStart ? nsText.substring(with: NSRange(location: lineStart, length: min(Self.checkboxPrefixCount, nsText.length - lineStart))) : ""
+
+        if linePrefix == prefix {
+            // Already has checkbox — remove it (toggle off)
+            let mutable = NSMutableAttributedString(attributedString: attributedText)
+            mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
+            attributedText = mutable
+            selectedRange = NSRange(location: max(lineStart, cursorPos - Self.checkboxPrefixCount), length: 0)
+        } else if !text.isEmpty && cursorPos == nsText.length && lineStart < cursorPos {
+            // Cursor at end of a non-empty non-checkbox line — add newline + prefix
+            let insertion = NSAttributedString(string: "\n" + prefix, attributes: defaultTypingAttributes)
+            let mutable = NSMutableAttributedString(attributedString: attributedText)
+            mutable.insert(insertion, at: cursorPos)
+            attributedText = mutable
+            selectedRange = NSRange(location: cursorPos + 1 + Self.checkboxPrefixCount, length: 0)
+        } else {
+            // Insert prefix at start of current line
+            let insertion = NSAttributedString(string: prefix, attributes: defaultTypingAttributes)
+            let mutable = NSMutableAttributedString(attributedString: attributedText)
+            mutable.insert(insertion, at: lineStart)
+            attributedText = mutable
+            selectedRange = NSRange(location: cursorPos + Self.checkboxPrefixCount, length: 0)
+        }
+
+        textDidChange()
+    }
+
+    override func insertText(_ newText: String) {
+        guard newText == "\n" else {
+            super.insertText(newText)
+            return
+        }
+
+        let nsText = text as NSString
+        let cursorPos = selectedRange.location
+
+        // Find start of current line
+        var lineStart = cursorPos
+        while lineStart > 0 && nsText.character(at: lineStart - 1) != 0x0A {
+            lineStart -= 1
+        }
+
+        let prefix = Self.checkboxPrefix
+        let lineEnd = min(lineStart + Self.checkboxPrefixCount, nsText.length)
+        let linePrefix = lineEnd > lineStart ? nsText.substring(with: NSRange(location: lineStart, length: min(Self.checkboxPrefixCount, nsText.length - lineStart))) : ""
+
+        guard linePrefix == prefix else {
+            super.insertText(newText)
+            return
+        }
+
+        // Current line starts with "○ "
+        let lineContentStart = lineStart + Self.checkboxPrefixCount
+        let lineContentLength = cursorPos - lineContentStart
+        let lineContent = lineContentLength > 0 ? nsText.substring(with: NSRange(location: lineContentStart, length: lineContentLength)).trimmingCharacters(in: .whitespaces) : ""
+
+        if lineContent.isEmpty {
+            // Empty checkbox line — remove prefix (exit list mode)
+            let mutable = NSMutableAttributedString(attributedString: attributedText)
+            mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
+            attributedText = mutable
+            selectedRange = NSRange(location: lineStart, length: 0)
+            textDidChange()
+        } else {
+            // Has text — auto-continue checkbox on next line
+            let insertion = NSAttributedString(string: "\n" + prefix, attributes: defaultTypingAttributes)
+            let mutable = NSMutableAttributedString(attributedString: attributedText)
+            mutable.replaceCharacters(in: selectedRange, with: insertion)
+            attributedText = mutable
+            selectedRange = NSRange(location: cursorPos + 1 + Self.checkboxPrefixCount, length: 0)
+            textDidChange()
+        }
+    }
+
+    override func deleteBackward() {
+        let nsText = text as NSString
+        let cursorPos = selectedRange.location
+
+        guard cursorPos > 0 && selectedRange.length == 0 else {
+            super.deleteBackward()
+            return
+        }
+
+        // Find start of current line
+        var lineStart = cursorPos
+        while lineStart > 0 && nsText.character(at: lineStart - 1) != 0x0A {
+            lineStart -= 1
+        }
+
+        let prefix = Self.checkboxPrefix
+        // Check if cursor is right after the prefix and there's no other text after
+        if cursorPos == lineStart + Self.checkboxPrefixCount {
+            let lineEnd = min(lineStart + Self.checkboxPrefixCount, nsText.length)
+            let linePrefix = lineEnd > lineStart ? nsText.substring(with: NSRange(location: lineStart, length: min(Self.checkboxPrefixCount, nsText.length - lineStart))) : ""
+            if linePrefix == prefix {
+                // Delete the entire prefix
+                let mutable = NSMutableAttributedString(attributedString: attributedText)
+                mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
+                attributedText = mutable
+                selectedRange = NSRange(location: lineStart, length: 0)
+                textDidChange()
+                return
+            }
+        }
+
+        super.deleteBackward()
+    }
+
+    // MARK: - Content Extraction
+
+    struct ComposerContent {
+        let contentBlocks: [ContentBlock]
+        let plainTextForSearch: String
+        let todoItems: [TodoItem]
+        let hasTodos: Bool
+    }
+
+    /// Extract structured content from the composer, separating text and checkbox lines
+    func extractComposerContent() -> ComposerContent {
+        let fullText = text ?? ""
+        let lines = fullText.components(separatedBy: "\n")
+        let prefix = Self.checkboxPrefix
+
+        var blocks: [ContentBlock] = []
+        var todoItems: [TodoItem] = []
+        var textLines: [String] = []
+        var hasTodos = false
+
+        // Track character offset in the full attributed text for entity extraction
+        var charOffset = 0
+
+        func flushTextLines() {
+            let joined = textLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !joined.isEmpty {
+                // Extract entities for this text block from the attributed text
+                let blockEntities = extractEntitiesForRange(text: joined, searchFrom: 0)
+                blocks.append(ContentBlock(type: "text", text: joined, entities: blockEntities.isEmpty ? nil : blockEntities))
+            }
+            textLines.removeAll()
+        }
+
+        for (index, line) in lines.enumerated() {
+            if line.hasPrefix(prefix) {
+                // Flush any accumulated text lines
+                flushTextLines()
+
+                let todoText = String(line.dropFirst(Self.checkboxPrefixCount)).trimmingCharacters(in: .whitespaces)
+                if !todoText.isEmpty {
+                    let itemId = UUID()
+                    blocks.append(ContentBlock(id: itemId, type: "todo", text: todoText))
+                    todoItems.append(TodoItem(id: itemId, text: todoText, isCompleted: false))
+                    hasTodos = true
+                }
+            } else {
+                textLines.append(line)
+            }
+
+            // Track offset (line length + newline)
+            charOffset += (line as NSString).length
+            if index < lines.count - 1 {
+                charOffset += 1 // newline character
+            }
+        }
+
+        // Flush remaining text lines
+        flushTextLines()
+
+        // Build plain text for search (text blocks only)
+        let plainText = blocks
+            .filter { $0.type == "text" }
+            .map { $0.text }
+            .joined(separator: "\n")
+
+        return ComposerContent(
+            contentBlocks: blocks,
+            plainTextForSearch: plainText,
+            todoItems: todoItems,
+            hasTodos: hasTodos
+        )
+    }
+
+    /// Extract entities from the attributed text for a given plain text substring
+    private func extractEntitiesForRange(text searchText: String, searchFrom: Int) -> [TextEntity] {
+        // For now, detect URLs in the text block
+        return TextEntity.detectURLs(in: searchText)
     }
 
     /// Clear text and formatting
