@@ -1538,6 +1538,7 @@ final class MixedContentView: UIView {
     var onTodoToggle: ((UUID, Bool) -> Void)?
     private let stackView = UIStackView()
     private var checkboxRows: [TodoCheckboxRow] = []
+    private var currentBlocks: [ContentBlock]?
     private var topConstraint: NSLayoutConstraint?
     private var bottomConstraint: NSLayoutConstraint?
 
@@ -1565,6 +1566,13 @@ final class MixedContentView: UIView {
     }
 
     func configure(with blocks: [ContentBlock], isDarkMode: Bool, maxWidth: CGFloat) {
+        // Animation guard: if a checkbox is mid-animation and block count unchanged, skip rebuild
+        if let current = currentBlocks, current.count == blocks.count && checkboxRows.contains(where: { $0.isAnimating }) {
+            currentBlocks = blocks
+            return
+        }
+        currentBlocks = blocks
+
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         checkboxRows.removeAll()
 

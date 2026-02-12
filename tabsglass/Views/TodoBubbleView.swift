@@ -85,6 +85,13 @@ final class TodoBubbleView: UIView {
     }
 
     func configure(with title: String?, items: [TodoItem], isDarkMode: Bool) {
+        // Animation guard: if a checkbox is mid-animation and item count unchanged, skip rebuild
+        if items.count == self.items.count && checkboxRows.contains(where: { $0.isAnimating }) {
+            self.items = items
+            updateFooter()
+            return
+        }
+
         self.items = items
         self.isDarkMode = isDarkMode
 
@@ -224,13 +231,16 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
     /// Callback when checkbox is toggled: (itemId, isCompleted)
     var onToggle: ((UUID, Bool) -> Void)?
 
+    /// Whether a toggle animation is currently in progress
+    private(set) var isAnimating = false
+
     private var itemId: UUID?
     private var isCompleted: Bool = false
     private var isDarkMode: Bool = false
     private var entities: [TextEntity]?
     private var baseAttributedText: NSAttributedString?
 
-    private let checkboxButton = UIButton(type: .system)
+    private let checkboxImageView = UIImageView()
     private let textView = UITextView()
 
     override init(frame: CGRect) {
@@ -243,10 +253,10 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
     }
 
     private func setupView() {
-        // Checkbox button
-        checkboxButton.translatesAutoresizingMaskIntoConstraints = false
-        checkboxButton.addTarget(self, action: #selector(checkboxTapped), for: .touchUpInside)
-        addSubview(checkboxButton)
+        // Checkbox image view (UIImageView for SF Symbol effects)
+        checkboxImageView.contentMode = .center
+        checkboxImageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(checkboxImageView)
 
         // Text view (replaces UILabel for link & formatting support)
         textView.font = .systemFont(ofSize: 16)
@@ -271,12 +281,12 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
         addGestureRecognizer(tapGesture)
 
         NSLayoutConstraint.activate([
-            checkboxButton.leadingAnchor.constraint(equalTo: leadingAnchor),
-            checkboxButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            checkboxButton.widthAnchor.constraint(equalToConstant: 30),
-            checkboxButton.heightAnchor.constraint(equalToConstant: 30),
+            checkboxImageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            checkboxImageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            checkboxImageView.widthAnchor.constraint(equalToConstant: 30),
+            checkboxImageView.heightAnchor.constraint(equalToConstant: 30),
 
-            textView.leadingAnchor.constraint(equalTo: checkboxButton.trailingAnchor, constant: 10),
+            textView.leadingAnchor.constraint(equalTo: checkboxImageView.trailingAnchor, constant: 10),
             textView.trailingAnchor.constraint(equalTo: trailingAnchor),
             textView.centerYAnchor.constraint(equalTo: centerYAnchor),
             textView.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 10),
@@ -364,13 +374,8 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
     private func updateCheckboxAppearance() {
         let imageName = isCompleted ? "checkmark.circle.fill" : "circle"
         let config = UIImage.SymbolConfiguration(pointSize: 26, weight: .regular)
-        let image = UIImage(systemName: imageName, withConfiguration: config)
-        checkboxButton.setImage(image, for: .normal)
-        checkboxButton.tintColor = isCompleted ? .systemGreen : .secondaryLabel
-    }
-
-    @objc private func checkboxTapped() {
-        toggleCheckbox()
+        checkboxImageView.image = UIImage(systemName: imageName, withConfiguration: config)
+        checkboxImageView.tintColor = isCompleted ? .systemGreen : .secondaryLabel
     }
 
     @objc private func rowTapped(_ gesture: UITapGestureRecognizer) {
@@ -393,23 +398,61 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
     private func toggleCheckbox() {
         guard let itemId = itemId else { return }
         isCompleted.toggle()
+        isAnimating = true
+
+        let textColor: UIColor = isDarkMode ? .white : .black
+        let config = UIImage.SymbolConfiguration(pointSize: 26, weight: .regular)
 
         if isCompleted {
+            // Checking — full haptic
             let generator = UIImpactFeedbackGenerator(style: .light)
             generator.impactOccurred()
-        }
 
-        updateCheckboxAppearance()
+            // SF Symbol animated transition + bounce
+            let newImage = UIImage(systemName: "checkmark.circle.fill", withConfiguration: config)!
+            checkboxImageView.tintColor = .systemGreen
+            checkboxImageView.setSymbolImage(newImage, contentTransition: .replace.offUp.byLayer)
+            checkboxImageView.addSymbolEffect(.bounce, options: .speed(1.5))
 
-        // Animate text change — preserve formatting
-        UIView.transition(with: textView, duration: 0.2, options: .transitionCrossDissolve) {
-            let textColor: UIColor = self.isDarkMode ? .white : .black
-            if self.isCompleted {
+            // Scale spring: pop up to 1.2x then spring back
+            checkboxImageView.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
+            UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.55, initialSpringVelocity: 0, options: []) {
+                self.checkboxImageView.transform = .identity
+            }
+
+            // Text: cross-dissolve to strikethrough + dim
+            UIView.transition(with: textView, duration: 0.25, options: .transitionCrossDissolve) {
                 if let base = self.baseAttributedText {
                     self.textView.attributedText = Self.applyCompletion(to: base, textColor: textColor)
                 }
-            } else {
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                self?.isAnimating = false
+            }
+        } else {
+            // Unchecking — lighter haptic
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred(intensity: 0.5)
+
+            // SF Symbol animated transition (no bounce)
+            let newImage = UIImage(systemName: "circle", withConfiguration: config)!
+            checkboxImageView.tintColor = .secondaryLabel
+            checkboxImageView.setSymbolImage(newImage, contentTransition: .replace.offUp.byLayer)
+
+            // Scale spring: shrink to 0.85x then spring back
+            checkboxImageView.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
+            UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0, options: []) {
+                self.checkboxImageView.transform = .identity
+            }
+
+            // Text: cross-dissolve to restore original
+            UIView.transition(with: textView, duration: 0.2, options: .transitionCrossDissolve) {
                 self.textView.attributedText = self.baseAttributedText
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.isAnimating = false
             }
         }
 
