@@ -115,6 +115,17 @@ final class FormattingTextView: UITextView {
         ]
     }
 
+    /// Build styled checkbox prefix: larger ○ in placeholder color + normal space
+    private func styledCheckboxPrefix() -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        result.append(NSAttributedString(string: "\u{25CB}", attributes: [
+            .font: UIFont.systemFont(ofSize: 20),
+            .foregroundColor: ThemeManager.shared.currentTheme.placeholderColor
+        ]))
+        result.append(NSAttributedString(string: " ", attributes: defaultTypingAttributes))
+        return result
+    }
+
     @objc private func textDidChange() {
         pendingMenuDismissWorkItem?.cancel()
         isEditMenuVisible = false
@@ -515,16 +526,16 @@ final class FormattingTextView: UITextView {
             selectedRange = NSRange(location: max(lineStart, cursorPos - Self.checkboxPrefixCount), length: 0)
         } else if !text.isEmpty && cursorPos == nsText.length && lineStart < cursorPos {
             // Cursor at end of a non-empty non-checkbox line — add newline + prefix
-            let insertion = NSAttributedString(string: "\n" + prefix, attributes: defaultTypingAttributes)
+            let insertion = NSMutableAttributedString(string: "\n", attributes: defaultTypingAttributes)
+            insertion.append(styledCheckboxPrefix())
             let mutable = NSMutableAttributedString(attributedString: attributedText)
             mutable.insert(insertion, at: cursorPos)
             attributedText = mutable
             selectedRange = NSRange(location: cursorPos + 1 + Self.checkboxPrefixCount, length: 0)
         } else {
             // Insert prefix at start of current line
-            let insertion = NSAttributedString(string: prefix, attributes: defaultTypingAttributes)
             let mutable = NSMutableAttributedString(attributedString: attributedText)
-            mutable.insert(insertion, at: lineStart)
+            mutable.insert(styledCheckboxPrefix(), at: lineStart)
             attributedText = mutable
             selectedRange = NSRange(location: cursorPos + Self.checkboxPrefixCount, length: 0)
         }
@@ -570,7 +581,8 @@ final class FormattingTextView: UITextView {
             textDidChange()
         } else {
             // Has text — auto-continue checkbox on next line
-            let insertion = NSAttributedString(string: "\n" + prefix, attributes: defaultTypingAttributes)
+            let insertion = NSMutableAttributedString(string: "\n", attributes: defaultTypingAttributes)
+            insertion.append(styledCheckboxPrefix())
             let mutable = NSMutableAttributedString(attributedString: attributedText)
             mutable.replaceCharacters(in: selectedRange, with: insertion)
             attributedText = mutable
