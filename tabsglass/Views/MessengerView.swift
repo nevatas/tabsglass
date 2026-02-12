@@ -1648,7 +1648,7 @@ final class MixedContentView: UIView {
 
                 let row = TodoCheckboxRow()
                 let item = TodoItem(id: block.id, text: block.text, isCompleted: block.isCompleted)
-                row.configure(with: item, isDarkMode: isDarkMode)
+                row.configure(with: item, isDarkMode: isDarkMode, entities: block.entities)
                 row.onToggle = { [weak self] itemId, isCompleted in
                     self?.onTodoToggle?(itemId, isCompleted)
                 }
@@ -1656,7 +1656,7 @@ final class MixedContentView: UIView {
 
                 // Set explicit height to match calculateHeight and prevent stack stretching
                 let availableWidth = maxWidth - 24
-                let todoHeight = TodoCheckboxRow.calculateHeight(for: block.text, maxWidth: availableWidth)
+                let todoHeight = TodoCheckboxRow.calculateHeight(for: block.text, maxWidth: availableWidth, entities: block.entities)
                 let todoHeightConstraint = row.heightAnchor.constraint(equalToConstant: todoHeight)
                 todoHeightConstraint.priority = UILayoutPriority(999)
                 todoHeightConstraint.isActive = true
@@ -1712,7 +1712,7 @@ final class MixedContentView: UIView {
                 if previousBlockType == "todo" {
                     height += 1  // separator
                 }
-                height += TodoCheckboxRow.calculateHeight(for: block.text, maxWidth: availableWidth)
+                height += TodoCheckboxRow.calculateHeight(for: block.text, maxWidth: availableWidth, entities: block.entities)
                 previousBlockType = "todo"
             default:
                 break

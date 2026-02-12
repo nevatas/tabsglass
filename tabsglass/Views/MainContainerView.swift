@@ -313,7 +313,7 @@ struct MainContainerView: View {
         .sheet(item: $messageToEdit) { message in
             EditMessageSheet(
                 originalText: message.hasContentBlocks ? message.composerText : message.content,
-                originalEntities: message.hasContentBlocks ? nil : message.entities,
+                originalEntities: message.hasContentBlocks ? ContentBlock.composerEntities(from: message.contentBlocks!) : message.entities,
                 originalPhotoFileNames: message.photoFileNames,
                 originalVideoFileNames: message.videoFileNames,
                 originalVideoThumbnailFileNames: message.videoThumbnailFileNames,
@@ -368,13 +368,19 @@ struct MainContainerView: View {
 
                     // Update message — handle contentBlocks if present
                     if message.hasContentBlocks {
-                        let parsed = ContentBlock.parse(composerText: newText)
+                        let parsed = ContentBlock.parse(composerText: newText, entities: newEntities)
                         if parsed.hasTodos {
                             message.content = parsed.plainText
                             message.contentBlocks = parsed.blocks
                             message.todoItems = parsed.todoItems
-                            let urlEntities = TextEntity.detectURLs(in: parsed.plainText)
-                            message.entities = urlEntities.isEmpty ? nil : urlEntities
+                            // Collect entities from text blocks for the top-level field
+                            var allEntities: [TextEntity] = []
+                            for block in parsed.blocks where block.type == "text" {
+                                if let blockEntities = block.entities {
+                                    allEntities.append(contentsOf: blockEntities)
+                                }
+                            }
+                            message.entities = allEntities.isEmpty ? nil : allEntities
                         } else {
                             // All todos removed — revert to regular message
                             message.content = newText

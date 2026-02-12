@@ -48,43 +48,177 @@ struct ContentBlock: Codable, Hashable {
         }.joined(separator: "\n")
     }
 
-    /// Parse composer text into structured content blocks
-    static func parse(composerText: String) -> (blocks: [ContentBlock], todoItems: [TodoItem], plainText: String, hasTodos: Bool) {
+    /// Parse composer text into structured content blocks, optionally distributing entities
+    static func parse(composerText: String, entities: [TextEntity]? = nil) -> (blocks: [ContentBlock], todoItems: [TodoItem], plainText: String, hasTodos: Bool) {
         let prefix = checkboxPrefix
-        let prefixCount = prefix.count
+        let prefixUTF16 = (prefix as NSString).length
         let lines = composerText.components(separatedBy: "\n")
         var blocks: [ContentBlock] = []
         var todoItems: [TodoItem] = []
-        var textLines: [String] = []
         var hasTodos = false
 
-        func flushTextLines() {
-            let joined = textLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !joined.isEmpty {
-                let entities = TextEntity.detectURLs(in: joined)
-                blocks.append(ContentBlock(type: "text", text: joined, entities: entities.isEmpty ? nil : entities))
+        // Compute UTF-16 offset for each line
+        struct LineInfo {
+            let text: String
+            let startOffset: Int
+            let isTodo: Bool
+        }
+        var lineInfos: [LineInfo] = []
+        var offset = 0
+        for (index, line) in lines.enumerated() {
+            lineInfos.append(LineInfo(text: line, startOffset: offset, isTodo: line.hasPrefix(prefix)))
+            offset += (line as NSString).length
+            if index < lines.count - 1 {
+                offset += 1 // newline
             }
-            textLines.removeAll()
         }
 
-        for line in lines {
-            if line.hasPrefix(prefix) {
+        var currentTextLines: [(text: String, startOffset: Int)] = []
+
+        func flushTextLines() {
+            guard !currentTextLines.isEmpty else { return }
+            let joinedText = currentTextLines.map { $0.text }.joined(separator: "\n")
+            let trimmed = joinedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                currentTextLines.removeAll()
+                return
+            }
+
+            var blockEntities: [TextEntity] = []
+
+            if let entities = entities, !entities.isEmpty {
+                // Map entities from composer text coordinates to block-local coordinates
+                let blockStartInFull = currentTextLines.first!.startOffset
+                let leadingTrimmed = String(joinedText.prefix(while: { $0.isWhitespace || $0.isNewline }))
+                let leadingTrimUTF16 = (leadingTrimmed as NSString).length
+                let trimmedStart = blockStartInFull + leadingTrimUTF16
+                let trimmedLength = (trimmed as NSString).length
+                let trimmedEnd = trimmedStart + trimmedLength
+
+                for entity in entities {
+                    let entityStart = entity.offset
+                    let entityEnd = entity.offset + entity.length
+                    guard entityStart < trimmedEnd && entityEnd > trimmedStart else { continue }
+
+                    let clippedStart = max(entityStart, trimmedStart)
+                    let clippedEnd = min(entityEnd, trimmedEnd)
+                    let newLength = clippedEnd - clippedStart
+                    guard newLength > 0 else { continue }
+
+                    blockEntities.append(TextEntity(
+                        type: entity.type,
+                        offset: clippedStart - trimmedStart,
+                        length: newLength,
+                        url: entity.url
+                    ))
+                }
+            }
+
+            // Also detect plain-text URLs
+            let urlEntities = TextEntity.detectURLs(in: trimmed)
+            blockEntities.append(contentsOf: urlEntities)
+
+            blocks.append(ContentBlock(type: "text", text: trimmed, entities: blockEntities.isEmpty ? nil : blockEntities))
+            currentTextLines.removeAll()
+        }
+
+        for info in lineInfos {
+            if info.isTodo {
                 flushTextLines()
-                let todoText = String(line.dropFirst(prefixCount)).trimmingCharacters(in: .whitespaces)
+                let afterPrefix = String(info.text.dropFirst(prefix.count))
+                let todoText = afterPrefix.trimmingCharacters(in: .whitespaces)
                 if !todoText.isEmpty {
+                    var todoEntities: [TextEntity] = []
+
+                    if let entities = entities, !entities.isEmpty {
+                        // Map entities from composer text coordinates to todo-local coordinates
+                        let leadingSpaces = String(afterPrefix.prefix(while: { $0 == " " }))
+                        let leadingSpacesUTF16 = (leadingSpaces as NSString).length
+                        let todoStart = info.startOffset + prefixUTF16 + leadingSpacesUTF16
+                        let todoLength = (todoText as NSString).length
+                        let todoEnd = todoStart + todoLength
+
+                        for entity in entities {
+                            let entityStart = entity.offset
+                            let entityEnd = entity.offset + entity.length
+                            guard entityStart < todoEnd && entityEnd > todoStart else { continue }
+
+                            let clippedStart = max(entityStart, todoStart)
+                            let clippedEnd = min(entityEnd, todoEnd)
+                            let newLength = clippedEnd - clippedStart
+                            guard newLength > 0 else { continue }
+
+                            todoEntities.append(TextEntity(
+                                type: entity.type,
+                                offset: clippedStart - todoStart,
+                                length: newLength,
+                                url: entity.url
+                            ))
+                        }
+                    }
+
+                    // Also detect plain-text URLs
+                    let urlEntities = TextEntity.detectURLs(in: todoText)
+                    todoEntities.append(contentsOf: urlEntities)
+
                     let itemId = UUID()
-                    blocks.append(ContentBlock(id: itemId, type: "todo", text: todoText))
+                    blocks.append(ContentBlock(id: itemId, type: "todo", text: todoText, entities: todoEntities.isEmpty ? nil : todoEntities))
                     todoItems.append(TodoItem(id: itemId, text: todoText))
                     hasTodos = true
                 }
             } else {
-                textLines.append(line)
+                currentTextLines.append((text: info.text, startOffset: info.startOffset))
             }
         }
         flushTextLines()
 
         let plainText = blocks.filter { $0.type == "text" }.map { $0.text }.joined(separator: "\n")
         return (blocks, todoItems, plainText, hasTodos)
+    }
+
+    /// Map block-level entities back to composer text coordinate space
+    static func composerEntities(from blocks: [ContentBlock]) -> [TextEntity] {
+        var entities: [TextEntity] = []
+        var offset = 0
+        let prefixUTF16 = (checkboxPrefix as NSString).length
+
+        for (index, block) in blocks.enumerated() {
+            if block.type == "todo" {
+                // Todo text starts after "○ " prefix in composer
+                if let blockEntities = block.entities {
+                    for entity in blockEntities {
+                        if entity.type == "url" { continue }
+                        entities.append(TextEntity(
+                            type: entity.type,
+                            offset: entity.offset + offset + prefixUTF16,
+                            length: entity.length,
+                            url: entity.url
+                        ))
+                    }
+                }
+                offset += prefixUTF16 + (block.text as NSString).length
+            } else {
+                // Map text block entities to composer text coordinates
+                if let blockEntities = block.entities {
+                    for entity in blockEntities {
+                        if entity.type == "url" { continue }
+                        entities.append(TextEntity(
+                            type: entity.type,
+                            offset: entity.offset + offset,
+                            length: entity.length,
+                            url: entity.url
+                        ))
+                    }
+                }
+                offset += (block.text as NSString).length
+            }
+
+            if index < blocks.count - 1 {
+                offset += 1 // newline between blocks
+            }
+        }
+
+        return entities
     }
 }
 

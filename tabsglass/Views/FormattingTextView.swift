@@ -628,48 +628,128 @@ final class FormattingTextView: UITextView {
         let lines = fullText.components(separatedBy: "\n")
         let prefix = Self.checkboxPrefix
 
-        var blocks: [ContentBlock] = []
-        var todoItems: [TodoItem] = []
-        var textLines: [String] = []
-        var hasTodos = false
+        // Extract ALL formatting entities from the attributed text (full-text coordinates)
+        let allFormattingEntities = extractEntities()
 
-        // Track character offset in the full attributed text for entity extraction
-        var charOffset = 0
-
-        func flushTextLines() {
-            let joined = textLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !joined.isEmpty {
-                // Extract entities for this text block from the attributed text
-                let blockEntities = extractEntitiesForRange(text: joined, searchFrom: 0)
-                blocks.append(ContentBlock(type: "text", text: joined, entities: blockEntities.isEmpty ? nil : blockEntities))
-            }
-            textLines.removeAll()
+        // First pass: compute UTF-16 offset of each line in the full text
+        struct LineInfo {
+            let text: String
+            let startOffset: Int  // UTF-16 offset in full text
+            let isTodo: Bool
         }
 
+        var lineInfos: [LineInfo] = []
+        var offset = 0
         for (index, line) in lines.enumerated() {
-            if line.hasPrefix(prefix) {
-                // Flush any accumulated text lines
-                flushTextLines()
+            lineInfos.append(LineInfo(text: line, startOffset: offset, isTodo: line.hasPrefix(prefix)))
+            offset += (line as NSString).length
+            if index < lines.count - 1 {
+                offset += 1 // newline
+            }
+        }
 
-                let todoText = String(line.dropFirst(Self.checkboxPrefixCount)).trimmingCharacters(in: .whitespaces)
+        // Second pass: group lines into blocks and map entities
+        var blocks: [ContentBlock] = []
+        var todoItems: [TodoItem] = []
+        var hasTodos = false
+        var currentTextLines: [(text: String, startOffset: Int)] = []
+
+        func flushTextLines() {
+            guard !currentTextLines.isEmpty else { return }
+
+            let joinedText = currentTextLines.map { $0.text }.joined(separator: "\n")
+            let trimmed = joinedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                currentTextLines.removeAll()
+                return
+            }
+
+            // Calculate the block's range in the full text
+            let blockStartInFull = currentTextLines.first!.startOffset
+            let leadingTrimmed = String(joinedText.prefix(while: { $0.isWhitespace || $0.isNewline }))
+            let leadingTrimUTF16 = (leadingTrimmed as NSString).length
+            let trimmedStartInFull = blockStartInFull + leadingTrimUTF16
+            let trimmedLengthUTF16 = (trimmed as NSString).length
+            let trimmedEndInFull = trimmedStartInFull + trimmedLengthUTF16
+
+            // Filter and adjust formatting entities that overlap this block's range
+            var blockEntities: [TextEntity] = []
+            for entity in allFormattingEntities {
+                let entityStart = entity.offset
+                let entityEnd = entity.offset + entity.length
+
+                guard entityStart < trimmedEndInFull && entityEnd > trimmedStartInFull else { continue }
+
+                // Clip entity to block bounds
+                let clippedStart = max(entityStart, trimmedStartInFull)
+                let clippedEnd = min(entityEnd, trimmedEndInFull)
+                let newLength = clippedEnd - clippedStart
+                guard newLength > 0 else { continue }
+
+                blockEntities.append(TextEntity(
+                    type: entity.type,
+                    offset: clippedStart - trimmedStartInFull,
+                    length: newLength,
+                    url: entity.url
+                ))
+            }
+
+            // Also detect plain-text URLs
+            let urlEntities = TextEntity.detectURLs(in: trimmed)
+            blockEntities.append(contentsOf: urlEntities)
+
+            blocks.append(ContentBlock(type: "text", text: trimmed, entities: blockEntities.isEmpty ? nil : blockEntities))
+            currentTextLines.removeAll()
+        }
+
+        let prefixUTF16 = (prefix as NSString).length
+
+        for info in lineInfos {
+            if info.isTodo {
+                flushTextLines()
+                let afterPrefix = String(info.text.dropFirst(Self.checkboxPrefixCount))
+                let todoText = afterPrefix.trimmingCharacters(in: .whitespaces)
                 if !todoText.isEmpty {
+                    // Calculate todo text range in the full text (after "○ " prefix + leading whitespace)
+                    let leadingSpaces = String(afterPrefix.prefix(while: { $0 == " " }))
+                    let leadingSpacesUTF16 = (leadingSpaces as NSString).length
+                    let todoStartInFull = info.startOffset + prefixUTF16 + leadingSpacesUTF16
+                    let todoLengthUTF16 = (todoText as NSString).length
+                    let todoEndInFull = todoStartInFull + todoLengthUTF16
+
+                    // Extract formatting entities for this todo text
+                    var todoEntities: [TextEntity] = []
+                    for entity in allFormattingEntities {
+                        let entityStart = entity.offset
+                        let entityEnd = entity.offset + entity.length
+                        guard entityStart < todoEndInFull && entityEnd > todoStartInFull else { continue }
+
+                        let clippedStart = max(entityStart, todoStartInFull)
+                        let clippedEnd = min(entityEnd, todoEndInFull)
+                        let newLength = clippedEnd - clippedStart
+                        guard newLength > 0 else { continue }
+
+                        todoEntities.append(TextEntity(
+                            type: entity.type,
+                            offset: clippedStart - todoStartInFull,
+                            length: newLength,
+                            url: entity.url
+                        ))
+                    }
+
+                    // Also detect plain-text URLs
+                    let urlEntities = TextEntity.detectURLs(in: todoText)
+                    todoEntities.append(contentsOf: urlEntities)
+
                     let itemId = UUID()
-                    blocks.append(ContentBlock(id: itemId, type: "todo", text: todoText))
+                    blocks.append(ContentBlock(id: itemId, type: "todo", text: todoText, entities: todoEntities.isEmpty ? nil : todoEntities))
                     todoItems.append(TodoItem(id: itemId, text: todoText, isCompleted: false))
                     hasTodos = true
                 }
             } else {
-                textLines.append(line)
-            }
-
-            // Track offset (line length + newline)
-            charOffset += (line as NSString).length
-            if index < lines.count - 1 {
-                charOffset += 1 // newline character
+                currentTextLines.append((text: info.text, startOffset: info.startOffset))
             }
         }
-
-        // Flush remaining text lines
         flushTextLines()
 
         // Build plain text for search (text blocks only)
@@ -684,12 +764,6 @@ final class FormattingTextView: UITextView {
             todoItems: todoItems,
             hasTodos: hasTodos
         )
-    }
-
-    /// Extract entities from the attributed text for a given plain text substring
-    private func extractEntitiesForRange(text searchText: String, searchFrom: Int) -> [TextEntity] {
-        // For now, detect URLs in the text block
-        return TextEntity.detectURLs(in: searchText)
     }
 
     /// Clear text and formatting

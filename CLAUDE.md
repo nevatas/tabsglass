@@ -1,5 +1,16 @@
 # Taby — iOS Notes App
 
+## ⚠️ Data Safety — Critical Rule
+
+User data is the most valuable thing in this app. **NEVER** make changes that could corrupt, lose, or break data for users upgrading from a previous version. This includes:
+
+- No destructive SwiftData schema migrations (renaming/removing fields, changing types) without a proper lightweight migration path
+- No changes to file storage paths or naming conventions that would orphan existing photos/videos
+- No modifications to export/import formats that break backward compatibility
+- No changes to App Group shared data that would desync the share extension
+
+When in doubt, always preserve backward compatibility. New fields should have defaults. Old fields should never be removed — only deprecated. Test every change against the assumption that a user has existing data from the previous version.
+
 ## Overview
 Messenger-style notes app with tabs. SwiftUI + UIKit hybrid, SwiftData, iOS 26+.
 
