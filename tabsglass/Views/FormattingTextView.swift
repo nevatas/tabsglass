@@ -115,15 +115,61 @@ final class FormattingTextView: UITextView {
         ]
     }
 
+    /// Width of the "○ " prefix for hanging indent calculation
+    private lazy var checkboxIndentWidth: CGFloat = {
+        let circle = NSAttributedString(string: "\u{25CB}", attributes: [.font: UIFont.systemFont(ofSize: 20)])
+        let space = NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 16)])
+        return ceil(circle.size().width + space.size().width)
+    }()
+
+    /// Paragraph style for checkbox lines — wrapped lines align with text, not the ○
+    private var checkboxParagraphStyle: NSMutableParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.headIndent = checkboxIndentWidth
+        return style
+    }
+
     /// Build styled checkbox prefix: larger ○ in placeholder color + normal space
     private func styledCheckboxPrefix() -> NSAttributedString {
+        let style = checkboxParagraphStyle
         let result = NSMutableAttributedString()
         result.append(NSAttributedString(string: "\u{25CB}", attributes: [
             .font: UIFont.systemFont(ofSize: 20),
-            .foregroundColor: ThemeManager.shared.currentTheme.placeholderColor
+            .foregroundColor: ThemeManager.shared.currentTheme.placeholderColor,
+            .paragraphStyle: style
         ]))
-        result.append(NSAttributedString(string: " ", attributes: defaultTypingAttributes))
+        result.append(NSAttributedString(string: " ", attributes: [
+            .font: UIFont.systemFont(ofSize: 16),
+            .foregroundColor: defaultTextColor,
+            .paragraphStyle: style
+        ]))
         return result
+    }
+
+    /// Apply checkbox hanging indent to the entire paragraph at lineStart
+    private func applyCheckboxIndent(to mutable: NSMutableAttributedString, lineStart: Int) {
+        let nsString = mutable.string as NSString
+        var lineEnd = lineStart
+        while lineEnd < nsString.length && nsString.character(at: lineEnd) != 0x0A {
+            lineEnd += 1
+        }
+        let range = NSRange(location: lineStart, length: lineEnd - lineStart)
+        if range.length > 0 {
+            mutable.addAttribute(.paragraphStyle, value: checkboxParagraphStyle, range: range)
+        }
+    }
+
+    /// Remove checkbox indent from the paragraph at lineStart
+    private func removeCheckboxIndent(from mutable: NSMutableAttributedString, lineStart: Int) {
+        let nsString = mutable.string as NSString
+        var lineEnd = lineStart
+        while lineEnd < nsString.length && nsString.character(at: lineEnd) != 0x0A {
+            lineEnd += 1
+        }
+        let range = NSRange(location: lineStart, length: lineEnd - lineStart)
+        if range.length > 0 {
+            mutable.addAttribute(.paragraphStyle, value: NSParagraphStyle.default, range: range)
+        }
     }
 
     @objc private func textDidChange() {
@@ -522,22 +568,29 @@ final class FormattingTextView: UITextView {
             // Already has checkbox — remove it (toggle off)
             let mutable = NSMutableAttributedString(attributedString: attributedText)
             mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
+            removeCheckboxIndent(from: mutable, lineStart: lineStart)
             attributedText = mutable
             selectedRange = NSRange(location: max(lineStart, cursorPos - Self.checkboxPrefixCount), length: 0)
+            typingAttributes = defaultTypingAttributes
         } else if !text.isEmpty && cursorPos == nsText.length && lineStart < cursorPos {
             // Cursor at end of a non-empty non-checkbox line — add newline + prefix
             let insertion = NSMutableAttributedString(string: "\n", attributes: defaultTypingAttributes)
             insertion.append(styledCheckboxPrefix())
             let mutable = NSMutableAttributedString(attributedString: attributedText)
             mutable.insert(insertion, at: cursorPos)
+            let newLineStart = cursorPos + 1
+            applyCheckboxIndent(to: mutable, lineStart: newLineStart)
             attributedText = mutable
             selectedRange = NSRange(location: cursorPos + 1 + Self.checkboxPrefixCount, length: 0)
+            typingAttributes = defaultTypingAttributes.merging([.paragraphStyle: checkboxParagraphStyle]) { _, new in new }
         } else {
             // Insert prefix at start of current line
             let mutable = NSMutableAttributedString(attributedString: attributedText)
             mutable.insert(styledCheckboxPrefix(), at: lineStart)
+            applyCheckboxIndent(to: mutable, lineStart: lineStart)
             attributedText = mutable
             selectedRange = NSRange(location: cursorPos + Self.checkboxPrefixCount, length: 0)
+            typingAttributes = defaultTypingAttributes.merging([.paragraphStyle: checkboxParagraphStyle]) { _, new in new }
         }
 
         textDidChange()
@@ -576,8 +629,10 @@ final class FormattingTextView: UITextView {
             // Empty checkbox line — remove prefix (exit list mode)
             let mutable = NSMutableAttributedString(attributedString: attributedText)
             mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
+            removeCheckboxIndent(from: mutable, lineStart: lineStart)
             attributedText = mutable
             selectedRange = NSRange(location: lineStart, length: 0)
+            typingAttributes = defaultTypingAttributes
             textDidChange()
         } else {
             // Has text — auto-continue checkbox on next line
@@ -585,8 +640,11 @@ final class FormattingTextView: UITextView {
             insertion.append(styledCheckboxPrefix())
             let mutable = NSMutableAttributedString(attributedString: attributedText)
             mutable.replaceCharacters(in: selectedRange, with: insertion)
+            let newLineStart = cursorPos + 1
+            applyCheckboxIndent(to: mutable, lineStart: newLineStart)
             attributedText = mutable
             selectedRange = NSRange(location: cursorPos + 1 + Self.checkboxPrefixCount, length: 0)
+            typingAttributes = defaultTypingAttributes.merging([.paragraphStyle: checkboxParagraphStyle]) { _, new in new }
             textDidChange()
         }
     }
@@ -615,8 +673,10 @@ final class FormattingTextView: UITextView {
                 // Delete the entire prefix
                 let mutable = NSMutableAttributedString(attributedString: attributedText)
                 mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
+                removeCheckboxIndent(from: mutable, lineStart: lineStart)
                 attributedText = mutable
                 selectedRange = NSRange(location: lineStart, length: 0)
+                typingAttributes = defaultTypingAttributes
                 textDidChange()
                 return
             }
