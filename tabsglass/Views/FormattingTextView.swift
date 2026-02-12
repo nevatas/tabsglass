@@ -18,6 +18,7 @@ final class FormattingTextView: UITextView {
 
     var onTextChange: ((NSAttributedString) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
+    private var capitalizeNextCharacter = false
     private(set) var isEditMenuVisible: Bool = false
     private var editMenuLockUntil: CFTimeInterval = 0
     private var cachedEditMenuTargetRect: CGRect?
@@ -115,9 +116,20 @@ final class FormattingTextView: UITextView {
         ]
     }
 
+    /// Default typing attributes with explicit default paragraph style (resets headIndent after checkbox removal)
+    private var defaultTypingAttributesWithDefaultParagraph: [NSAttributedString.Key: Any] {
+        [
+            .font: UIFont.systemFont(ofSize: 16),
+            .foregroundColor: defaultTextColor,
+            .paragraphStyle: NSParagraphStyle.default
+        ]
+    }
+
     /// Width of the "○ " prefix for hanging indent calculation
+    private static let checkboxCircleFontSize: CGFloat = 18
+
     private lazy var checkboxIndentWidth: CGFloat = {
-        let circle = NSAttributedString(string: "\u{25CB}", attributes: [.font: UIFont.systemFont(ofSize: 20)])
+        let circle = NSAttributedString(string: "\u{25CB}", attributes: [.font: UIFont.systemFont(ofSize: Self.checkboxCircleFontSize)])
         let space = NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 16)])
         return ceil(circle.size().width + space.size().width)
     }()
@@ -126,6 +138,9 @@ final class FormattingTextView: UITextView {
     private var checkboxParagraphStyle: NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.headIndent = checkboxIndentWidth
+        // Extra spacing around checkbox paragraphs (between tasks and regular text)
+        style.paragraphSpacing = 2
+        style.paragraphSpacingBefore = 2
         return style
     }
 
@@ -134,9 +149,10 @@ final class FormattingTextView: UITextView {
         let style = checkboxParagraphStyle
         let result = NSMutableAttributedString()
         result.append(NSAttributedString(string: "\u{25CB}", attributes: [
-            .font: UIFont.systemFont(ofSize: 20),
+            .font: UIFont.systemFont(ofSize: Self.checkboxCircleFontSize),
             .foregroundColor: ThemeManager.shared.currentTheme.placeholderColor,
-            .paragraphStyle: style
+            .paragraphStyle: style,
+            .baselineOffset: -1
         ]))
         result.append(NSAttributedString(string: " ", attributes: [
             .font: UIFont.systemFont(ofSize: 16),
@@ -570,8 +586,15 @@ final class FormattingTextView: UITextView {
             mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
             removeCheckboxIndent(from: mutable, lineStart: lineStart)
             attributedText = mutable
-            selectedRange = NSRange(location: max(lineStart, cursorPos - Self.checkboxPrefixCount), length: 0)
-            typingAttributes = defaultTypingAttributes
+            let newCursorPos = max(lineStart, cursorPos - Self.checkboxPrefixCount)
+            selectedRange = NSRange(location: newCursorPos, length: 0)
+            typingAttributes = defaultTypingAttributesWithDefaultParagraph
+            // Capitalize next character if line is now empty
+            if newCursorPos == lineStart {
+                let nsNew = (text ?? "") as NSString
+                let atLineEnd = newCursorPos >= nsNew.length || nsNew.character(at: newCursorPos) == 0x0A
+                if atLineEnd { capitalizeNextCharacter = true }
+            }
         } else if !text.isEmpty && cursorPos == nsText.length && lineStart < cursorPos {
             // Cursor at end of a non-empty non-checkbox line — add newline + prefix
             let insertion = NSMutableAttributedString(string: "\n", attributes: defaultTypingAttributes)
@@ -597,6 +620,28 @@ final class FormattingTextView: UITextView {
     }
 
     override func insertText(_ newText: String) {
+        // Auto-capitalize after ○ prefix was deleted
+        if capitalizeNextCharacter, newText.count == 1, let first = newText.first, first.isLetter, first.isLowercase {
+            capitalizeNextCharacter = false
+            super.insertText(newText.uppercased())
+            return
+        }
+        capitalizeNextCharacter = false
+
+        // Auto-capitalize first letter after checkbox prefix "○ "
+        if newText.count == 1, let first = newText.first, first.isLetter, first.isLowercase {
+            let nsText = text as NSString
+            let cursorPos = selectedRange.location
+            if cursorPos >= Self.checkboxPrefixCount {
+                let prefixStart = cursorPos - Self.checkboxPrefixCount
+                let prefix = nsText.substring(with: NSRange(location: prefixStart, length: Self.checkboxPrefixCount))
+                if prefix == Self.checkboxPrefix && (prefixStart == 0 || nsText.character(at: prefixStart - 1) == 0x0A) {
+                    super.insertText(newText.uppercased())
+                    return
+                }
+            }
+        }
+
         guard newText == "\n" else {
             super.insertText(newText)
             return
@@ -632,7 +677,8 @@ final class FormattingTextView: UITextView {
             removeCheckboxIndent(from: mutable, lineStart: lineStart)
             attributedText = mutable
             selectedRange = NSRange(location: lineStart, length: 0)
-            typingAttributes = defaultTypingAttributes
+            typingAttributes = defaultTypingAttributesWithDefaultParagraph
+            capitalizeNextCharacter = true
             textDidChange()
         } else {
             // Has text — auto-continue checkbox on next line
@@ -676,7 +722,8 @@ final class FormattingTextView: UITextView {
                 removeCheckboxIndent(from: mutable, lineStart: lineStart)
                 attributedText = mutable
                 selectedRange = NSRange(location: lineStart, length: 0)
-                typingAttributes = defaultTypingAttributes
+                typingAttributes = defaultTypingAttributesWithDefaultParagraph
+                capitalizeNextCharacter = true
                 textDidChange()
                 return
             }

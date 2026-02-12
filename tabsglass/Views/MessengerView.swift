@@ -563,7 +563,7 @@ struct EmbeddedComposerView: View {
                             Button {
                                 state.formattingTextView?.insertCheckbox()
                             } label: {
-                                Image(systemName: "checkmark.square")
+                                Image(systemName: "checkmark.circle")
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
                                     .padding(.vertical, 8)
@@ -592,7 +592,7 @@ struct EmbeddedComposerView: View {
                 }
             }
             .padding(.top, hasMedia ? 8 : 14)
-            .padding(.bottom, 14)
+            .padding(.bottom, 10)
             .contentShape(.rect(cornerRadius: 24))
             .onTapGesture {
                 state.shouldFocus = true
@@ -1538,6 +1538,8 @@ final class MixedContentView: UIView {
     var onTodoToggle: ((UUID, Bool) -> Void)?
     private let stackView = UIStackView()
     private var checkboxRows: [TodoCheckboxRow] = []
+    private var topConstraint: NSLayoutConstraint?
+    private var bottomConstraint: NSLayoutConstraint?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1546,11 +1548,15 @@ final class MixedContentView: UIView {
         stackView.alignment = .fill
         stackView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stackView)
+        let top = stackView.topAnchor.constraint(equalTo: topAnchor, constant: 8)
+        let bottom = stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8)
+        topConstraint = top
+        bottomConstraint = bottom
         NSLayoutConstraint.activate([
-            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            top,
             stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            bottom,
         ])
     }
 
@@ -1561,6 +1567,10 @@ final class MixedContentView: UIView {
     func configure(with blocks: [ContentBlock], isDarkMode: Bool, maxWidth: CGFloat) {
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         checkboxRows.removeAll()
+
+        // Less padding when adjacent block is a todo (checkbox has its own vertical padding)
+        topConstraint?.constant = (blocks.first?.type == "todo") ? 4 : 8
+        bottomConstraint?.constant = (blocks.last?.type == "todo") ? -4 : -8
 
         let textColor: UIColor = isDarkMode ? .white : .black
         var previousBlockType: String?
@@ -1719,7 +1729,9 @@ final class MixedContentView: UIView {
             }
         }
 
-        height += 16  // vertical padding (8 top + 8 bottom)
+        let topPadding: CGFloat = (blocks.first?.type == "todo") ? 4 : 8
+        let bottomPadding: CGFloat = (blocks.last?.type == "todo") ? 4 : 8
+        height += topPadding + bottomPadding
         return height
     }
 }
