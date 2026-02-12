@@ -34,6 +34,7 @@ struct tabsglassApp: App {
             let container = try SharedModelContainer.create()
             self.modelContainer = container
             Self.seedWelcomeMessagesIfNeeded(in: container)
+            Self.migrateTodoMessagesIfNeeded(in: container)
             Self.processPendingShareItems(in: container)
         } catch {
             fatalError("Failed to initialize model container: \(error)")
@@ -108,6 +109,46 @@ private extension tabsglassApp {
             // Stagger timestamps so messages appear in correct order (oldest first at top)
             message.createdAt = now.addingTimeInterval(Double(index))
             context.insert(message)
+        }
+
+        try? context.save()
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    static func migrateTodoMessagesIfNeeded(in container: ModelContainer) {
+        let key = "hasCompletedTodoMigration_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        let context = container.mainContext
+        let descriptor = FetchDescriptor<Message>()
+        guard let messages = try? context.fetch(descriptor) else { return }
+
+        for message in messages {
+            guard message.isTodoList && !message.hasContentBlocks else { continue }
+
+            var blocks: [ContentBlock] = []
+
+            // Title → bold text block
+            if let title = message.todoTitle, !title.isEmpty {
+                let titleUTF16Length = (title as NSString).length
+                let boldEntity = TextEntity(type: "bold", offset: 0, length: titleUTF16Length)
+                blocks.append(ContentBlock(type: "text", text: title, entities: [boldEntity]))
+            }
+
+            // TodoItems → todo blocks (preserve original IDs)
+            if let items = message.todoItems {
+                for item in items {
+                    blocks.append(ContentBlock(
+                        id: item.id,
+                        type: "todo",
+                        text: item.text,
+                        isCompleted: item.isCompleted
+                    ))
+                }
+            }
+
+            message.contentBlocks = blocks
+            message.content = message.todoTitle ?? ""
         }
 
         try? context.save()

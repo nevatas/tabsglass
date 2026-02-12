@@ -23,8 +23,6 @@ struct MainContainerView: View {
     @State private var tabToRename: Tab?
     @State private var tabToDelete: Tab?
     @State private var messageToEdit: Message?
-    @State private var showTaskListSheet = false
-    @State private var taskListToEdit: Message?
     @State private var messageForReminder: Message?
     @State private var newTabTitle = ""
     @State private var renameTabTitle = ""
@@ -108,17 +106,10 @@ struct MainContainerView: View {
                 moveMessage(message, toTabId: targetTabId)
             },
             onEditMessage: { message in
-                if message.isTodoList && !message.hasContentBlocks {
-                    taskListToEdit = message  // Old-style todo list → TaskListSheet
-                } else {
-                    messageToEdit = message   // Regular or mixed content → EditMessageSheet
-                }
+                messageToEdit = message
             },
             onRestoreMessage: {
                 restoreDeletedMessage()
-            },
-            onShowTaskList: {
-                showTaskListSheet = true
             },
             onToggleTodoItem: { message, itemId, isCompleted in
                 toggleTodoItem(message: message, itemId: itemId, isCompleted: isCompleted)
@@ -419,30 +410,6 @@ struct MainContainerView: View {
                 ReorderTabsView()
             }
         }
-        .sheet(isPresented: $showTaskListSheet) {
-            TaskListSheet(
-                onSave: { title, items in
-                    sendTaskListMessage(title: title, items: items)
-                    showTaskListSheet = false
-                },
-                onCancel: {
-                    showTaskListSheet = false
-                }
-            )
-        }
-        .sheet(item: $taskListToEdit) { message in
-            TaskListSheet(
-                existingTitle: message.todoTitle,
-                existingItems: message.todoItems ?? [],
-                onSave: { title, items in
-                    updateTaskList(message: message, newTitle: title, newItems: items)
-                    taskListToEdit = nil
-                },
-                onCancel: {
-                    taskListToEdit = nil
-                }
-            )
-        }
         .sheet(item: $messageForReminder) { message in
             ReminderSheet(
                 message: message,
@@ -621,28 +588,6 @@ struct MainContainerView: View {
 
     private func moveMessage(_ message: Message, toTabId targetTabId: UUID?) {
         message.tabId = targetTabId
-        try? modelContext.save()
-        reloadTrigger += 1
-    }
-
-    private func sendTaskListMessage(title: String?, items: [TodoItem]) {
-        guard !items.isEmpty else { return }
-
-        let message = Message(content: "", tabId: currentTabId)
-        message.todoTitle = title
-        message.todoItems = items
-        modelContext.insert(message)
-        try? modelContext.save()
-    }
-
-    private func updateTaskList(message: Message, newTitle: String?, newItems: [TodoItem]) {
-        if newItems.isEmpty {
-            // Delete message if all items removed
-            modelContext.delete(message)
-        } else {
-            message.todoTitle = newTitle
-            message.todoItems = newItems
-        }
         try? modelContext.save()
         reloadTrigger += 1
     }

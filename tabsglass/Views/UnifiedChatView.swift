@@ -28,7 +28,6 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
     var onEditMessage: ((Message) -> Void)?
     var onRestoreMessage: (() -> Void)?
-    var onShowTaskList: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
 
@@ -51,7 +50,6 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onMoveMessage = onMoveMessage
         vc.onEditMessage = onEditMessage
         vc.onRestoreMessage = onRestoreMessage
-        vc.onShowTaskList = onShowTaskList
         vc.onToggleTodoItem = onToggleTodoItem
         vc.onToggleReminder = onToggleReminder
         vc.onIndexChange = { newIndex in
@@ -111,7 +109,6 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onMoveMessage = onMoveMessage
         uiViewController.onEditMessage = onEditMessage
         uiViewController.onRestoreMessage = onRestoreMessage
-        uiViewController.onShowTaskList = onShowTaskList
         uiViewController.onToggleTodoItem = onToggleTodoItem
         uiViewController.onToggleReminder = onToggleReminder
         uiViewController.onEnterSelectionMode = onEnterSelectionMode
@@ -210,7 +207,6 @@ final class UnifiedChatViewController: UIViewController {
     var onImagesChange: (([UIImage]) -> Void)?
     var onVideosChange: (([AttachedVideo]) -> Void)?
     var onRestoreMessage: (() -> Void)?
-    var onShowTaskList: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
 
@@ -512,10 +508,6 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onShowCamera = { [weak self] in
             self?.showCamera()
-        }
-
-        inputContainer.onShowTaskList = { [weak self] in
-            self?.onShowTaskList?()
         }
 
         inputContainer.onImagesChange = { [weak self] images in

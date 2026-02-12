@@ -40,8 +40,6 @@ final class ComposerState {
     var onAttachmentChange: (() -> Void)?
     var onShowPhotoPicker: (() -> Void)?
     var onShowCamera: (() -> Void)?
-    var onShowTaskList: (() -> Void)?
-
     /// Reference to the formatting text view for extracting entities
     weak var formattingTextView: FormattingTextView?
 
@@ -164,10 +162,6 @@ final class SwiftUIComposerContainer: UIView {
     var onShowCamera: (() -> Void)? {
         didSet { composerState.onShowCamera = onShowCamera }
     }
-    var onShowTaskList: (() -> Void)? {
-        didSet { composerState.onShowTaskList = onShowTaskList }
-    }
-
     /// Callback for height changes
     var onHeightChange: ((CGFloat) -> Void)?
 
@@ -534,12 +528,6 @@ struct EmbeddedComposerView: View {
 
                         HStack {
                             Menu {
-                                Button {
-                                    state.onShowTaskList?()
-                                } label: {
-                                    Label(L10n.Composer.list, systemImage: "checklist")
-                                }
-
                                 Button {
                                     state.onShowPhotoPicker?()
                                 } label: {
