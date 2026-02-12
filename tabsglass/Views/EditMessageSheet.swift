@@ -455,39 +455,66 @@ struct EditFormattingTextView: UIViewRepresentable {
             ]
         )
 
-        guard let entities = entities else {
-            return attributedString
-        }
-
         let nsString = text as NSString
 
-        for entity in entities {
-            guard entity.offset >= 0,
-                  entity.length > 0,
-                  entity.offset + entity.length <= nsString.length else {
-                continue
+        // Apply checkbox styling to lines starting with "○ "
+        let checkboxPrefix = FormattingTextView.checkboxPrefix
+        let lines = text.components(separatedBy: "\n")
+        var offset = 0
+        let circleFontSize: CGFloat = 18
+        let circleStr = NSAttributedString(string: "\u{25CB}", attributes: [.font: UIFont.systemFont(ofSize: circleFontSize)])
+        let spaceStr = NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 16)])
+        let indentWidth = ceil(circleStr.size().width + spaceStr.size().width)
+
+        for line in lines {
+            if line.hasPrefix(checkboxPrefix) {
+                let lineRange = NSRange(location: offset, length: (line as NSString).length)
+
+                // Paragraph style with hanging indent
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.headIndent = indentWidth
+                paragraphStyle.paragraphSpacing = 2
+                paragraphStyle.paragraphSpacingBefore = 2
+                attributedString.addAttribute(.paragraphStyle, value: paragraphStyle, range: lineRange)
+
+                // Style the circle "○": larger font, placeholder color, baseline offset
+                let circleRange = NSRange(location: offset, length: 1)
+                attributedString.addAttribute(.font, value: UIFont.systemFont(ofSize: circleFontSize), range: circleRange)
+                attributedString.addAttribute(.foregroundColor, value: ThemeManager.shared.currentTheme.placeholderColor, range: circleRange)
+                attributedString.addAttribute(.baselineOffset, value: -1, range: circleRange)
             }
+            offset += (line as NSString).length + 1 // +1 for newline
+        }
 
-            let range = NSRange(location: entity.offset, length: entity.length)
-
-            switch entity.type {
-            case "bold":
-                attributedString.addAttribute(.font, value: UIFont.boldSystemFont(ofSize: 16), range: range)
-            case "italic":
-                attributedString.addAttribute(.font, value: UIFont.italicSystemFont(ofSize: 16), range: range)
-            case "underline":
-                attributedString.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-            case "strikethrough":
-                attributedString.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-            case "text_link":
-                // Text link - hyperlinked text
-                if let urlString = entity.url {
-                    attributedString.addAttribute(.link, value: urlString, range: range)
-                    attributedString.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
-                    attributedString.addAttribute(.foregroundColor, value: UIColor.link, range: range)
+        // Apply formatting entities
+        if let entities = entities {
+            for entity in entities {
+                guard entity.offset >= 0,
+                      entity.length > 0,
+                      entity.offset + entity.length <= nsString.length else {
+                    continue
                 }
-            default:
-                break
+
+                let range = NSRange(location: entity.offset, length: entity.length)
+
+                switch entity.type {
+                case "bold":
+                    attributedString.addAttribute(.font, value: UIFont.boldSystemFont(ofSize: 16), range: range)
+                case "italic":
+                    attributedString.addAttribute(.font, value: UIFont.italicSystemFont(ofSize: 16), range: range)
+                case "underline":
+                    attributedString.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                case "strikethrough":
+                    attributedString.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                case "text_link":
+                    if let urlString = entity.url {
+                        attributedString.addAttribute(.link, value: urlString, range: range)
+                        attributedString.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                        attributedString.addAttribute(.foregroundColor, value: UIColor.link, range: range)
+                    }
+                default:
+                    break
+                }
             }
         }
 

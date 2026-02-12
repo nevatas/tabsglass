@@ -912,7 +912,7 @@ final class UnifiedChatViewController: UIViewController {
 
         guard !snapshots.isEmpty else { return }
 
-        let resolvedViewportWidth = viewportWidth > 0 ? viewportWidth : UIScreen.main.bounds.width
+        let resolvedViewportWidth = viewportWidth > 0 ? viewportWidth : (view.window?.windowScene?.screen.bounds.width ?? 393)
         let bubbleWidth = max(resolvedViewportWidth - 32, 1)
 
         mediaWarmupQueue.async {

@@ -461,10 +461,13 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
 
     // MARK: - UITextViewDelegate
 
-    func textView(_ textView: UITextView, shouldInteractWith URL: URL, in characterRange: NSRange, interaction: UITextItemInteraction) -> Bool {
-        // Open the link in Safari — don't toggle the checkbox
-        UIApplication.shared.open(URL)
-        return false
+    func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction) -> UIAction? {
+        switch textItem.content {
+        case .link(let url):
+            return UIAction { _ in UIApplication.shared.open(url) }
+        default:
+            return defaultAction
+        }
     }
 
     /// Calculate height for a row with given text, entities, and max width

@@ -549,7 +549,12 @@ struct EmbeddedComposerView: View {
                             }
 
                             Button {
-                                state.formattingTextView?.insertCheckbox()
+                                if let tv = state.formattingTextView {
+                                    if !tv.isFirstResponder {
+                                        tv.becomeFirstResponder()
+                                    }
+                                    tv.insertCheckbox()
+                                }
                             } label: {
                                 Image(systemName: "checkmark.circle")
                                     .font(.system(size: 20, weight: .medium))
