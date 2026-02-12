@@ -11,6 +11,10 @@ User data is the most valuable thing in this app. **NEVER** make changes that co
 
 When in doubt, always preserve backward compatibility. New fields should have defaults. Old fields should never be removed — only deprecated. Test every change against the assumption that a user has existing data from the previous version.
 
+## Git Policy
+
+**NEVER** commit or push without an explicit user request. Only run `git commit` and `git push` when the user directly asks for it.
+
 ## Overview
 Messenger-style notes app with tabs. SwiftUI + UIKit hybrid, SwiftData, iOS 26+.
 
