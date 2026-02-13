@@ -9,6 +9,9 @@ import SwiftUI
 
 struct ReminderSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var themeManager: ThemeManager { ThemeManager.shared }
 
     @State private var selectedDate: Date
     @State private var selectedTime: Date
@@ -90,6 +93,10 @@ struct ReminderSheet: View {
             let dateString = dateFormatter.string(from: selectedDate)
             return String(format: L10n.Reminder.sendOnDate, dateString, timeString)
         }
+    }
+
+    private var accentColor: Color {
+        themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black)
     }
 
     var body: some View {
@@ -212,6 +219,7 @@ struct ReminderSheet: View {
                 }
             }
         }
+        .tint(accentColor)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
     }
