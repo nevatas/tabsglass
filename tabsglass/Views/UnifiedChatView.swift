@@ -709,7 +709,7 @@ final class UnifiedChatViewController: UIViewController {
     /// Finalize input visibility after swipe completes
     private func updateInputVisibility(animated: Bool) {
         guard !isSelectionMode else {
-            // In selection mode, hide both inputs immediately
+            // In selection mode, hide both inputs quickly
             inputContainer.isUserInteractionEnabled = false
             searchInputContainer?.isUserInteractionEnabled = false
             searchInputHostingController?.view.isUserInteractionEnabled = false
@@ -719,7 +719,7 @@ final class UnifiedChatViewController: UIViewController {
                 self.searchInputContainer?.alpha = 0
             }
             if animated {
-                UIView.animate(withDuration: 0.25, animations: changes)
+                UIView.animate(withDuration: 0.2, animations: changes)
             } else {
                 changes()
             }
@@ -1145,8 +1145,15 @@ final class UnifiedChatViewController: UIViewController {
     // MARK: - Selection Mode
 
     private func updateSelectionModeUI() {
-        // Update composer/search input visibility
-        updateInputVisibility(animated: true)
+        if isSelectionMode {
+            // Entering selection: hide composer immediately
+            updateInputVisibility(animated: true)
+        } else {
+            // Exiting selection: delay composer reappearance to stagger after selection bars slide out
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                self.updateInputVisibility(animated: true)
+            }
+        }
 
         // Block/unblock page swiping
         pageScrollView?.isScrollEnabled = !isSelectionMode

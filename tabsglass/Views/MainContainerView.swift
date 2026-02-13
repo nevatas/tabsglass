@@ -128,9 +128,7 @@ struct MainContainerView: View {
             selectedMessageIds: $selectedMessageIds,
             onEnterSelectionMode: { message in
                 selectedMessageIds = [message.id]
-                withAnimation(.easeOut(duration: 0.25)) {
-                    isSelectionMode = true
-                }
+                isSelectionMode = true
             },
             onToggleMessageSelection: { messageId, selected in
                 if selected {
@@ -190,35 +188,55 @@ struct MainContainerView: View {
             .offset(y: isSelectionMode ? -24 : 0)
             .opacity(isSelectionMode ? 0 : 1)
             .allowsHitTesting(!isSelectionMode)
+            .animation(
+                isSelectionMode
+                    ? .easeOut(duration: 0.25)
+                    : .easeOut(duration: 0.3).delay(0.18),
+                value: isSelectionMode
+            )
 
-            // Selection UI - shown in selection mode
-            if isSelectionMode {
-                // Cancel bar at top
-                VStack {
-                    SelectionCancelBar(
-                        selectedCount: selectedMessageIds.count,
-                        onCancel: { exitSelectionMode() }
-                    )
-                    Spacer()
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-
-                // Action bar at bottom
-                VStack {
-                    Spacer()
-                    SelectionActionBar(
-                        selectedCount: selectedMessageIds.count,
-                        canMove: canMoveMessages,
-                        tabs: tabs,
-                        currentTabId: currentTabId,
-                        onMove: { targetTabId in
-                            moveSelectedMessages(to: targetTabId)
-                        },
-                        onDelete: { showDeleteSelectedAlert = true }
-                    )
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Selection UI - always mounted, animated via offset/opacity
+            // Cancel bar at top
+            VStack {
+                SelectionCancelBar(
+                    selectedCount: selectedMessageIds.count,
+                    onCancel: { exitSelectionMode() }
+                )
+                Spacer()
             }
+            .offset(y: isSelectionMode ? 0 : -80)
+            .opacity(isSelectionMode ? 1 : 0)
+            .allowsHitTesting(isSelectionMode)
+            .animation(
+                isSelectionMode
+                    ? .spring(duration: 0.4, bounce: 0.12)
+                    : .easeOut(duration: 0.3),
+                value: isSelectionMode
+            )
+
+            // Action bar at bottom
+            VStack {
+                Spacer()
+                SelectionActionBar(
+                    selectedCount: selectedMessageIds.count,
+                    canMove: canMoveMessages,
+                    tabs: tabs,
+                    currentTabId: currentTabId,
+                    onMove: { targetTabId in
+                        moveSelectedMessages(to: targetTabId)
+                    },
+                    onDelete: { showDeleteSelectedAlert = true }
+                )
+            }
+            .offset(y: isSelectionMode ? 0 : 80)
+            .opacity(isSelectionMode ? 1 : 0)
+            .allowsHitTesting(isSelectionMode)
+            .animation(
+                isSelectionMode
+                    ? .spring(duration: 0.4, bounce: 0.12)
+                    : .easeOut(duration: 0.3),
+                value: isSelectionMode
+            )
 
             // Tab input dialogs (overlays, not sheets — keyboard appears instantly)
             if showNewTabAlert {
@@ -264,7 +282,6 @@ struct MainContainerView: View {
                 .transition(.opacity.combined(with: .offset(y: 10)))
             }
         }
-        .animation(.easeOut(duration: 0.25), value: isSelectionMode)
         .alert(L10n.Tab.deleteTitle, isPresented: $showDeleteAlert) {
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.delete, role: .destructive) {
@@ -832,10 +849,8 @@ struct MainContainerView: View {
     // MARK: - Selection Mode
 
     private func exitSelectionMode() {
-        withAnimation(.easeOut(duration: 0.25)) {
-            isSelectionMode = false
-            selectedMessageIds.removeAll()
-        }
+        isSelectionMode = false
+        selectedMessageIds.removeAll()
     }
 
     private func deleteSelectedMessages() {
