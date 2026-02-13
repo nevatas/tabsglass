@@ -1033,6 +1033,11 @@ final class UnifiedChatViewController: UIViewController {
                 }
             }
 
+            // Dismiss keyboard when crossing Search boundary
+            if (previousIndex == 0) != (selectedIndex == 0) {
+                view.endEditing(true)
+            }
+
             // For programmatic changes, animate input positions in sync with page transition
             if shouldAnimate && (previousIndex <= 1 || selectedIndex <= 1) {
                 // Animate inputs when transitioning to/from Search or Inbox
@@ -1489,6 +1494,11 @@ extension UnifiedChatViewController: UIGestureRecognizerDelegate {
 extension UnifiedChatViewController: UIScrollViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         guard scrollView === pageScrollView else { return }
+        // Dismiss keyboard when leaving Search (can only swipe right from index 0)
+        if selectedIndex == 0 && isSearchFocused {
+            view.endEditing(true)
+        }
+
         isUserSwiping = true
         didStartInteractivePageSwipe = true
         lastReportedFraction = 0
@@ -1521,6 +1531,11 @@ extension UnifiedChatViewController: UIScrollViewDelegate {
         if delta > 0.01 || directionChanged {
             lastReportedFraction = clampedFraction
             onSwitchFraction?(clampedFraction)
+        }
+
+        // Dismiss keyboard when swiping from Inbox toward Search
+        if selectedIndex == 1 && clampedFraction < -0.15 && isComposerFocused {
+            view.endEditing(true)
         }
 
         // Sync input sliding with page swipe (always update for smooth input movement)
