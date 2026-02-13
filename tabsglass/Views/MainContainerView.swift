@@ -39,7 +39,6 @@ struct MainContainerView: View {
     // Selection mode
     @State private var isSelectionMode = false
     @State private var selectedMessageIds: Set<UUID> = []
-    @State private var showMoveSheet = false
     @State private var showDeleteSelectedAlert = false
     @State private var reloadTrigger = 0
     @State private var isComposerFocused = false
@@ -210,7 +209,11 @@ struct MainContainerView: View {
                     SelectionActionBar(
                         selectedCount: selectedMessageIds.count,
                         canMove: canMoveMessages,
-                        onMove: { showMoveSheet = true },
+                        tabs: tabs,
+                        currentTabId: currentTabId,
+                        onMove: { targetTabId in
+                            moveSelectedMessages(to: targetTabId)
+                        },
                         onDelete: { showDeleteSelectedAlert = true }
                     )
                 }
@@ -262,11 +265,6 @@ struct MainContainerView: View {
             }
         }
         .animation(.easeOut(duration: 0.25), value: isSelectionMode)
-        .sheet(isPresented: $showMoveSheet) {
-            MoveMessagesSheet(tabs: tabs, currentTabId: currentTabId) { targetTabId in
-                moveSelectedMessages(to: targetTabId)
-            }
-        }
         .alert(L10n.Tab.deleteTitle, isPresented: $showDeleteAlert) {
             Button(L10n.Tab.cancel, role: .cancel) { }
             Button(L10n.Tab.delete, role: .destructive) {
