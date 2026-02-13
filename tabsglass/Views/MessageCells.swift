@@ -63,6 +63,7 @@ final class MessageTableCell: UITableViewCell {
 
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
+    private var lastLayoutHash: Int = 0
 
     /// Callback when a photo is tapped: (index, sourceFrame in window, image, fileNames)
     var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
@@ -514,6 +515,7 @@ final class MessageTableCell: UITableViewCell {
         super.prepareForReuse()
         cachedMessage = nil
         lastLayoutWidth = 0
+        lastLayoutHash = 0
         reminderBadge.isHidden = true
         // Reset constraints
         messageTextViewTopToMosaic.isActive = false
@@ -586,9 +588,33 @@ final class MessageTableCell: UITableViewCell {
 
         let width = contentView.bounds.width
         if width > 0 {
+            let layoutHash = makeLayoutHash(for: message, isExpanded: isExpanded)
+            let widthUnchanged = abs(width - lastLayoutWidth) < 0.5
+            if widthUnchanged && layoutHash == lastLayoutHash {
+                // Layout-affecting data unchanged — skip expensive constraint rebuild
+                return
+            }
             lastLayoutWidth = width
+            lastLayoutHash = layoutHash
             applyLayout(for: message, width: width)
         }
+    }
+
+    /// Hash of properties that affect cell layout (NOT todo isCompleted, NOT reminder state)
+    private func makeLayoutHash(for message: Message, isExpanded: Bool) -> Int {
+        var hasher = Hasher()
+        hasher.combine(message.id)
+        hasher.combine(message.content)
+        hasher.combine(message.photoFileNames.count)
+        hasher.combine(message.videoFileNames.count)
+        hasher.combine(message.todoItems?.count ?? -1)
+        hasher.combine(message.todoTitle)
+        hasher.combine(message.contentBlocks?.count ?? -1)
+        hasher.combine(message.linkPreview?.url)
+        hasher.combine(message.linkPreview?.isPlaceholder)
+        hasher.combine(message.linkPreview?.isLargeImage)
+        hasher.combine(isExpanded)
+        return hasher.finalize()
     }
 
     private func createAttributedString(for message: Message) -> NSAttributedString {

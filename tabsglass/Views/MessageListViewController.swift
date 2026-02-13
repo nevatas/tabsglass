@@ -73,6 +73,10 @@ final class MessageListViewController: UIViewController {
     // MARK: - Performance: Height cache
     /// Cache for calculated row heights, keyed by message ID
     private var heightCache: [UUID: CGFloat] = [:]
+    /// Hash of properties that affected the cached height (detects changes regardless of SwiftData identity)
+    private var heightInputCache: [UUID: Int] = [:]
+    /// Per-message render hash — skip reconfigure when unchanged
+    private var cellRenderCache: [UUID: Int] = [:]
     /// Width used for cached heights (invalidate on width change)
     private var cachedHeightWidth: CGFloat = 0
 
@@ -302,6 +306,48 @@ final class MessageListViewController: UIViewController {
         return hasher.finalize()
     }
 
+    /// Hash of per-message properties that affect cell height
+    private func makeHeightInputHash(for message: Message) -> Int {
+        var hasher = Hasher()
+        hasher.combine(message.content)
+        hasher.combine(message.photoFileNames.count)
+        hasher.combine(message.videoFileNames.count)
+        hasher.combine(message.todoItems?.count ?? -1)
+        hasher.combine(message.todoTitle)
+        hasher.combine(message.contentBlocks?.count ?? -1)
+        hasher.combine(message.linkPreview?.url)
+        hasher.combine(message.linkPreview?.title)
+        hasher.combine(message.linkPreview?.isPlaceholder)
+        hasher.combine(message.linkPreview?.isLargeImage)
+        return hasher.finalize()
+    }
+
+    /// Full per-message render hash — includes everything visible (todo completion, reminder, etc.)
+    private func makeCellRenderHash(for message: Message) -> Int {
+        var hasher = Hasher()
+        hasher.combine(message.content)
+        hasher.combine(message.photoFileNames.count)
+        hasher.combine(message.videoFileNames.count)
+        hasher.combine(message.todoTitle)
+        hasher.combine(message.hasReminder)
+        hasher.combine(message.linkPreview?.url)
+        hasher.combine(message.linkPreview?.title)
+        hasher.combine(message.linkPreview?.isPlaceholder)
+        if let items = message.todoItems {
+            for item in items {
+                hasher.combine(item.id)
+                hasher.combine(item.isCompleted)
+            }
+        }
+        if let blocks = message.contentBlocks {
+            for block in blocks {
+                hasher.combine(block.id)
+                hasher.combine(block.isCompleted)
+            }
+        }
+        return hasher.finalize()
+    }
+
     func reloadMessages(invalidateHeights: Bool = false) {
         // Skip if first message animation is in progress
         if isAnimatingFirstMessage { return }
@@ -309,6 +355,7 @@ final class MessageListViewController: UIViewController {
         // Force reload: clear all height caches so cells recalculate
         if invalidateHeights {
             heightCache.removeAll()
+            heightInputCache.removeAll()
         }
 
         // Snapshot current content to avoid redundant reload on first appear after prewarm.
@@ -333,6 +380,7 @@ final class MessageListViewController: UIViewController {
         } else {
             // IDs changed - need full filter and sort, invalidate height cache
             heightCache.removeAll()
+            heightInputCache.removeAll()
             newMessages = validMessages
                 .filter { !$0.isEmpty }
                 .sorted { $0.createdAt > $1.createdAt }
@@ -389,15 +437,14 @@ final class MessageListViewController: UIViewController {
 
         if oldIds == newIds {
             // Same messages in same order — just reconfigure content
-            // (if we're here, all sortedMessages are valid since their IDs match newMessages)
-            for (index, newMsg) in newMessages.enumerated() {
-                let oldMsg = sortedMessages[index]
-                // Check if content that affects height has changed
-                if oldMsg.content != newMsg.content ||
-                   oldMsg.todoItems?.count != newMsg.todoItems?.count ||
-                   oldMsg.linkPreview?.isPlaceholder != newMsg.linkPreview?.isPlaceholder ||
-                   oldMsg.linkPreview?.title != newMsg.linkPreview?.title {
+            // Compare height-input hashes (not SwiftData object refs which are identity-equal)
+            var heightsInvalidated = false
+            for newMsg in newMessages {
+                let currentHash = makeHeightInputHash(for: newMsg)
+                if heightInputCache[newMsg.id] != currentHash {
                     heightCache.removeValue(forKey: newMsg.id)
+                    heightInputCache.removeValue(forKey: newMsg.id)
+                    heightsInvalidated = true
                 }
             }
 
@@ -410,12 +457,20 @@ final class MessageListViewController: UIViewController {
                           let indexPath = tableView.indexPath(for: cell),
                           indexPath.row < sortedMessages.count else { continue }
                     let msg = sortedMessages[indexPath.row]
+                    // Skip reconfigure if cell content hasn't changed
+                    let renderHash = makeCellRenderHash(for: msg)
+                    if cellRenderCache[msg.id] == renderHash {
+                        continue
+                    }
+                    cellRenderCache[msg.id] = renderHash
                     messageCell.configure(with: msg, isExpanded: expandedMessageIds.contains(msg.id))
                     messageCell.isKeyboardActive = isComposerFocused
                 }
-                // Force UITableView to recalculate row heights (e.g., after todo items change)
-                tableView.beginUpdates()
-                tableView.endUpdates()
+                // Only recalculate row heights when layout-affecting content changed
+                if heightsInvalidated {
+                    tableView.beginUpdates()
+                    tableView.endUpdates()
+                }
             }
             CATransaction.commit()
         } else {
@@ -801,6 +856,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
 
         let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
         cell.configure(with: message, isExpanded: expandedMessageIds.contains(message.id))
+        cellRenderCache[message.id] = makeCellRenderHash(for: message)
         cell.isKeyboardActive = isComposerFocused
         cell.onMediaTapped = { [weak self] index, sourceFrame, _, _, _ in
             // Open unified gallery with all media (photos + videos)
@@ -826,6 +882,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 self.expandedMessageIds.insert(message.id)
             }
             self.heightCache.removeValue(forKey: message.id)
+            self.heightInputCache.removeValue(forKey: message.id)
             cell.configure(with: message, isExpanded: !wasExpanded)
             let newHeight = self.calculateMessageHeight(for: message, cellWidth: self.tableView.bounds.width)
             self.heightCache[message.id] = newHeight
@@ -906,6 +963,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         // Invalidate cache if width changed (rotation, etc.)
         if cellWidth != cachedHeightWidth {
             heightCache.removeAll()
+            heightInputCache.removeAll()
             cachedHeightWidth = cellWidth
         }
 
@@ -923,8 +981,9 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             height = calculateMessageHeight(for: message, cellWidth: cellWidth)
         }
 
-        // Cache the result
+        // Cache the result alongside input hash for change detection
         heightCache[message.id] = height
+        heightInputCache[message.id] = makeHeightInputHash(for: message)
 
         return height
     }

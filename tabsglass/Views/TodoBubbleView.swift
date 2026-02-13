@@ -430,7 +430,7 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
         let config = UIImage.SymbolConfiguration(pointSize: 26, weight: .regular)
 
         if isCompleted {
-            // Checking — full haptic
+            // Checking — haptic + sound
             let generator = UIImpactFeedbackGenerator(style: .light)
             generator.impactOccurred()
 
