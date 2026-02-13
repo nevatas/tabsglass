@@ -33,16 +33,18 @@ tabsglass/
 ├── Views/
 │   ├── MainContainerView.swift     # State orchestrator, CRUD, alerts/sheets
 │   ├── TabBarView.swift            # Telegram-style tab bar (Liquid Glass, UIKit engine)
-│   ├── UnifiedChatView.swift       # UIPageViewController + composer + message list
-│   ├── MessengerView.swift         # Message cells, composer UI, search result cells
+│   ├── UnifiedChatView.swift       # UIPageViewController host + tab paging coordinator
+│   ├── MessageListViewController.swift  # Per-tab list controller, context menu, search tab
+│   ├── ComposerComponents.swift    # Composer state/container + SwiftUI composer views
+│   ├── MessageCells.swift          # MessageTableCell, SearchResultCell, EmptyTableCell
 │   ├── SearchInputView.swift       # Search text field (UITextField wrapper)
 │   ├── SearchTabsView.swift        # Tab filter buttons on Search screen
 │   ├── FormattingTextView.swift    # Rich text editing (UITextView)
 │   ├── TodoBubbleView.swift        # Checklist rendering in chat
 │   ├── MosaicLayout.swift          # Photo grid calculations
 │   ├── SettingsView.swift          # Settings screen
+│   ├── OnboardingView.swift        # Onboarding flow
 │   ├── PaywallView.swift           # Paywall screen (Taby Unlimited)
-│   ├── TaskListSheet.swift         # Create/edit task list
 │   ├── EditMessageSheet.swift      # Edit message
 │   ├── ReminderSheet.swift         # Set reminder
 │   ├── MoveMessagesSheet.swift     # Move messages between tabs
@@ -176,14 +178,14 @@ Chat tabs use `tableView.transform = CGAffineTransform(scaleX: 1, y: -1)` — ne
 - `headerHeight = 115` (safe area + header + tab bar)
 - Each cell also has inverted transform to display correctly
 
-### Message Insertion Animations (UnifiedChatView.swift ~line 1876)
+### Message Insertion Animations (MessageListViewController.swift `reloadMessages()`)
 Three paths in `reloadMessages()`:
 
 1. **Subsequent messages** (`sortedMessages` not empty): `insertRows` with scale+fade animation (0.85→1.0, alpha 0→1, 0.25s)
 2. **First message** (`sortedMessages` empty): 3-phase — fade out EmptyTableCell (0.15s) → `reloadData()` → scale+fade in message (0.25s)
 3. **Search tab**: instant `reloadData()` without animation
 
-**Defensive path** (~line 1765): Checks `renderedRows == expectedRows` before incremental updates. When `sortedMessages` is empty and `!isSearchTab`, expected rows = 1 (EmptyTableCell placeholder), not 0.
+**Defensive path** (around lines 334-336): Checks `renderedRows == expectedRows` before incremental updates. When `sortedMessages` is empty and `!isSearchTab`, expected rows = 1 (EmptyTableCell placeholder), not 0.
 
 ### Search
 - Full-text search across all messages and tabs

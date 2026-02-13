@@ -12,6 +12,13 @@ final class TodoBubbleView: UIView {
     /// Callback when a checkbox is toggled: (itemId, isCompleted)
     var onToggle: ((UUID, Bool) -> Void)?
 
+    /// Whether the keyboard/composer is currently active (propagated to checkbox rows)
+    var isKeyboardActive: Bool = false {
+        didSet {
+            checkboxRows.forEach { $0.isKeyboardActive = isKeyboardActive }
+        }
+    }
+
     private let titleLabel = UILabel()
     private let stackView = UIStackView()
     private let footerLabel = UILabel()
@@ -231,6 +238,15 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
     /// Callback when checkbox is toggled: (itemId, isCompleted)
     var onToggle: ((UUID, Bool) -> Void)?
 
+    /// Whether the keyboard/composer is currently active
+    var isKeyboardActive: Bool = false {
+        didSet {
+            // Disable text view interaction when keyboard is active to prevent it from
+            // becoming first responder and dismissing the composer's keyboard
+            textView.isUserInteractionEnabled = !isKeyboardActive
+        }
+    }
+
     /// Whether a toggle animation is currently in progress
     private(set) var isAnimating = false
 
@@ -379,6 +395,16 @@ final class TodoCheckboxRow: UIView, UITextViewDelegate {
     }
 
     @objc private func rowTapped(_ gesture: UITapGestureRecognizer) {
+        // When keyboard is active, right 15% of the row dismisses keyboard
+        if isKeyboardActive {
+            let location = gesture.location(in: self)
+            let dismissZoneX = bounds.width * 0.85
+            if location.x > dismissZoneX {
+                window?.endEditing(true)
+                return
+            }
+        }
+
         // Check if tap landed on a link in the text view
         let location = gesture.location(in: textView)
         if isPointOnLink(location) { return } // Let textView handle the link tap
@@ -500,6 +526,9 @@ extension TodoCheckboxRow: UIGestureRecognizerDelegate {
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        // When keyboard is active, always receive — text view interaction is disabled
+        // so links can't fire anyway; avoids dead zones where tap does nothing
+        if isKeyboardActive { return true }
         // Don't let row tap gesture fire if the touch is on a link
         let location = touch.location(in: textView)
         if location.x >= 0 && location.y >= 0 && isPointOnLink(location) {
