@@ -52,6 +52,7 @@ final class MessageTableCell: UITableViewCell {
     private let reminderBadge = UIView()
     private let reminderIcon = UIImageView()
 
+    private let linkPreviewView = LinkPreviewBubbleView()
     private let showMoreButton = UIButton(type: .system)
     private let fadeGradientView = FadeGradientView()
     private var messageTextViewHeightConstraint: NSLayoutConstraint!
@@ -91,6 +92,11 @@ final class MessageTableCell: UITableViewCell {
     private var mosaicBottomToBubble: NSLayoutConstraint!
     private var todoViewHeightConstraint: NSLayoutConstraint!
     private var todoViewBottomToBubble: NSLayoutConstraint!
+    private var linkPreviewHeightConstraint: NSLayoutConstraint!
+    private var linkPreviewTopToText: NSLayoutConstraint!
+    private var linkPreviewTopToMosaic: NSLayoutConstraint!
+    private var linkPreviewTopToShowMore: NSLayoutConstraint!
+    private var linkPreviewBottomToBubble: NSLayoutConstraint!
     private var bubbleContainerTopConstraint: NSLayoutConstraint!
     private var traitChangeRegistration: UITraitChangeRegistration?
 
@@ -227,6 +233,11 @@ final class MessageTableCell: UITableViewCell {
         mixedContentView.isHidden = true
         bubbleView.addSubview(mixedContentView)
 
+        // Link preview view
+        linkPreviewView.translatesAutoresizingMaskIntoConstraints = false
+        linkPreviewView.isHidden = true
+        bubbleView.addSubview(linkPreviewView)
+
         // Fade gradient overlay for truncated messages (added before button so button is on top)
         fadeGradientView.translatesAutoresizingMaskIntoConstraints = false
         fadeGradientView.isHidden = true
@@ -262,6 +273,14 @@ final class MessageTableCell: UITableViewCell {
         // Show more button constraints
         showMoreTopToText = showMoreButton.topAnchor.constraint(equalTo: messageTextView.bottomAnchor, constant: 4)
         showMoreBottomToBubble = showMoreButton.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -8)
+
+        // Link preview constraints
+        linkPreviewHeightConstraint = linkPreviewView.heightAnchor.constraint(equalToConstant: 0)
+        linkPreviewHeightConstraint.priority = UILayoutPriority(999)
+        linkPreviewTopToText = linkPreviewView.topAnchor.constraint(equalTo: messageTextView.bottomAnchor, constant: 4)
+        linkPreviewTopToMosaic = linkPreviewView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 4)
+        linkPreviewTopToShowMore = linkPreviewView.topAnchor.constraint(equalTo: showMoreButton.bottomAnchor, constant: 4)
+        linkPreviewBottomToBubble = linkPreviewView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -4)
 
         // Height constraint for collapsing long messages (inactive by default)
         messageTextViewHeightConstraint = messageTextView.heightAnchor.constraint(equalToConstant: 0)
@@ -320,6 +339,11 @@ final class MessageTableCell: UITableViewCell {
             // Show more button constraints (horizontal only — vertical managed dynamically)
             showMoreButton.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
             showMoreButton.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
+
+            // Link preview view constraints (horizontal always active)
+            linkPreviewView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor),
+            linkPreviewView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor),
+            linkPreviewHeightConstraint,
         ])
 
         // Activate normal leading constraint by default
@@ -505,6 +529,13 @@ final class MessageTableCell: UITableViewCell {
         mixedContentTopToBubble.isActive = false
         mixedContentBottomToBubble.isActive = false
         mixedContentView.isHidden = true
+        // Reset link preview constraints
+        linkPreviewTopToText.isActive = false
+        linkPreviewTopToMosaic.isActive = false
+        linkPreviewTopToShowMore.isActive = false
+        linkPreviewBottomToBubble.isActive = false
+        linkPreviewView.isHidden = true
+        linkPreviewHeightConstraint.constant = 0
         // Reset show more state
         isExpanded = false
         showMoreButton.isHidden = true
@@ -539,6 +570,12 @@ final class MessageTableCell: UITableViewCell {
         if !message.hasContentBlocks && message.isTodoList, let items = message.todoItems {
             let isDarkMode = traitCollection.userInterfaceStyle == .dark
             todoView.configure(with: message.todoTitle, items: items, isDarkMode: isDarkMode)
+        }
+
+        // Configure link preview
+        if message.linkPreview != nil && !message.isTodoList && !message.hasContentBlocks {
+            let isDarkMode = traitCollection.userInterfaceStyle == .dark
+            linkPreviewView.configure(with: message.linkPreview, isDarkMode: isDarkMode)
         }
 
         // Show/hide reminder badge (floating — no layout impact on cell height)
@@ -641,6 +678,10 @@ final class MessageTableCell: UITableViewCell {
         mixedContentTopToMosaic.isActive = false
         mixedContentTopToBubble.isActive = false
         mixedContentBottomToBubble.isActive = false
+        linkPreviewTopToText.isActive = false
+        linkPreviewTopToMosaic.isActive = false
+        linkPreviewTopToShowMore.isActive = false
+        linkPreviewBottomToBubble.isActive = false
 
         // Calculate bubble width (cell width - 32 for margins)
         let bubbleWidth = max(width - 32, 0)
@@ -707,27 +748,59 @@ final class MessageTableCell: UITableViewCell {
             todoViewHeightConstraint.constant = 0
             todoView.isHidden = true
 
+            // Check for link preview
+            let hasLinkPreview = message.linkPreview != nil
+            if hasLinkPreview {
+                let previewHeight = LinkPreviewBubbleView.calculateHeight(for: message.linkPreview!, maxWidth: bubbleWidth)
+                linkPreviewHeightConstraint.constant = previewHeight
+                linkPreviewView.isHidden = false
+            } else {
+                linkPreviewHeightConstraint.constant = 0
+                linkPreviewView.isHidden = true
+            }
+
             // Configure layout based on content
             if hasMedia && hasText {
                 // Both media and text
                 messageTextViewTopToMosaic.isActive = true
                 messageTextView.isHidden = false
-                if applyShowMoreIfNeeded(bubbleWidth: bubbleWidth) {
-                    // Show more button handles bottom constraint
+                let hasShowMore = applyShowMoreIfNeeded(bubbleWidth: bubbleWidth)
+                if hasLinkPreview {
+                    if hasShowMore {
+                        linkPreviewTopToShowMore.isActive = true
+                    } else {
+                        linkPreviewTopToText.isActive = true
+                    }
+                    linkPreviewBottomToBubble.isActive = true
+                } else if hasShowMore {
+                    showMoreBottomToBubble.isActive = true
                 } else {
                     messageTextViewBottomToBubble.isActive = true
                 }
             } else if hasMedia && !hasText {
-                // Media only - mosaic fills to bottom
-                mosaicBottomToBubble.isActive = true
+                // Media only
                 messageTextView.isHidden = true
                 showMoreButton.isHidden = true
+                if hasLinkPreview {
+                    linkPreviewTopToMosaic.isActive = true
+                    linkPreviewBottomToBubble.isActive = true
+                } else {
+                    mosaicBottomToBubble.isActive = true
+                }
             } else {
                 // Text only (or empty)
                 messageTextViewTopToBubble.isActive = true
                 messageTextView.isHidden = false
-                if applyShowMoreIfNeeded(bubbleWidth: bubbleWidth) {
-                    // Show more button handles bottom constraint
+                let hasShowMore = applyShowMoreIfNeeded(bubbleWidth: bubbleWidth)
+                if hasLinkPreview {
+                    if hasShowMore {
+                        linkPreviewTopToShowMore.isActive = true
+                    } else {
+                        linkPreviewTopToText.isActive = true
+                    }
+                    linkPreviewBottomToBubble.isActive = true
+                } else if hasShowMore {
+                    showMoreBottomToBubble.isActive = true
                 } else {
                     messageTextViewBottomToBubble.isActive = true
                 }
@@ -776,7 +849,8 @@ final class MessageTableCell: UITableViewCell {
 
         showMoreButton.isHidden = false
         showMoreTopToText.isActive = true
-        showMoreBottomToBubble.isActive = true
+        // Don't set showMoreBottomToBubble here — caller handles bottom constraint
+        // (link preview may go below the show more button)
         return true
     }
 
@@ -801,6 +875,359 @@ final class MessageTableCell: UITableViewCell {
         ).height)
         _collapsedHeightCache = (textWidth, height)
         return height
+    }
+}
+
+// MARK: - Link Preview Bubble View
+
+final class LinkPreviewBubbleView: UIView {
+    // Shared
+    private let accentBar = UIView()
+    private let siteNameLabel = UILabel()
+    private let titleLabel = UILabel()
+
+    // Compact layout (description + small thumbnail)
+    private let descriptionLabel = UILabel()
+    private let thumbnailView = UIImageView()
+
+    // Large layout (full-width image)
+    private let largeImageView = UIImageView()
+
+    // Layout state
+    private var isLargeLayout = false
+    private var activeConstraints: [NSLayoutConstraint] = []
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupView()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupView() {
+        clipsToBounds = true
+
+        // Accent bar (always present)
+        accentBar.layer.cornerRadius = 1.5
+        accentBar.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(accentBar)
+
+        // Site name (always present)
+        siteNameLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        siteNameLabel.textColor = .secondaryLabel
+        siteNameLabel.numberOfLines = 1
+        siteNameLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(siteNameLabel)
+
+        // Title (always present)
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.numberOfLines = 2
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
+        // Description (compact only)
+        descriptionLabel.font = .systemFont(ofSize: 14)
+        descriptionLabel.textColor = .secondaryLabel
+        descriptionLabel.numberOfLines = 3
+        descriptionLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(descriptionLabel)
+
+        // Thumbnail (compact only)
+        thumbnailView.contentMode = .scaleAspectFill
+        thumbnailView.clipsToBounds = true
+        thumbnailView.layer.cornerRadius = 8
+        thumbnailView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(thumbnailView)
+
+        // Large image (large layout only)
+        largeImageView.contentMode = .scaleAspectFill
+        largeImageView.clipsToBounds = true
+        largeImageView.layer.cornerRadius = 10
+        largeImageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(largeImageView)
+    }
+
+    func configure(with preview: LinkPreview?, isDarkMode: Bool) {
+        guard let preview = preview else {
+            isHidden = true
+            return
+        }
+        isHidden = false
+        isLargeLayout = preview.isLargeImage
+
+        // Theme accent color
+        let theme = ThemeManager.shared.currentTheme
+        if let accent = theme.accentColor {
+            accentBar.backgroundColor = UIColor(accent)
+        } else {
+            accentBar.backgroundColor = .systemBlue
+        }
+
+        titleLabel.textColor = isDarkMode ? .white : .black
+
+        siteNameLabel.text = preview.siteName
+        let hasSiteName = preview.siteName != nil && !preview.siteName!.isEmpty
+        siteNameLabel.isHidden = !hasSiteName
+
+        titleLabel.text = preview.title
+        let hasTitle = preview.title != nil && !preview.title!.isEmpty
+        titleLabel.isHidden = !hasTitle
+
+        // Reset all layout
+        NSLayoutConstraint.deactivate(activeConstraints)
+        activeConstraints.removeAll()
+        thumbnailView.isHidden = true
+        thumbnailView.image = nil
+        largeImageView.isHidden = true
+        largeImageView.image = nil
+        descriptionLabel.isHidden = true
+
+        if isLargeLayout {
+            configureLargeLayout(preview: preview, hasSiteName: hasSiteName, hasTitle: hasTitle)
+        } else {
+            configureCompactLayout(preview: preview, hasSiteName: hasSiteName, hasTitle: hasTitle)
+        }
+
+        NSLayoutConstraint.activate(activeConstraints)
+    }
+
+    // MARK: - Large Layout (full-width image below title)
+
+    private func configureLargeLayout(preview: LinkPreview, hasSiteName: Bool, hasTitle: Bool) {
+        titleLabel.numberOfLines = 2
+        descriptionLabel.isHidden = true
+
+        // Accent bar — spans from siteName to bottom of image
+        activeConstraints.append(contentsOf: [
+            accentBar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            accentBar.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            accentBar.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            accentBar.widthAnchor.constraint(equalToConstant: 3),
+        ])
+
+        // Build text chain vertically
+        let contentLeading = accentBar.trailingAnchor
+
+        var topAnchorRef = topAnchor
+        let topOffset: CGFloat = 6
+
+        if hasSiteName {
+            activeConstraints.append(contentsOf: [
+                siteNameLabel.topAnchor.constraint(equalTo: topAnchorRef, constant: topOffset),
+                siteNameLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+                siteNameLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            ])
+            topAnchorRef = siteNameLabel.bottomAnchor
+        }
+
+        if hasTitle {
+            activeConstraints.append(contentsOf: [
+                titleLabel.topAnchor.constraint(equalTo: topAnchorRef, constant: hasSiteName ? 2 : topOffset),
+                titleLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+                titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            ])
+            topAnchorRef = titleLabel.bottomAnchor
+        }
+
+        // Large image — full width (inside accent bar area)
+        largeImageView.isHidden = false
+        let aspectRatio = preview.imageAspectRatio ?? 1.5
+        activeConstraints.append(contentsOf: [
+            largeImageView.topAnchor.constraint(equalTo: topAnchorRef, constant: 6),
+            largeImageView.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+            largeImageView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            largeImageView.heightAnchor.constraint(equalTo: largeImageView.widthAnchor, multiplier: 1.0 / aspectRatio),
+            largeImageView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+        ])
+
+        // Load image
+        if let imageFileName = preview.image, !imageFileName.isEmpty {
+            let targetWidth = UIScreen.main.bounds.width - 32 - 28 - 3 - 8
+            let targetHeight = targetWidth / aspectRatio
+            let thumbSize = CGSize(width: targetWidth * 2, height: targetHeight * 2)
+            ImageCache.shared.loadThumbnail(for: imageFileName, targetSize: thumbSize) { [weak self] image in
+                self?.largeImageView.image = image
+            }
+        }
+
+    }
+
+    // MARK: - Compact Layout (text + small thumbnail)
+
+    private func configureCompactLayout(preview: LinkPreview, hasSiteName: Bool, hasTitle: Bool) {
+        titleLabel.numberOfLines = 1
+
+        let hasImage = preview.image != nil && !(preview.image?.isEmpty ?? true)
+        let hasDesc = preview.previewDescription != nil && !(preview.previewDescription?.isEmpty ?? true)
+
+        descriptionLabel.text = preview.previewDescription
+        descriptionLabel.isHidden = !hasDesc
+
+        // Accent bar
+        activeConstraints.append(contentsOf: [
+            accentBar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            accentBar.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            accentBar.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            accentBar.widthAnchor.constraint(equalToConstant: 3),
+        ])
+
+        let contentLeading = accentBar.trailingAnchor
+        let trailingRef: NSLayoutXAxisAnchor
+
+        // Thumbnail on the right
+        if hasImage {
+            thumbnailView.isHidden = false
+            activeConstraints.append(contentsOf: [
+                thumbnailView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+                thumbnailView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+                thumbnailView.widthAnchor.constraint(equalToConstant: 50),
+                thumbnailView.heightAnchor.constraint(equalToConstant: 50),
+            ])
+            trailingRef = thumbnailView.leadingAnchor
+            let trailingOffset: CGFloat = -8
+
+            // Load thumbnail
+            if let imageFileName = preview.image {
+                let thumbSize = CGSize(width: 100, height: 100)
+                ImageCache.shared.loadThumbnail(for: imageFileName, targetSize: thumbSize) { [weak self] image in
+                    self?.thumbnailView.image = image
+                }
+            }
+
+            // Text trailing to thumbnail
+            var topAnchorRef = topAnchor
+            let topOffset: CGFloat = 4
+            if hasSiteName {
+                activeConstraints.append(contentsOf: [
+                    siteNameLabel.topAnchor.constraint(equalTo: topAnchorRef, constant: topOffset),
+                    siteNameLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+                    siteNameLabel.trailingAnchor.constraint(equalTo: trailingRef, constant: trailingOffset),
+                ])
+                topAnchorRef = siteNameLabel.bottomAnchor
+            }
+            if hasTitle {
+                activeConstraints.append(contentsOf: [
+                    titleLabel.topAnchor.constraint(equalTo: topAnchorRef, constant: hasSiteName ? 2 : topOffset),
+                    titleLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+                    titleLabel.trailingAnchor.constraint(equalTo: trailingRef, constant: trailingOffset),
+                ])
+                topAnchorRef = titleLabel.bottomAnchor
+            }
+            if hasDesc {
+                activeConstraints.append(contentsOf: [
+                    descriptionLabel.topAnchor.constraint(equalTo: topAnchorRef, constant: 2),
+                    descriptionLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+                    descriptionLabel.trailingAnchor.constraint(equalTo: trailingRef, constant: trailingOffset),
+                    descriptionLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -4),
+                ])
+            }
+        } else {
+            // No image — text fills full width
+            var topAnchorRef = topAnchor
+            let topOffset: CGFloat = 4
+            if hasSiteName {
+                activeConstraints.append(contentsOf: [
+                    siteNameLabel.topAnchor.constraint(equalTo: topAnchorRef, constant: topOffset),
+                    siteNameLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+                    siteNameLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+                ])
+                topAnchorRef = siteNameLabel.bottomAnchor
+            }
+            if hasTitle {
+                activeConstraints.append(contentsOf: [
+                    titleLabel.topAnchor.constraint(equalTo: topAnchorRef, constant: hasSiteName ? 2 : topOffset),
+                    titleLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+                    titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+                ])
+                topAnchorRef = titleLabel.bottomAnchor
+            }
+            if hasDesc {
+                activeConstraints.append(contentsOf: [
+                    descriptionLabel.topAnchor.constraint(equalTo: topAnchorRef, constant: 2),
+                    descriptionLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+                    descriptionLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+                    descriptionLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -4),
+                ])
+            }
+        }
+    }
+
+    // MARK: - Height Calculation
+
+    static func calculateHeight(for preview: LinkPreview, maxWidth: CGFloat) -> CGFloat {
+        if preview.isLargeImage {
+            return calculateLargeHeight(for: preview, maxWidth: maxWidth)
+        } else {
+            return calculateCompactHeight(for: preview, maxWidth: maxWidth)
+        }
+    }
+
+    private static func calculateLargeHeight(for preview: LinkPreview, maxWidth: CGFloat) -> CGFloat {
+        let textWidth = maxWidth - 14 - 3 - 8 - 14  // leading margin + bar + spacing + trailing margin
+        var height: CGFloat = 6  // top padding
+
+        if let siteName = preview.siteName, !siteName.isEmpty {
+            height += 16  // ~12pt font + spacing
+        }
+        if let title = preview.title, !title.isEmpty {
+            let titleHeight = title.boundingRect(
+                with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold)],
+                context: nil
+            ).height
+            height += min(ceil(titleHeight), 40) + 2  // 2 lines max
+        }
+
+        // Image height based on aspect ratio
+        let imageWidth = textWidth
+        let aspectRatio = preview.imageAspectRatio ?? 1.5
+        height += 6  // spacing above image
+        height += imageWidth / aspectRatio
+        height += 6  // bottom padding
+
+        return height
+    }
+
+    private static func calculateCompactHeight(for preview: LinkPreview, maxWidth: CGFloat) -> CGFloat {
+        let fullTextWidth = maxWidth - 14 - 3 - 8 - 14  // margins - bar - spacing
+        let hasImage = preview.image != nil && !(preview.image?.isEmpty ?? true)
+        let availableTextWidth = hasImage ? fullTextWidth - 50 - 8 : fullTextWidth
+
+        var height: CGFloat = 0
+
+        if let siteName = preview.siteName, !siteName.isEmpty {
+            height += 16
+        }
+        if let title = preview.title, !title.isEmpty {
+            let titleHeight = title.boundingRect(
+                with: CGSize(width: availableTextWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold)],
+                context: nil
+            ).height
+            height += min(ceil(titleHeight), 20) + 2
+        }
+        if let desc = preview.previewDescription, !desc.isEmpty {
+            let descHeight = desc.boundingRect(
+                with: CGSize(width: availableTextWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: UIFont.systemFont(ofSize: 14)],
+                context: nil
+            ).height
+            height += min(ceil(descHeight), 54)  // 3 lines max
+        }
+
+        height += 8  // top + bottom padding
+
+        // Minimum height to accommodate thumbnail
+        if hasImage {
+            height = max(height, 58)
+        }
+
+        return max(height, 30)
     }
 }
 

@@ -283,20 +283,29 @@ struct LinkPreview: Codable, Hashable {
     let url: String
     let title: String?
     let previewDescription: String?  // "description" is reserved by Swift
-    let image: String?               // URL to preview image
+    let image: String?               // Local filename for preview image
     let siteName: String?
+    let imageAspectRatio: Double?    // width / height — determines large vs compact layout
 
-    init(url: String, title: String? = nil, previewDescription: String? = nil, image: String? = nil, siteName: String? = nil) {
+    /// Large layout: full-width image below title (landscape og:image, width >= 300)
+    var isLargeImage: Bool {
+        guard image != nil && !(image?.isEmpty ?? true) else { return false }
+        guard let ratio = imageAspectRatio else { return false }
+        return ratio >= 1.2
+    }
+
+    init(url: String, title: String? = nil, previewDescription: String? = nil, image: String? = nil, siteName: String? = nil, imageAspectRatio: Double? = nil) {
         self.url = url
         self.title = title
         self.previewDescription = previewDescription
         self.image = image
         self.siteName = siteName
+        self.imageAspectRatio = imageAspectRatio
     }
 
     // Custom coding keys to map "description" from JSON to "previewDescription"
     enum CodingKeys: String, CodingKey {
-        case url, title, image, siteName
+        case url, title, image, siteName, imageAspectRatio
         case previewDescription = "description"
     }
 }
@@ -489,9 +498,12 @@ final class Message: Identifiable {
         }
     }
 
-    /// Delete all media files (photos and videos)
+    /// Delete all media files (photos, videos, and link preview image)
     func deleteMediaFiles() {
         deletePhotoFiles()
         deleteVideoFiles()
+        if let imageFileName = linkPreview?.image {
+            SharedPhotoStorage.deletePhoto(imageFileName)
+        }
     }
 }

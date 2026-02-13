@@ -994,6 +994,11 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             }
         }
 
+        // Link preview height (only for non-todo, non-contentBlocks messages)
+        if let linkPreview = message.linkPreview, !message.isTodoList, !message.hasContentBlocks {
+            height += LinkPreviewBubbleView.calculateHeight(for: linkPreview, maxWidth: bubbleWidth) + 4
+        }
+
         return max(height, 50)  // Minimum height
     }
 

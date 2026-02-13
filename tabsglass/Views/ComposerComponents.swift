@@ -36,6 +36,7 @@ final class ComposerState {
     var onSend: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     var onAttachmentChange: (() -> Void)?
+    var onLinkPreviewChange: (() -> Void)?
     var onShowPhotoPicker: (() -> Void)?
     var onShowCamera: (() -> Void)?
     /// Reference to the formatting text view for extracting entities
@@ -43,6 +44,12 @@ final class ComposerState {
 
     /// Height of media section (80 when visible, 0 when hidden)
     var mediaSectionHeight: CGFloat = 0
+
+    /// Link preview state
+    var linkPreview: LinkPreview? = nil
+    var linkPreviewDismissed: Bool = false
+    var linkPreviewBannerHeight: CGFloat = 0
+    private var lastDetectedURL: String?
 
     /// Total count of attached media (photos + videos)
     var totalMediaCount: Int {
@@ -57,6 +64,66 @@ final class ComposerState {
     /// Extract formatting entities from current text
     func extractEntities() -> [TextEntity] {
         return formattingTextView?.extractEntities() ?? []
+    }
+
+    /// Detect and fetch link preview for the first URL in text
+    func detectLinkPreview(in text: String) {
+        let service = LinkPreviewService.shared
+        guard let url = service.firstURL(in: text) else {
+            // No URL — hide preview
+            if linkPreview != nil || linkPreviewBannerHeight > 0 {
+                linkPreview = nil
+                lastDetectedURL = nil
+                linkPreviewDismissed = false
+                withAnimation(.easeOut(duration: 0.2)) {
+                    linkPreviewBannerHeight = 0
+                }
+            }
+            return
+        }
+
+        let urlString = url.absoluteString
+
+        // URL changed — reset dismissed state
+        if urlString != lastDetectedURL {
+            linkPreviewDismissed = false
+        }
+
+        // User dismissed this URL
+        if linkPreviewDismissed {
+            return
+        }
+
+        // Same URL already showing
+        if urlString == lastDetectedURL && linkPreview != nil {
+            return
+        }
+
+        lastDetectedURL = urlString
+        service.fetchPreview(for: text) { [weak self] preview in
+            guard let self = self else { return }
+            guard self.lastDetectedURL == urlString else { return }
+            self.linkPreview = preview
+            if preview != nil {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    self.linkPreviewBannerHeight = 52
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    self.linkPreviewBannerHeight = 0
+                }
+            }
+            self.onLinkPreviewChange?()
+        }
+    }
+
+    /// Dismiss the current link preview banner
+    func dismissLinkPreview() {
+        linkPreviewDismissed = true
+        linkPreview = nil
+        linkPreviewBannerHeight = 0
+        LinkPreviewService.shared.cancel()
+        onLinkPreviewChange?()
     }
 
     func removeImage(at index: Int) {
@@ -139,6 +206,11 @@ final class ComposerState {
         formattingTextView?.clear()
         formattingTextView?.isScrollEnabled = false
         clearAttachments()
+        linkPreview = nil
+        linkPreviewDismissed = false
+        linkPreviewBannerHeight = 0
+        lastDetectedURL = nil
+        LinkPreviewService.shared.cancel()
     }
 }
 
@@ -206,7 +278,18 @@ final class SwiftUIComposerContainer: UIView {
         composerState.onTextChange = { [weak self] newText in
             guard let self = self else { return }
             self.onTextChange?(newText)
+            self.composerState.detectLinkPreview(in: newText)
             self.updateHeight()
+        }
+
+        composerState.onLinkPreviewChange = { [weak self] in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                self.updateHeight()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.updateHeight()
+            }
         }
 
         composerState.onAttachmentChange = { [weak self] in
@@ -345,6 +428,11 @@ final class SwiftUIComposerContainer: UIView {
         return composerState.formattingTextView?.extractComposerContent()
     }
 
+    /// Extract current link preview (called before send)
+    func extractLinkPreview() -> LinkPreview? {
+        return composerState.linkPreview
+    }
+
     /// Focus the composer text field
     func focus() {
         composerState.shouldFocus = true
@@ -454,6 +542,64 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
     }
 }
 
+// MARK: - Link Preview Banner
+
+struct LinkPreviewBanner: View {
+    let preview: LinkPreview
+    let onDismiss: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    private var themeManager: ThemeManager { ThemeManager.shared }
+
+    private var accentColor: Color {
+        themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .primary)
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Left accent bar
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(accentColor)
+                .frame(width: 3, height: 36)
+
+            // Text content
+            VStack(alignment: .leading, spacing: 2) {
+                if let title = preview.title, !title.isEmpty {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(colorScheme == .dark ? .white : .primary)
+                }
+                if let desc = preview.previewDescription, !desc.isEmpty {
+                    Text(desc)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                } else if let siteName = preview.siteName, !siteName.isEmpty {
+                    Text(siteName)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Dismiss button
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - Embedded Composer
 
 struct EmbeddedComposerView: View {
@@ -467,6 +613,10 @@ struct EmbeddedComposerView: View {
 
     private var hasMedia: Bool {
         state.totalMediaCount > 0
+    }
+
+    private var hasLinkPreview: Bool {
+        state.linkPreview != nil && state.linkPreviewBannerHeight > 0
     }
 
     private var composerTint: Color {
@@ -516,6 +666,14 @@ struct EmbeddedComposerView: View {
                         .frame(height: state.mediaSectionHeight > 0 ? 92 : 0)
                         .clipped()
                         .opacity(state.mediaSectionHeight > 0 ? 1 : 0)
+                    }
+
+                    // Link preview banner
+                    if let preview = state.linkPreview, state.linkPreviewBannerHeight > 0 {
+                        LinkPreviewBanner(preview: preview, onDismiss: { state.dismissLinkPreview() })
+                            .frame(height: state.linkPreviewBannerHeight > 0 ? 52 : 0)
+                            .clipped()
+                            .opacity(state.linkPreviewBannerHeight > 0 ? 1 : 0)
                     }
 
                     // Bottom section with text field and buttons
@@ -582,7 +740,7 @@ struct EmbeddedComposerView: View {
                     .padding(.horizontal, 16)
                 }
             }
-            .padding(.top, hasMedia ? 8 : 14)
+            .padding(.top, (hasMedia || hasLinkPreview) ? 8 : 14)
             .padding(.bottom, 10)
             .contentShape(.rect(cornerRadius: 24))
             .onTapGesture {

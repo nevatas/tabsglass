@@ -23,6 +23,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var attachedVideos: [AttachedVideo]
     @Binding var formattingEntities: [TextEntity]  // Entities from formatting
     @Binding var composerContent: FormattingTextView.ComposerContent?
+    @Binding var linkPreview: LinkPreview?
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
@@ -78,6 +79,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onComposerContentExtracted = { content in
             composerContent = content
         }
+        vc.onLinkPreviewExtracted = { preview in
+            linkPreview = preview
+        }
         // Selection mode
         vc.isSelectionMode = isSelectionMode
         vc.selectedMessageIds = selectedMessageIds
@@ -99,6 +103,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             hasher.combine(message.hasReminder)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
+            hasher.combine(message.linkPreview?.url)
         }
         return hasher.finalize()
     }
@@ -190,6 +195,7 @@ final class UnifiedChatViewController: UIViewController {
     var onSend: (() -> Void)?
     var onEntitiesExtracted: (([TextEntity]) -> Void)?
     var onComposerContentExtracted: ((FormattingTextView.ComposerContent?) -> Void)?
+    var onLinkPreviewExtracted: ((LinkPreview?) -> Void)?
 
     /// Total tab count including Search and virtual Inbox
     private var totalTabCount: Int { 2 + tabs.count }
@@ -271,6 +277,7 @@ final class UnifiedChatViewController: UIViewController {
             hasher.combine(message.hasReminder)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
+            hasher.combine(message.linkPreview?.url)
         }
         return hasher.finalize()
     }
@@ -490,9 +497,10 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onSend = { [weak self] in
             guard let self = self else { return }
-            // Extract formatting entities and composer content before clearing
+            // Extract formatting entities, composer content, and link preview before clearing
             self.onEntitiesExtracted?(self.inputContainer.extractEntities())
             self.onComposerContentExtracted?(self.inputContainer.extractComposerContent())
+            self.onLinkPreviewExtracted?(self.inputContainer.extractLinkPreview())
             self.onSend?()
             self.inputContainer.clearText()
             self.reloadCurrentTab()

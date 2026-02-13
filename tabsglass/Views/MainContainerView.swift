@@ -34,6 +34,7 @@ struct MainContainerView: View {
     @State private var attachedVideos: [AttachedVideo] = []
     @State private var formattingEntities: [TextEntity] = []
     @State private var composerContent: FormattingTextView.ComposerContent?
+    @State private var capturedLinkPreview: LinkPreview?
 
     // Selection mode
     @State private var isSelectionMode = false
@@ -98,6 +99,7 @@ struct MainContainerView: View {
             attachedVideos: $attachedVideos,
             formattingEntities: $formattingEntities,
             composerContent: $composerContent,
+            linkPreview: $capturedLinkPreview,
             onSend: { sendMessage() },
             onDeleteMessage: { message in
                 deleteMessage(message)
@@ -464,12 +466,16 @@ struct MainContainerView: View {
         // Extract composer content for inline checkboxes
         let extractedComposerContent = composerContent
 
+        // Capture link preview before clearing
+        let linkPreviewToSave = capturedLinkPreview
+
         // Clear UI immediately for responsiveness
         messageText = ""
         attachedImages = []
         attachedVideos = []
         formattingEntities = []
         composerContent = nil
+        capturedLinkPreview = nil
 
         // Save photos synchronously (they're already in memory)
         var photoFileNames: [String] = []
@@ -567,6 +573,7 @@ struct MainContainerView: View {
                 if let blocks = contentBlocks {
                     message.contentBlocks = blocks
                 }
+                message.linkPreview = linkPreviewToSave
 
                 modelContext.insert(message)
                 try? modelContext.save()
