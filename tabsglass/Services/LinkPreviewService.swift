@@ -103,9 +103,37 @@ final class LinkPreviewService {
         cache.removeAll()
     }
 
+    /// Fetch preview for an already-sent message (no debounce). Returns best available result.
+    /// Waits up to 2s for background image download after initial metadata fetch.
+    func fetchPreviewForMessage(url urlString: String) async -> LinkPreview? {
+        guard let url = URL(string: urlString) else { return nil }
+
+        // Check cache first — may already have a full preview with image
+        if let cached = cache[urlString], cached.isPlaceholder != true {
+            return cached
+        }
+
+        // Fetch metadata directly (no debounce)
+        guard let preview = await fetchMetadata(for: url) else { return nil }
+        cache[urlString] = preview
+
+        // If no image yet, wait up to 2s for background image download to finish
+        if preview.image == nil {
+            for _ in 0..<8 {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                if let enriched = cache[urlString], enriched.image != nil {
+                    return enriched
+                }
+            }
+        }
+
+        // Return best available from cache
+        return cache[urlString] ?? preview
+    }
+
     // MARK: - Private
 
-    private func fetchMetadata(for url: URL) async -> LinkPreview? {
+    func fetchMetadata(for url: URL) async -> LinkPreview? {
         // Fetch HTML description in parallel with LPMetadataProvider
         async let descriptionResult = fetchHTMLDescription(for: url)
         async let metadataResult = fetchLPMetadata(for: url)

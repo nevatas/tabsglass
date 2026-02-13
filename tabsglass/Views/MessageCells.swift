@@ -893,6 +893,17 @@ final class LinkPreviewBubbleView: UIView {
     // Large layout (full-width image)
     private let largeImageView = UIImageView()
 
+    // Loading state
+    private let loadingTitleLabel = UILabel()
+    private let shimmerView = UIView()
+    private let shimmerGradientLayer = CAGradientLayer()
+    private var dotsTimer: Timer?
+    private var dotCount = 0
+    private var isShowingLoading = false
+
+    // Tap to open URL
+    private var currentURL: String?
+
     // Layout state
     private var isLargeLayout = false
     private var activeConstraints: [NSLayoutConstraint] = []
@@ -908,6 +919,8 @@ final class LinkPreviewBubbleView: UIView {
 
     private func setupView() {
         clipsToBounds = true
+        isUserInteractionEnabled = true
+        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleTap)))
 
         // Accent bar (always present)
         accentBar.layer.cornerRadius = 1.5
@@ -947,15 +960,44 @@ final class LinkPreviewBubbleView: UIView {
         largeImageView.layer.cornerRadius = 10
         largeImageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(largeImageView)
+
+        // Loading title ("Loading...")
+        loadingTitleLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        loadingTitleLabel.textColor = .secondaryLabel
+        loadingTitleLabel.numberOfLines = 1
+        loadingTitleLabel.isHidden = true
+        loadingTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(loadingTitleLabel)
+
+        // Shimmer placeholder rectangle
+        shimmerView.backgroundColor = .quaternarySystemFill
+        shimmerView.layer.cornerRadius = 8
+        shimmerView.clipsToBounds = true
+        shimmerView.isHidden = true
+        shimmerView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(shimmerView)
+
+        // Shimmer gradient
+        shimmerGradientLayer.colors = [
+            UIColor.clear.cgColor,
+            UIColor.white.withAlphaComponent(0.3).cgColor,
+            UIColor.clear.cgColor
+        ]
+        shimmerGradientLayer.locations = [0, 0.5, 1]
+        shimmerGradientLayer.startPoint = CGPoint(x: 0, y: 0.5)
+        shimmerGradientLayer.endPoint = CGPoint(x: 1, y: 0.5)
+        shimmerView.layer.addSublayer(shimmerGradientLayer)
     }
 
     func configure(with preview: LinkPreview?, isDarkMode: Bool) {
         guard let preview = preview else {
             isHidden = true
+            currentURL = nil
+            stopLoading()
             return
         }
         isHidden = false
-        isLargeLayout = preview.isLargeImage
+        currentURL = preview.isPlaceholder == true ? nil : preview.url
 
         // Theme accent color
         let theme = ThemeManager.shared.currentTheme
@@ -964,6 +1006,30 @@ final class LinkPreviewBubbleView: UIView {
         } else {
             accentBar.backgroundColor = .systemBlue
         }
+
+        // Reset all layout
+        NSLayoutConstraint.deactivate(activeConstraints)
+        activeConstraints.removeAll()
+        thumbnailView.isHidden = true
+        thumbnailView.image = nil
+        largeImageView.isHidden = true
+        largeImageView.image = nil
+        descriptionLabel.isHidden = true
+        titleLabel.isHidden = true
+        siteNameLabel.isHidden = true
+
+        // Loading placeholder state
+        if preview.isPlaceholder == true {
+            stopLoading()
+            configureLoadingLayout(preview: preview)
+            NSLayoutConstraint.activate(activeConstraints)
+            startLoading()
+            return
+        }
+
+        // Normal state — hide loading views
+        stopLoading()
+        isLargeLayout = preview.isLargeImage
 
         titleLabel.textColor = .label
 
@@ -975,15 +1041,6 @@ final class LinkPreviewBubbleView: UIView {
         let hasTitle = preview.title != nil && !preview.title!.isEmpty
         titleLabel.isHidden = !hasTitle
 
-        // Reset all layout
-        NSLayoutConstraint.deactivate(activeConstraints)
-        activeConstraints.removeAll()
-        thumbnailView.isHidden = true
-        thumbnailView.image = nil
-        largeImageView.isHidden = true
-        largeImageView.image = nil
-        descriptionLabel.isHidden = true
-
         if isLargeLayout {
             configureLargeLayout(preview: preview, hasSiteName: hasSiteName, hasTitle: hasTitle)
         } else {
@@ -991,6 +1048,90 @@ final class LinkPreviewBubbleView: UIView {
         }
 
         NSLayoutConstraint.activate(activeConstraints)
+    }
+
+    @objc private func handleTap() {
+        guard let urlString = currentURL,
+              let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if isShowingLoading {
+            shimmerGradientLayer.frame = shimmerView.bounds
+        }
+    }
+
+    // MARK: - Loading Layout
+
+    private func configureLoadingLayout(preview: LinkPreview) {
+        isShowingLoading = true
+        loadingTitleLabel.isHidden = false
+        shimmerView.isHidden = false
+        siteNameLabel.isHidden = false
+        siteNameLabel.text = preview.siteName
+
+        // Accent bar
+        activeConstraints.append(contentsOf: [
+            accentBar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            accentBar.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            accentBar.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            accentBar.widthAnchor.constraint(equalToConstant: 3),
+        ])
+
+        let contentLeading = accentBar.trailingAnchor
+
+        // Shimmer rectangle on right (same position as compact thumbnail)
+        activeConstraints.append(contentsOf: [
+            shimmerView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            shimmerView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            shimmerView.widthAnchor.constraint(equalToConstant: 50),
+            shimmerView.heightAnchor.constraint(equalToConstant: 50),
+        ])
+
+        // Site name
+        activeConstraints.append(contentsOf: [
+            siteNameLabel.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            siteNameLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+            siteNameLabel.trailingAnchor.constraint(equalTo: shimmerView.leadingAnchor, constant: -8),
+        ])
+
+        // "Loading..." text
+        activeConstraints.append(contentsOf: [
+            loadingTitleLabel.topAnchor.constraint(equalTo: siteNameLabel.bottomAnchor, constant: 2),
+            loadingTitleLabel.leadingAnchor.constraint(equalTo: contentLeading, constant: 8),
+            loadingTitleLabel.trailingAnchor.constraint(equalTo: shimmerView.leadingAnchor, constant: -8),
+        ])
+    }
+
+    private func startLoading() {
+        // Animated dots
+        dotCount = 3
+        loadingTitleLabel.text = "Loading..."
+        dotsTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+            guard let self = self, self.isShowingLoading else { return }
+            self.dotCount = (self.dotCount % 3) + 1
+            let dots = String(repeating: ".", count: self.dotCount)
+            self.loadingTitleLabel.text = "Loading" + dots
+        }
+
+        // Shimmer animation
+        let animation = CABasicAnimation(keyPath: "locations")
+        animation.fromValue = [-1.0, -0.5, 0.0]
+        animation.toValue = [1.0, 1.5, 2.0]
+        animation.duration = 1.5
+        animation.repeatCount = .infinity
+        shimmerGradientLayer.add(animation, forKey: "shimmer")
+    }
+
+    private func stopLoading() {
+        isShowingLoading = false
+        dotsTimer?.invalidate()
+        dotsTimer = nil
+        shimmerGradientLayer.removeAllAnimations()
+        loadingTitleLabel.isHidden = true
+        shimmerView.isHidden = true
     }
 
     // MARK: - Large Layout (full-width image below title)
@@ -1157,6 +1298,9 @@ final class LinkPreviewBubbleView: UIView {
     // MARK: - Height Calculation
 
     static func calculateHeight(for preview: LinkPreview, maxWidth: CGFloat) -> CGFloat {
+        if preview.isPlaceholder == true {
+            return 58  // Fixed height matching compact with thumbnail
+        }
         if preview.isLargeImage {
             return calculateLargeHeight(for: preview, maxWidth: maxWidth)
         } else {

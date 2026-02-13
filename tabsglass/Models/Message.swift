@@ -286,6 +286,7 @@ struct LinkPreview: Codable, Hashable {
     let image: String?               // Local filename for preview image
     let siteName: String?
     let imageAspectRatio: Double?    // width / height — determines large vs compact layout
+    var isPlaceholder: Bool?         // true while real preview is loading (nil for existing data)
 
     /// Large layout: full-width image below title (landscape og:image, width >= 300)
     var isLargeImage: Bool {
@@ -294,18 +295,19 @@ struct LinkPreview: Codable, Hashable {
         return ratio >= 1.2
     }
 
-    init(url: String, title: String? = nil, previewDescription: String? = nil, image: String? = nil, siteName: String? = nil, imageAspectRatio: Double? = nil) {
+    init(url: String, title: String? = nil, previewDescription: String? = nil, image: String? = nil, siteName: String? = nil, imageAspectRatio: Double? = nil, isPlaceholder: Bool? = nil) {
         self.url = url
         self.title = title
         self.previewDescription = previewDescription
         self.image = image
         self.siteName = siteName
         self.imageAspectRatio = imageAspectRatio
+        self.isPlaceholder = isPlaceholder
     }
 
     // Custom coding keys to map "description" from JSON to "previewDescription"
     enum CodingKeys: String, CodingKey {
-        case url, title, image, siteName, imageAspectRatio
+        case url, title, image, siteName, imageAspectRatio, isPlaceholder
         case previewDescription = "description"
     }
 }

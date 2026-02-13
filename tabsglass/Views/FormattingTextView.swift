@@ -284,6 +284,18 @@ final class FormattingTextView: UITextView {
         builder.insertSibling(formattingMenu, afterMenu: .standardEdit)
     }
 
+    // MARK: - Paste (strip rich text to avoid paragraph style artifacts)
+
+    override func paste(_ sender: Any?) {
+        let pb = UIPasteboard.general
+        // Prefer plain text to avoid rich paragraph styles inserting extra line breaks
+        if let text = pb.string, !text.isEmpty {
+            insertText(text)
+        } else {
+            super.paste(sender)
+        }
+    }
+
     // MARK: - Edit Menu Customization
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {

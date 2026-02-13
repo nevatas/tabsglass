@@ -434,12 +434,18 @@ final class SwiftUIComposerContainer: UIView {
 
     /// Extract current link preview (called before send)
     /// Prefers enriched version from cache (may include image downloaded after banner appeared)
+    /// Returns placeholder with isPlaceholder=true if still loading
     func extractLinkPreview() -> LinkPreview? {
         if let url = composerState.lastDetectedURL,
            let cached = LinkPreviewService.shared.cachedPreview(for: url) {
             return cached
         }
-        // Don't return loading placeholder (has no title/description)
+        // Still loading — return placeholder so message bubble shows loading state
+        if composerState.isLoadingLinkPreview,
+           let url = composerState.lastDetectedURL,
+           let siteName = composerState.linkPreview?.siteName {
+            return LinkPreview(url: url, siteName: siteName, isPlaceholder: true)
+        }
         let preview = composerState.linkPreview
         guard preview?.title != nil || preview?.previewDescription != nil else {
             return nil

@@ -104,6 +104,8 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
             hasher.combine(message.linkPreview?.url)
+            hasher.combine(message.linkPreview?.title)
+            hasher.combine(message.linkPreview?.isPlaceholder)
         }
         return hasher.finalize()
     }
@@ -278,6 +280,8 @@ final class UnifiedChatViewController: UIViewController {
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
             hasher.combine(message.linkPreview?.url)
+            hasher.combine(message.linkPreview?.title)
+            hasher.combine(message.linkPreview?.isPlaceholder)
         }
         return hasher.finalize()
     }

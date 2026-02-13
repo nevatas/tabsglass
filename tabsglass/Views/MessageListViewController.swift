@@ -284,6 +284,9 @@ final class MessageListViewController: UIViewController {
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
             hasher.combine(message.createdAt.timeIntervalSinceReferenceDate.bitPattern)
+            hasher.combine(message.linkPreview?.url)
+            hasher.combine(message.linkPreview?.title)
+            hasher.combine(message.linkPreview?.isPlaceholder)
 
             if let items = message.todoItems {
                 hasher.combine(items.count)
@@ -391,7 +394,9 @@ final class MessageListViewController: UIViewController {
                 let oldMsg = sortedMessages[index]
                 // Check if content that affects height has changed
                 if oldMsg.content != newMsg.content ||
-                   oldMsg.todoItems?.count != newMsg.todoItems?.count {
+                   oldMsg.todoItems?.count != newMsg.todoItems?.count ||
+                   oldMsg.linkPreview?.isPlaceholder != newMsg.linkPreview?.isPlaceholder ||
+                   oldMsg.linkPreview?.title != newMsg.linkPreview?.title {
                     heightCache.removeValue(forKey: newMsg.id)
                 }
             }

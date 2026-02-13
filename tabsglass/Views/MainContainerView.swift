@@ -587,6 +587,28 @@ struct MainContainerView: View {
 
                 modelContext.insert(message)
                 try? modelContext.save()
+
+                // Background fetch real preview if placeholder was sent
+                if linkPreviewToSave?.isPlaceholder == true {
+                    fetchLinkPreviewForMessage(message)
+                }
+            }
+        }
+    }
+
+    private func fetchLinkPreviewForMessage(_ message: Message) {
+        guard let urlString = message.linkPreview?.url else { return }
+        Task {
+            let preview = await LinkPreviewService.shared.fetchPreviewForMessage(url: urlString)
+            await MainActor.run {
+                if let preview = preview {
+                    message.linkPreview = preview
+                } else {
+                    // Fetch failed — remove stale placeholder
+                    message.linkPreview = nil
+                }
+                try? modelContext.save()
+                reloadTrigger += 1
             }
         }
     }
