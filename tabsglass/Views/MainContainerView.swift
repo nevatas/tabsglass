@@ -135,6 +135,9 @@ struct MainContainerView: View {
                     selectedMessageIds.insert(messageId)
                 } else {
                     selectedMessageIds.remove(messageId)
+                    if selectedMessageIds.isEmpty {
+                        exitSelectionMode()
+                    }
                 }
             },
             reloadTrigger: reloadTrigger

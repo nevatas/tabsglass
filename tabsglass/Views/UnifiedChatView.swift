@@ -124,10 +124,11 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onEnterSelectionMode = onEnterSelectionMode
         uiViewController.onToggleMessageSelection = onToggleMessageSelection
 
-        // Selection mode
+        // Selection mode — update selectedMessageIds BEFORE isSelectionMode
+        // because isSelectionMode didSet triggers updateSelectionModeUI() which reads selectedMessageIds
         if uiViewController.isSelectionMode != isSelectionMode {
-            uiViewController.isSelectionMode = isSelectionMode
             uiViewController.selectedMessageIds = selectedMessageIds
+            uiViewController.isSelectionMode = isSelectionMode
         } else if uiViewController.selectedMessageIds != selectedMessageIds {
             uiViewController.updateSelectedMessageIds(selectedMessageIds)
         }
