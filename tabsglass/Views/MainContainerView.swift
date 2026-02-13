@@ -380,6 +380,24 @@ struct MainContainerView: View {
                             message.todoItems = nil
                             message.todoTitle = nil
                         }
+                    } else if newText.contains(ContentBlock.checkboxPrefix) {
+                        // Plain message got checkboxes added during edit
+                        let parsed = ContentBlock.parse(composerText: newText, entities: newEntities)
+                        if parsed.hasTodos {
+                            message.content = parsed.plainText
+                            message.contentBlocks = parsed.blocks
+                            message.todoItems = parsed.todoItems
+                            var allEntities: [TextEntity] = []
+                            for block in parsed.blocks where block.type == "text" {
+                                if let blockEntities = block.entities {
+                                    allEntities.append(contentsOf: blockEntities)
+                                }
+                            }
+                            message.entities = allEntities.isEmpty ? nil : allEntities
+                        } else {
+                            message.content = newText
+                            message.entities = newEntities
+                        }
                     } else {
                         message.content = newText
                         message.entities = newEntities

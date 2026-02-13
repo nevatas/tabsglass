@@ -175,6 +175,17 @@ struct EditMessageSheet: View {
                     Image(systemName: "plus")
                         .font(.system(size: 20, weight: .medium))
                         .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
+                        .padding(.trailing, 12)
+                }
+
+                Button {
+                    if let tv = holder.textView {
+                        tv.insertCheckbox()
+                    }
+                } label: {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
                 }
 
                 Spacer()
