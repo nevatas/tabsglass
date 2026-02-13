@@ -41,7 +41,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .light: return "sun.max.fill"
         case .dark: return "moon.fill"
         case .pink: return "heart.fill"
-        case .beige: return "leaf.fill"
+        case .beige: return "cup.and.saucer.fill"
         case .green: return "leaf.fill"
         case .blue: return "drop.fill"
         }
