@@ -267,8 +267,11 @@ extension GalleryViewController: UIScrollViewDelegate {
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         guard scrollView === dismissScrollView, !isZoomed else { return }
-        // Snap back to center if not dismissed
-        if abs(scrollView.contentOffset.y - centerOffset) < 150 {
+        let delta = scrollView.contentOffset.y - centerOffset
+        if abs(delta) > 150 {
+            let direction: CGFloat = delta > 0 ? 1 : -1
+            animateDismiss(direction: direction)
+        } else {
             snapToCenter()
         }
     }
@@ -552,7 +555,7 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
 
     // Controls
     private let controlsContainer = UIView()
-    private let playPauseButton = UIButton(type: .system)
+    private var playPauseHost: UIHostingController<GalleryPlayPauseButtonView>?
     private let scrubber = UISlider()
     private let currentTimeLabel = UILabel()
     private let remainingTimeLabel = UILabel()
@@ -652,26 +655,23 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
             controlsContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
 
-        // Center play/pause button
-        let config = UIImage.SymbolConfiguration(pointSize: 54, weight: .medium)
-        playPauseButton.setImage(UIImage(systemName: "pause.circle.fill", withConfiguration: config), for: .normal)
-        playPauseButton.tintColor = .white
-        playPauseButton.translatesAutoresizingMaskIntoConstraints = false
-        playPauseButton.addTarget(self, action: #selector(playPauseButtonTapped), for: .touchUpInside)
-
-        // Add shadow to button
-        playPauseButton.layer.shadowColor = UIColor.black.cgColor
-        playPauseButton.layer.shadowOffset = .zero
-        playPauseButton.layer.shadowRadius = 8
-        playPauseButton.layer.shadowOpacity = 0.5
-
-        controlsContainer.addSubview(playPauseButton)
+        // Center play/pause button (Liquid Glass)
+        let playPauseView = GalleryPlayPauseButtonView(isPlaying: false) { [weak self] in
+            self?.playPauseButtonTapped()
+        }
+        let hosting = UIHostingController(rootView: playPauseView)
+        hosting.view.backgroundColor = .clear
+        hosting.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(hosting)
+        controlsContainer.addSubview(hosting.view)
+        hosting.didMove(toParent: self)
+        playPauseHost = hosting
 
         NSLayoutConstraint.activate([
-            playPauseButton.centerXAnchor.constraint(equalTo: controlsContainer.centerXAnchor),
-            playPauseButton.centerYAnchor.constraint(equalTo: controlsContainer.centerYAnchor),
-            playPauseButton.widthAnchor.constraint(equalToConstant: 70),
-            playPauseButton.heightAnchor.constraint(equalToConstant: 70)
+            hosting.view.centerXAnchor.constraint(equalTo: controlsContainer.centerXAnchor),
+            hosting.view.centerYAnchor.constraint(equalTo: controlsContainer.centerYAnchor),
+            hosting.view.widthAnchor.constraint(equalToConstant: 64),
+            hosting.view.heightAnchor.constraint(equalToConstant: 64)
         ])
 
         // Scrubber container with Liquid Glass background
@@ -702,6 +702,7 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
 
         remainingTimeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
         remainingTimeLabel.textColor = .label
+        remainingTimeLabel.textAlignment = .right
         remainingTimeLabel.text = "-0:00"
         remainingTimeLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -734,7 +735,7 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
 
             remainingTimeLabel.trailingAnchor.constraint(equalTo: scrubberContainer.trailingAnchor, constant: -16),
             remainingTimeLabel.centerYAnchor.constraint(equalTo: scrubberContainer.centerYAnchor),
-            remainingTimeLabel.widthAnchor.constraint(equalToConstant: 50),
+            remainingTimeLabel.widthAnchor.constraint(equalToConstant: 45),
 
             scrubber.leadingAnchor.constraint(equalTo: currentTimeLabel.trailingAnchor, constant: 8),
             scrubber.trailingAnchor.constraint(equalTo: remainingTimeLabel.leadingAnchor, constant: -8),
@@ -766,7 +767,7 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
     }
 
     private func setupTimeObserver() {
-        let interval = CMTime(seconds: 0.1, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        let interval = CMTime(seconds: 1.0 / 30.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self, !self.isSeeking else { return }
 
@@ -774,7 +775,8 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
             self.updateTimeLabels(currentTime: currentTime)
 
             if self.duration > 0 {
-                self.scrubber.value = Float(currentTime / self.duration)
+                let newValue = Float(currentTime / self.duration)
+                self.scrubber.setValue(newValue, animated: true)
             }
         }
     }
@@ -850,6 +852,14 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
             return
         }
 
+        // Ignore taps on play/pause button area
+        if let playPauseView = playPauseHost?.view {
+            let playPauseFrame = playPauseView.convert(playPauseView.bounds, to: view)
+            if playPauseFrame.contains(location) {
+                return
+            }
+        }
+
         toggleControls()
         onSingleTap?()
     }
@@ -912,9 +922,9 @@ final class GalleryVideoPageViewController: UIViewController, GalleryPageProtoco
     }
 
     private func updatePlayPauseButton() {
-        let config = UIImage.SymbolConfiguration(pointSize: 54, weight: .medium)
-        let imageName = isPlaying ? "pause.circle.fill" : "play.circle.fill"
-        playPauseButton.setImage(UIImage(systemName: imageName, withConfiguration: config), for: .normal)
+        playPauseHost?.rootView = GalleryPlayPauseButtonView(isPlaying: isPlaying) { [weak self] in
+            self?.playPauseButtonTapped()
+        }
     }
 }
 
@@ -1045,6 +1055,21 @@ struct GalleryCloseButtonView: View {
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.primary)
             .frame(width: 44, height: 44)
+            .contentShape(Circle())
+            .onTapGesture { onTap() }
+            .glassEffect(.regular.interactive(), in: .circle)
+    }
+}
+
+struct GalleryPlayPauseButtonView: View {
+    let isPlaying: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+            .font(.system(size: 26, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 64, height: 64)
             .contentShape(Circle())
             .onTapGesture { onTap() }
             .glassEffect(.regular.interactive(), in: .circle)
