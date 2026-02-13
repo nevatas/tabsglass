@@ -299,4 +299,57 @@ final class AppSettings {
             defaults.set(newValue.rawValue, forKey: Keys.theme)
         }
     }
+
+    // MARK: - Legacy User (Grandfathering)
+
+    /// Records the first install date in Keychain (survives app reinstalls).
+    /// Call once on every app launch — only writes if no date exists yet.
+    func stampFirstInstallDateIfNeeded() {
+        guard KeychainHelper.getDate(for: "firstInstallDate") == nil else { return }
+        KeychainHelper.setDate(Date(), for: "firstInstallDate")
+    }
+
+    /// The date the app was first installed, or nil if never stamped.
+    var firstInstallDate: Date? {
+        KeychainHelper.getDate(for: "firstInstallDate")
+    }
+}
+
+// MARK: - Keychain Helper
+
+/// Minimal Keychain wrapper for storing dates (survives app reinstalls).
+enum KeychainHelper {
+    private static let service = "company.thecool.taby"
+
+    static func setDate(_ date: Date, for key: String) {
+        let data = String(date.timeIntervalSince1970).data(using: .utf8)!
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+        SecItemDelete(query as CFDictionary)
+        SecItemAdd(query as CFDictionary, nil)
+    }
+
+    static func getDate(for key: String) -> Date? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let string = String(data: data, encoding: .utf8),
+              let interval = Double(string) else {
+            return nil
+        }
+        return Date(timeIntervalSince1970: interval)
+    }
 }

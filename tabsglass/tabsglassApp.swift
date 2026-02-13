@@ -19,6 +19,9 @@ struct tabsglassApp: App {
         _ = ThemeManager.shared
         _ = ImageCache.shared
 
+        // Stamp first install date in Keychain for future grandfathering (survives reinstalls)
+        AppSettings.shared.stampFirstInstallDateIfNeeded()
+
         // Keyboard warmup is deferred until after paywall dismissal (see ContentView)
 
         // Warm up Liquid Glass effects to avoid delay on first render

@@ -318,6 +318,16 @@ Located in `share/` directory:
 
 Shares App Group with main app for SwiftData container, photo/video storage, pending items sync.
 
+## Legacy User Grandfathering
+
+A `firstInstallDate` is stamped in **Keychain** (survives reinstalls) on every app launch via `AppSettings.shared.stampFirstInstallDateIfNeeded()` in `tabsglassApp.init()`. This was added before any paywall exists.
+
+When implementing a paywall:
+- Check `AppSettings.shared.firstInstallDate` against the paywall release date
+- If `firstInstallDate < paywallReleaseDate` → grant lifetime full access (legacy user)
+- The Keychain key is `"firstInstallDate"`, service is `"company.thecool.taby"`
+- Helper: `KeychainHelper` in `AppSettings.swift`
+
 ## Performance
 
 ### Warmup (tabsglassApp.swift)
