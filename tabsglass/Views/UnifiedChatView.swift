@@ -440,6 +440,8 @@ final class UnifiedChatViewController: UIViewController {
 
             // Complete navigation if swiped enough or with enough velocity
             if translation > 50 || velocity > 300 {
+                // Dismiss keyboard before navigation to avoid layout interference
+                view.endEditing(true)
                 tabSwipeFeedbackGenerator.impactOccurred(intensity: 0.8)
                 tabSwipeFeedbackGenerator.prepare()
                 onAnimatedIndexChange?(0)
@@ -1033,11 +1035,6 @@ final class UnifiedChatViewController: UIViewController {
                 }
             }
 
-            // Dismiss keyboard when crossing Search boundary
-            if (previousIndex == 0) != (selectedIndex == 0) {
-                view.endEditing(true)
-            }
-
             // For programmatic changes, animate input positions in sync with page transition
             if shouldAnimate && (previousIndex <= 1 || selectedIndex <= 1) {
                 // Animate inputs when transitioning to/from Search or Inbox
@@ -1053,8 +1050,13 @@ final class UnifiedChatViewController: UIViewController {
                 // to prevent user from interrupting the animation and causing
                 // desync between tab bar selection and displayed content
                 pageViewController.view.isUserInteractionEnabled = false
+                let crossedSearch = (previousIndex == 0) != (selectedIndex == 0)
                 pageViewController.setViewControllers([vc], direction: direction, animated: true) { [weak self] finished in
                     guard let self = self else { return }
+                    // Dismiss keyboard after transition settles when crossing Search boundary
+                    if crossedSearch {
+                        self.view.endEditing(true)
+                    }
                     if finished {
                         // Workaround: UIPageViewController sometimes doesn't fully complete
                         // the scroll animation, leaving adjacent pages partially visible.
