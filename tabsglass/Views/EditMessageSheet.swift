@@ -61,74 +61,20 @@ struct EditMessageSheet: View {
     @State private var isLoadingLinkPreview = false
     @State private var lastDetectedURL: String?
     @State private var linkPreviewDismissed = false
+    @State private var showDiscardAlert = false
     private var themeManager: ThemeManager { ThemeManager.shared }
     @Environment(\.colorScheme) private var colorScheme
 
     private var totalMediaCount: Int {
-        photos.count + videoThumbnails.count
+        photoFileNames.count + videoFileNames.count
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Button(L10n.Tab.cancel) {
-                    onCancel()
-                }
-                .foregroundColor(.primary)
+        NavigationStack {
+            VStack(spacing: 0) {
+                Spacer().frame(height: 12)
 
-                Spacer()
-
-                Button {
-                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            // Calculate leading whitespace offset for entity adjustment
-                            let leadingWhitespaceUTF16 = text
-                                .prefix(while: { $0.isWhitespace || $0.isNewline })
-                                .utf16
-                                .count
-                            let trimmedUTF16Count = trimmed.utf16.count
-
-                            // Get entities and adjust offsets for trimmed text
-                            let rawEntities = holder.textView?.extractEntities() ?? []
-                            var adjustedEntities: [TextEntity] = []
-
-                            for entity in rawEntities {
-                                let newOffset = entity.offset - leadingWhitespaceUTF16
-                                // Only include entities that are within the trimmed text bounds
-                                if newOffset >= 0 && newOffset + entity.length <= trimmedUTF16Count {
-                                    adjustedEntities.append(TextEntity(
-                                        type: entity.type,
-                                        offset: newOffset,
-                                        length: entity.length,
-                                        url: entity.url
-                                    ))
-                                }
-                            }
-
-                        // Also detect URLs
-                        adjustedEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))
-                        let previewToSave = extractLinkPreview()
-                        onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, previewToSave)
-                    } else if totalMediaCount > 0 {
-                        // Allow saving with only media (no text)
-                        onSave("", nil, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, nil)
-                    }
-                } label: {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 32, height: 32)
-                        .background(canSave ? Color.accentColor : Color.gray.opacity(0.4))
-                        .clipShape(Circle())
-                }
-                .disabled(!canSave)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
-
-            // Attached media (photos and videos)
+                // Attached media (photos and videos)
             if totalMediaCount > 0 {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -228,8 +174,10 @@ struct EditMessageSheet: View {
             if let preview = originalLinkPreview {
                 lastDetectedURL = preview.url
             }
-            loadPhotos()
-            loadVideoThumbnails()
+            Task {
+                loadPhotos()
+                loadVideoThumbnails()
+            }
         }
         .onChange(of: text) { _, newText in
             detectLinkPreview(in: newText)
@@ -252,6 +200,33 @@ struct EditMessageSheet: View {
             maxSelectionCount: max(1, 10 - totalMediaCount),
             matching: .images
         )
+        .navigationTitle(L10n.Edit.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(L10n.Tab.cancel, systemImage: "xmark") {
+                    if hasChanges {
+                        showDiscardAlert = true
+                    } else {
+                        onCancel()
+                    }
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(L10n.Tab.save, systemImage: "checkmark") {
+                    performSave()
+                }
+                .disabled(!canSave)
+            }
+        }
+        } // NavigationStack
+        .interactiveDismissDisabled(hasChanges)
+        .alert(L10n.Edit.discardTitle, isPresented: $showDiscardAlert) {
+            Button(L10n.Edit.discard, role: .destructive) {
+                onCancel()
+            }
+            Button(L10n.Edit.keepEditing, role: .cancel) { }
+        }
     }
 
     // MARK: - Link Preview
@@ -310,6 +285,44 @@ struct EditMessageSheet: View {
         return !trimmed.isEmpty || totalMediaCount > 0
     }
 
+    private var hasChanges: Bool {
+        text != originalText ||
+        photoFileNames != originalPhotoFileNames ||
+        videoFileNames != originalVideoFileNames
+    }
+
+    private func performSave() {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            let leadingWhitespaceUTF16 = text
+                .prefix(while: { $0.isWhitespace || $0.isNewline })
+                .utf16
+                .count
+            let trimmedUTF16Count = trimmed.utf16.count
+
+            let rawEntities = holder.textView?.extractEntities() ?? []
+            var adjustedEntities: [TextEntity] = []
+
+            for entity in rawEntities {
+                let newOffset = entity.offset - leadingWhitespaceUTF16
+                if newOffset >= 0 && newOffset + entity.length <= trimmedUTF16Count {
+                    adjustedEntities.append(TextEntity(
+                        type: entity.type,
+                        offset: newOffset,
+                        length: entity.length,
+                        url: entity.url
+                    ))
+                }
+            }
+
+            adjustedEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))
+            let previewToSave = extractLinkPreview()
+            onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, previewToSave)
+        } else if totalMediaCount > 0 {
+            onSave("", nil, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, nil)
+        }
+    }
+
     private func loadPhotos() {
         photos = photoFileNames.compactMap { fileName in
             let url = Message.photosDirectory.appendingPathComponent(fileName)
@@ -327,9 +340,11 @@ struct EditMessageSheet: View {
     }
 
     private func removePhoto(at index: Int) {
-        guard index < photoFileNames.count && index < photos.count else { return }
+        guard index < photoFileNames.count else { return }
         photoFileNames.remove(at: index)
-        photos.remove(at: index)
+        if index < photos.count {
+            photos.remove(at: index)
+        }
     }
 
     private func removeVideo(at index: Int) {

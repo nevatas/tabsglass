@@ -62,8 +62,9 @@ private extension tabsglassApp {
 
         let context = container.mainContext
 
+        // Build all messages for batch insert
+        var insertedMessages: [(message: Message, itemId: UUID)] = []
         for item in pendingItems {
-            // Detect URLs in text
             let entities = TextEntity.detectURLs(in: item.text)
 
             let message = Message(
@@ -78,14 +79,45 @@ private extension tabsglassApp {
                 videoThumbnailFileNames: item.videoThumbnailFileNames
             )
             message.createdAt = item.createdAt
-
             context.insert(message)
-            do {
-                try context.save()
-                PendingShareStorage.remove(id: item.id)
-            } catch {
-                // Keep item in queue for retry on next foreground launch.
+            insertedMessages.append((message, item.id))
+        }
+
+        // Try single batch save
+        do {
+            try context.save()
+            // All succeeded — remove all pending items
+            for (_, itemId) in insertedMessages {
+                PendingShareStorage.remove(id: itemId)
+            }
+        } catch {
+            // Batch failed — roll back and retry one-by-one
+            for (message, _) in insertedMessages {
                 context.delete(message)
+            }
+
+            for item in pendingItems {
+                let entities = TextEntity.detectURLs(in: item.text)
+                let message = Message(
+                    content: item.text,
+                    tabId: item.tabId,
+                    entities: entities.isEmpty ? nil : entities,
+                    photoFileNames: item.photoFileNames,
+                    photoAspectRatios: item.photoAspectRatios,
+                    videoFileNames: item.videoFileNames,
+                    videoAspectRatios: item.videoAspectRatios,
+                    videoDurations: item.videoDurations,
+                    videoThumbnailFileNames: item.videoThumbnailFileNames
+                )
+                message.createdAt = item.createdAt
+                context.insert(message)
+                do {
+                    try context.save()
+                    PendingShareStorage.remove(id: item.id)
+                } catch {
+                    // Keep item in queue for retry on next foreground launch.
+                    context.delete(message)
+                }
             }
         }
     }

@@ -1211,7 +1211,8 @@ final class LinkPreviewBubbleView: UIView {
 
         // Load image
         if let imageFileName = preview.image, !imageFileName.isEmpty {
-            let targetWidth = UIScreen.main.bounds.width - 32 - 28 - 3 - 8
+            let screenWidth = window?.windowScene?.screen.bounds.width ?? 393
+            let targetWidth = screenWidth - 32 - 28 - 3 - 8
             let targetHeight = targetWidth / aspectRatio
             let thumbSize = CGSize(width: targetWidth * 2, height: targetHeight * 2)
             ImageCache.shared.loadThumbnail(for: imageFileName, targetSize: thumbSize) { [weak self] image in

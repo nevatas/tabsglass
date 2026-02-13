@@ -764,7 +764,7 @@ struct EmbeddedComposerView: View {
                             Button {
                                 if let tv = state.formattingTextView {
                                     if !tv.isFirstResponder {
-                                        tv.becomeFirstResponder()
+                                        _ = tv.becomeFirstResponder()
                                     }
                                     tv.insertCheckbox()
                                 }

@@ -198,6 +198,14 @@ enum L10n {
         }
     }
 
+    // MARK: - Edit
+    enum Edit {
+        static var title: String { NSLocalizedString("edit.title", comment: "Edit sheet title") }
+        static var discardTitle: String { NSLocalizedString("edit.discard_title", comment: "Discard changes alert title") }
+        static var discard: String { NSLocalizedString("edit.discard", comment: "Discard button") }
+        static var keepEditing: String { NSLocalizedString("edit.keep_editing", comment: "Keep editing button") }
+    }
+
     // MARK: - Data (Export/Import)
     enum Data {
         static var title: String { NSLocalizedString("data.title", comment: "Data section title") }

@@ -151,6 +151,13 @@
 "message.show_more" = "Показать ещё";
 "message.show_less" = "Свернуть";
 
+// MARK: - Edit
+
+"edit.title" = "Редактирование";
+"edit.discard_title" = "Отменить изменения?";
+"edit.discard" = "Отменить";
+"edit.keep_editing" = "Продолжить";
+
 // MARK: - Selection
 
 "selection.select" = "Выбрать";

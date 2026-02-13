@@ -239,6 +239,7 @@ final class UnifiedChatViewController: UIViewController {
     let inputContainer = SwiftUIComposerContainer()
     private var searchInputHostingController: UIHostingController<SearchInputWrapper>?
     private var searchText: String = ""
+    private var searchDebounceWorkItem: DispatchWorkItem?
     private var pageScrollView: UIScrollView?
     private var isUserSwiping: Bool = false
     private var pendingAdjacentPreloadAfterSwipe = false
@@ -628,11 +629,21 @@ final class UnifiedChatViewController: UIViewController {
             self.updateSearchKeyboardConstraint(followKeyboard: isFocused)
         }
 
-        // Track text changes to update search results
+        // Track text changes to update search results (debounced for non-empty text)
         searchInputState.onTextChange = { [weak self] newText in
             guard let self = self else { return }
             self.searchText = newText
-            self.updateSearchResults()
+            self.searchDebounceWorkItem?.cancel()
+            if newText.isEmpty {
+                // Empty text: update immediately (show tips/tabs without delay)
+                self.updateSearchResults()
+            } else {
+                let workItem = DispatchWorkItem { [weak self] in
+                    self?.updateSearchResults()
+                }
+                self.searchDebounceWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
+            }
         }
 
         // Search input starts with interaction disabled - updateInputVisibility will enable when on Search

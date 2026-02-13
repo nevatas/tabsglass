@@ -494,18 +494,17 @@ struct MainContainerView: View {
         composerContent = nil
         capturedLinkPreview = nil
 
-        // Save photos synchronously (they're already in memory)
-        var photoFileNames: [String] = []
-        var photoAspectRatios: [Double] = []
-        for image in imagesToSave {
-            if let result = Message.savePhoto(image) {
-                photoFileNames.append(result.fileName)
-                photoAspectRatios.append(result.aspectRatio)
-            }
-        }
-
-        // Save videos asynchronously (file I/O)
+        // Save photos and videos asynchronously (JPEG encoding + disk I/O off main thread)
         Task {
+            var photoFileNames: [String] = []
+            var photoAspectRatios: [Double] = []
+            for image in imagesToSave {
+                if let result = Message.savePhoto(image) {
+                    photoFileNames.append(result.fileName)
+                    photoAspectRatios.append(result.aspectRatio)
+                }
+            }
+
             var videoFileNames: [String] = []
             var videoAspectRatios: [Double] = []
             var videoDurations: [Double] = []

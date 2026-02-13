@@ -251,13 +251,16 @@ struct TextEntity: Codable, Hashable {
         self.url = url
     }
 
+    /// Shared link detector (NSDataDetector is immutable after creation, thread-safe for matching)
+    private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
     /// Detect URLs in text and return entities
     static func detectURLs(in text: String) -> [TextEntity] {
         guard !text.isEmpty else { return [] }
 
         var entities: [TextEntity] = []
 
-        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        let detector = linkDetector
         let nsString = text as NSString
         let range = NSRange(location: 0, length: nsString.length)
 
@@ -433,27 +436,14 @@ final class Message: Identifiable {
         }
     }
 
-    /// Check if message has no content (no text, no valid media, no todo items)
+    /// Check if message has no content (no text, no media, no todo items)
     var isEmpty: Bool {
         let hasText = !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if hasText { return false }
-
-        // Check if has todo items
         if isTodoList { return false }
-
-        // Check if any photo files exist (without loading them)
-        let hasValidPhotos = photoFileNames.contains { fileName in
-            let url = Message.photosDirectory.appendingPathComponent(fileName)
-            return FileManager.default.fileExists(atPath: url.path)
-        }
-        if hasValidPhotos { return false }
-
-        // Check if any video files exist (without loading them)
-        let hasValidVideos = videoFileNames.contains { fileName in
-            let url = Message.videosDirectory.appendingPathComponent(fileName)
-            return FileManager.default.fileExists(atPath: url.path)
-        }
-        return !hasValidVideos
+        if !photoFileNames.isEmpty { return false }
+        if !videoFileNames.isEmpty { return false }
+        return true
     }
 
     /// Directory for storing message photos (uses shared container for extension support)

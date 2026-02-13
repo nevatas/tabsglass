@@ -188,13 +188,13 @@ struct SettingsView: View {
         showExportProgress = true
         exportProgress = ExportImportProgress(phase: .preparing, current: 0, total: 1)
 
-        // Fetch data lazily only when export is requested (not on view creation)
-        let tabsDescriptor = FetchDescriptor<Tab>(sortBy: [SortDescriptor(\.position)])
-        let messagesDescriptor = FetchDescriptor<Message>()
-        let tabs = (try? modelContext.fetch(tabsDescriptor)) ?? []
-        let messages = (try? modelContext.fetch(messagesDescriptor)) ?? []
-
         Task {
+            // Fetch inside Task so SwiftUI renders progress overlay before the fetch blocks
+            let tabsDescriptor = FetchDescriptor<Tab>(sortBy: [SortDescriptor(\.position)])
+            let messagesDescriptor = FetchDescriptor<Message>()
+            let tabs = (try? modelContext.fetch(tabsDescriptor)) ?? []
+            let messages = (try? modelContext.fetch(messagesDescriptor)) ?? []
+
             do {
                 let archiveURL = try await exportImportService.exportData(
                     tabs: tabs,

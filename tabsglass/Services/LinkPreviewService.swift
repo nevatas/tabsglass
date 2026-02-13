@@ -16,6 +16,9 @@ final class LinkPreviewService {
     private var currentTask: Task<Void, Never>?
     private var currentURL: String?
 
+    /// Shared link detector (NSDataDetector is immutable after creation, thread-safe for matching)
+    private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
     private init() {}
 
     /// Return the latest cached preview (may include image downloaded after initial return)
@@ -26,7 +29,7 @@ final class LinkPreviewService {
     /// Extract first URL from text using NSDataDetector (same pattern as TextEntity.detectURLs)
     func firstURL(in text: String) -> URL? {
         guard !text.isEmpty else { return nil }
-        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        let detector = Self.linkDetector
         let nsString = text as NSString
         let range = NSRange(location: 0, length: nsString.length)
         var result: URL?

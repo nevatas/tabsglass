@@ -121,17 +121,9 @@ final class ExportImportService {
         messages: [Message],
         progressHandler: @escaping (ExportImportProgress) -> Void
     ) async throws -> URL {
-        // Create temp directory for archive contents
-        let tempDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
-
-        defer {
-            try? fileManager.removeItem(at: tempDir)
-        }
-
         progressHandler(ExportImportProgress(phase: .preparing, current: 0, total: 1))
 
-        // Collect all media files
+        // Collect media file sets and convert SwiftData objects to plain Codable DTOs on MainActor
         var allPhotoFiles: Set<String> = []
         var allVideoFiles: Set<String> = []
         var allThumbnailFiles: Set<String> = []
@@ -142,11 +134,10 @@ final class ExportImportService {
             allThumbnailFiles.formUnion(message.videoThumbnailFileNames)
         }
 
-        // Create exportable models
         let exportableTabs = tabs.map { ExportableTab(from: $0) }
         let exportableMessages = messages.map { ExportableMessage(from: $0) }
 
-        // Create manifest
+        // Pre-compute MainActor-isolated values before going off-actor
         let manifest = ExportManifest(
             tabCount: tabs.count,
             messageCount: messages.count,
@@ -155,42 +146,79 @@ final class ExportImportService {
             deviceName: UIDevice.current.name
         )
 
-        // Write manifest.json
-        progressHandler(ExportImportProgress(phase: .exportingData, current: 0, total: 2))
+        // Resolve photo source URLs on MainActor (photoURL does fallback directory check)
+        let allPhotos = allPhotoFiles.union(allThumbnailFiles)
+        var photoSourceURLs: [String: URL] = [:]
+        for fileName in allPhotos {
+            photoSourceURLs[fileName] = SharedPhotoStorage.photoURL(for: fileName)
+        }
 
+        // Video URLs are simple directory appends but still MainActor-isolated
+        var videoSourceURLs: [String: URL] = [:]
+        for fileName in allVideoFiles {
+            videoSourceURLs[fileName] = SharedVideoStorage.videoURL(for: fileName)
+        }
+
+        // Encode JSON on MainActor (Encodable conformance is MainActor-isolated)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         let manifestData = try encoder.encode(manifest)
-        try manifestData.write(to: tempDir.appendingPathComponent(manifestFileName))
-
-        // Write data.json
         let exportData = ExportData(tabs: exportableTabs, messages: exportableMessages)
         let dataData = try encoder.encode(exportData)
+
+        // Perform all file I/O (file write, file copy, ZIP) off the main actor
+        return try await performExport(
+            manifestData: manifestData,
+            dataData: dataData,
+            photoSourceURLs: photoSourceURLs,
+            videoSourceURLs: videoSourceURLs,
+            progressHandler: progressHandler
+        )
+    }
+
+    /// File I/O portion of export — runs off MainActor
+    private nonisolated func performExport(
+        manifestData: Data,
+        dataData: Data,
+        photoSourceURLs: [String: URL],
+        videoSourceURLs: [String: URL],
+        progressHandler: @escaping (ExportImportProgress) -> Void
+    ) async throws -> URL {
+        let fileManager = FileManager.default
+        let tempDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+        defer {
+            try? fileManager.removeItem(at: tempDir)
+        }
+
+        // Write manifest.json
+        await MainActor.run { progressHandler(ExportImportProgress(phase: .exportingData, current: 0, total: 2)) }
+
+        try manifestData.write(to: tempDir.appendingPathComponent(manifestFileName))
         try dataData.write(to: tempDir.appendingPathComponent(dataFileName))
 
-        progressHandler(ExportImportProgress(phase: .exportingData, current: 2, total: 2))
+        await MainActor.run { progressHandler(ExportImportProgress(phase: .exportingData, current: 2, total: 2)) }
 
         // Copy photos (including video thumbnails)
-        let allPhotos = allPhotoFiles.union(allThumbnailFiles)
-        if !allPhotos.isEmpty {
+        if !photoSourceURLs.isEmpty {
             let photosDir = tempDir.appendingPathComponent(photosFolder)
             try fileManager.createDirectory(at: photosDir, withIntermediateDirectories: true)
 
             var photosCopied = 0
-            let totalPhotos = allPhotos.count
+            let totalPhotos = photoSourceURLs.count
 
-            for fileName in allPhotos {
-                progressHandler(ExportImportProgress(phase: .copyingPhotos, current: photosCopied, total: totalPhotos))
+            for (fileName, sourceURL) in photoSourceURLs {
+                let current = photosCopied
+                await MainActor.run { progressHandler(ExportImportProgress(phase: .copyingPhotos, current: current, total: totalPhotos)) }
 
-                let sourceURL = SharedPhotoStorage.photoURL(for: fileName)
                 if fileManager.fileExists(atPath: sourceURL.path) {
                     let destURL = photosDir.appendingPathComponent(fileName)
                     do {
                         try fileManager.copyItem(at: sourceURL, to: destURL)
                     } catch {
-                        logger.error("Failed to copy photo \(fileName): \(error.localizedDescription)")
                         throw ExportImportError.fileAccessDenied
                     }
                 }
@@ -199,23 +227,22 @@ final class ExportImportService {
         }
 
         // Copy videos
-        if !allVideoFiles.isEmpty {
+        if !videoSourceURLs.isEmpty {
             let videosDir = tempDir.appendingPathComponent(videosFolder)
             try fileManager.createDirectory(at: videosDir, withIntermediateDirectories: true)
 
             var videosCopied = 0
-            let totalVideos = allVideoFiles.count
+            let totalVideos = videoSourceURLs.count
 
-            for fileName in allVideoFiles {
-                progressHandler(ExportImportProgress(phase: .copyingVideos, current: videosCopied, total: totalVideos))
+            for (fileName, sourceURL) in videoSourceURLs {
+                let current = videosCopied
+                await MainActor.run { progressHandler(ExportImportProgress(phase: .copyingVideos, current: current, total: totalVideos)) }
 
-                let sourceURL = SharedVideoStorage.videoURL(for: fileName)
                 if fileManager.fileExists(atPath: sourceURL.path) {
                     let destURL = videosDir.appendingPathComponent(fileName)
                     do {
                         try fileManager.copyItem(at: sourceURL, to: destURL)
                     } catch {
-                        logger.error("Failed to copy video \(fileName): \(error.localizedDescription)")
                         throw ExportImportError.fileAccessDenied
                     }
                 }
@@ -224,7 +251,7 @@ final class ExportImportService {
         }
 
         // Compress to .taby (ZIP)
-        progressHandler(ExportImportProgress(phase: .compressing, current: 0, total: 1))
+        await MainActor.run { progressHandler(ExportImportProgress(phase: .compressing, current: 0, total: 1)) }
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -257,13 +284,11 @@ final class ExportImportService {
                 }
             }
         } catch {
-            logger.error("Compression failed: \(error.localizedDescription)")
             throw ExportImportError.compressionFailed
         }
 
-        progressHandler(ExportImportProgress(phase: .complete, current: 1, total: 1))
+        await MainActor.run { progressHandler(ExportImportProgress(phase: .complete, current: 1, total: 1)) }
 
-        logger.info("Export completed: \(tabs.count) tabs, \(messages.count) messages")
         return archiveURL
     }
 

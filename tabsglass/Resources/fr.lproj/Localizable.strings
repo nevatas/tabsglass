@@ -151,6 +151,13 @@
 "message.show_more" = "Voir plus";
 "message.show_less" = "Voir moins";
 
+// MARK: - Edit
+
+"edit.title" = "Modification";
+"edit.discard_title" = "Abandonner les modifications ?";
+"edit.discard" = "Abandonner";
+"edit.keep_editing" = "Continuer";
+
 // MARK: - Selection
 
 "selection.select" = "Sélectionner";

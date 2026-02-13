@@ -197,6 +197,7 @@ Three paths in `reloadMessages()`:
 - Tap result → navigate to tab + scroll to message
 - Edge swipe from left → go to Search
 - Keyboard return key: `.done` (always)
+- **Debounce:** 150ms on non-empty text; empty text updates immediately (in `UnifiedChatViewController`)
 
 ### Tab Creation (MainContainerView.swift)
 - Max 24 characters for tab title
@@ -327,6 +328,18 @@ Shares App Group with main app for SwiftData container, photo/video storage, pen
 - `NSCache` with size limit
 - Downsampling for thumbnails
 - Async loading with callbacks
+
+### Off-Main-Thread Work
+- **Photo/video saving** (`MainContainerView.sendMessage`): JPEG encoding + disk write runs inside `Task {}`, off main thread. UI is cleared before save starts for instant feedback.
+- **Export file I/O** (`ExportImportService`): `exportData` converts SwiftData→DTOs and encodes JSON on MainActor, then delegates file write/copy/ZIP to `nonisolated performExport`.
+- **Pending share items** (`tabsglassApp`): Batch-inserted with single `context.save()`. Falls back to per-item retry on failure.
+
+### Cached Detectors
+- `NSDataDetector` is created once as `private static let` in both `TextEntity` and `LinkPreviewService`. Do NOT create new instances per call — it's expensive.
+
+### Hot Path Rules
+- `Message.isEmpty` trusts `photoFileNames`/`videoFileNames` arrays — no `FileManager.fileExists` calls. Photos are always saved to disk before Message creation.
+- Avoid `UIScreen.main` (deprecated iOS 26). Use `view.window?.windowScene?.screen` instead.
 
 ## Common Patterns
 
