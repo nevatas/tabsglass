@@ -42,6 +42,7 @@ struct MainContainerView: View {
     @State private var showMoveSheet = false
     @State private var showDeleteSelectedAlert = false
     @State private var reloadTrigger = 0
+    @State private var isComposerFocused = false
 
     /// Total number of tabs including Search and virtual Inbox
     private var totalTabCount: Int {
@@ -119,6 +120,11 @@ struct MainContainerView: View {
             onToggleReminder: { message in
                 messageForReminder = message
             },
+            onComposerFocusChange: { isFocused in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isComposerFocused = isFocused
+                }
+            },
             isSelectionMode: $isSelectionMode,
             selectedMessageIds: $selectedMessageIds,
             onEnterSelectionMode: { message in
@@ -179,7 +185,8 @@ struct MainContainerView: View {
                     withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
                         selectedTabIndex = 1  // Go to Inbox
                     }
-                }
+                },
+                isHeaderHidden: isComposerFocused && !isOnSearch
             )
             .offset(y: isSelectionMode ? -24 : 0)
             .opacity(isSelectionMode ? 0 : 1)
