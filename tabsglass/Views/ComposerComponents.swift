@@ -805,7 +805,7 @@ struct EmbeddedComposerView: View {
             }
             .clipShape(.rect(cornerRadius: 24))
             .glassEffect(
-                .regular.tint(composerTint).interactive(),
+                .regular.interactive(),
                 in: .rect(cornerRadius: 24)
             )
             .id(glassId)  // Force recreation when theme changes

@@ -142,7 +142,7 @@ struct SearchInputView: View {
             isFocused = true
         }
         .glassEffect(
-            .regular.tint(composerTint).interactive(),
+            .regular.interactive(),
             in: .capsule
         )
         .id(glassId)  // Force recreation when theme changes
