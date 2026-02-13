@@ -48,8 +48,8 @@ final class ComposerState {
     /// Link preview state
     var linkPreview: LinkPreview? = nil
     var linkPreviewDismissed: Bool = false
-    var linkPreviewBannerHeight: CGFloat = 0
-    private var lastDetectedURL: String?
+    var isLoadingLinkPreview: Bool = false
+    private(set) var lastDetectedURL: String?
 
     /// Total count of attached media (photos + videos)
     var totalMediaCount: Int {
@@ -71,13 +71,13 @@ final class ComposerState {
         let service = LinkPreviewService.shared
         guard let url = service.firstURL(in: text) else {
             // No URL — hide preview
-            if linkPreview != nil || linkPreviewBannerHeight > 0 {
+            if linkPreview != nil || isLoadingLinkPreview || lastDetectedURL != nil {
                 linkPreview = nil
                 lastDetectedURL = nil
                 linkPreviewDismissed = false
-                withAnimation(.easeOut(duration: 0.2)) {
-                    linkPreviewBannerHeight = 0
-                }
+                isLoadingLinkPreview = false
+                service.cancel()
+                onLinkPreviewChange?()
             }
             return
         }
@@ -94,24 +94,28 @@ final class ComposerState {
             return
         }
 
-        // Same URL already showing
-        if urlString == lastDetectedURL && linkPreview != nil {
+        // Same URL already showing or loading
+        if urlString == lastDetectedURL && (linkPreview != nil || isLoadingLinkPreview) {
             return
         }
 
         lastDetectedURL = urlString
+
+        // Show loading banner immediately with short URL
+        let shortURL = url.host(percentEncoded: false) ?? urlString
+        linkPreview = LinkPreview(url: urlString, siteName: shortURL)
+        isLoadingLinkPreview = true
+        onLinkPreviewChange?()
+
         service.fetchPreview(for: text) { [weak self] preview in
             guard let self = self else { return }
             guard self.lastDetectedURL == urlString else { return }
-            self.linkPreview = preview
-            if preview != nil {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    self.linkPreviewBannerHeight = 52
-                }
+            self.isLoadingLinkPreview = false
+            if let preview = preview {
+                self.linkPreview = preview
             } else {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    self.linkPreviewBannerHeight = 0
-                }
+                // Fetch failed — hide banner
+                self.linkPreview = nil
             }
             self.onLinkPreviewChange?()
         }
@@ -121,7 +125,7 @@ final class ComposerState {
     func dismissLinkPreview() {
         linkPreviewDismissed = true
         linkPreview = nil
-        linkPreviewBannerHeight = 0
+        isLoadingLinkPreview = false
         LinkPreviewService.shared.cancel()
         onLinkPreviewChange?()
     }
@@ -208,7 +212,7 @@ final class ComposerState {
         clearAttachments()
         linkPreview = nil
         linkPreviewDismissed = false
-        linkPreviewBannerHeight = 0
+        isLoadingLinkPreview = false
         lastDetectedURL = nil
         LinkPreviewService.shared.cancel()
     }
@@ -429,8 +433,18 @@ final class SwiftUIComposerContainer: UIView {
     }
 
     /// Extract current link preview (called before send)
+    /// Prefers enriched version from cache (may include image downloaded after banner appeared)
     func extractLinkPreview() -> LinkPreview? {
-        return composerState.linkPreview
+        if let url = composerState.lastDetectedURL,
+           let cached = LinkPreviewService.shared.cachedPreview(for: url) {
+            return cached
+        }
+        // Don't return loading placeholder (has no title/description)
+        let preview = composerState.linkPreview
+        guard preview?.title != nil || preview?.previewDescription != nil else {
+            return nil
+        }
+        return preview
     }
 
     /// Focus the composer text field
@@ -546,6 +560,7 @@ struct FormattingTextViewWrapper: UIViewRepresentable {
 
 struct LinkPreviewBanner: View {
     let preview: LinkPreview
+    let isLoading: Bool
     let onDismiss: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -564,13 +579,24 @@ struct LinkPreviewBanner: View {
 
             // Text content
             VStack(alignment: .leading, spacing: 2) {
-                if let title = preview.title, !title.isEmpty {
+                if isLoading {
+                    LoadingDotsText()
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(colorScheme == .dark ? .white : .primary)
+                } else if let title = preview.title, !title.isEmpty {
                     Text(title)
                         .font(.system(size: 14, weight: .semibold))
                         .lineLimit(1)
                         .foregroundStyle(colorScheme == .dark ? .white : .primary)
                 }
-                if let desc = preview.previewDescription, !desc.isEmpty {
+                if isLoading {
+                    if let siteName = preview.siteName, !siteName.isEmpty {
+                        Text(siteName)
+                            .font(.system(size: 13))
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let desc = preview.previewDescription, !desc.isEmpty {
                     Text(desc)
                         .font(.system(size: 13))
                         .lineLimit(1)
@@ -600,6 +626,28 @@ struct LinkPreviewBanner: View {
     }
 }
 
+/// Animated "Loading..." text — dots appear one by one
+private struct LoadingDotsText: View {
+    @State private var dotCount = 1
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text("Loading")
+            Text("...")
+                .opacity(0) // Reserve space for 3 dots
+                .overlay(alignment: .leading) {
+                    Text(String(repeating: ".", count: dotCount))
+                }
+        }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                dotCount = (dotCount % 3) + 1
+            }
+        }
+    }
+}
+
 // MARK: - Embedded Composer
 
 struct EmbeddedComposerView: View {
@@ -616,7 +664,7 @@ struct EmbeddedComposerView: View {
     }
 
     private var hasLinkPreview: Bool {
-        state.linkPreview != nil && state.linkPreviewBannerHeight > 0
+        state.linkPreview != nil
     }
 
     private var composerTint: Color {
@@ -668,13 +716,16 @@ struct EmbeddedComposerView: View {
                         .opacity(state.mediaSectionHeight > 0 ? 1 : 0)
                     }
 
-                    // Link preview banner
-                    if let preview = state.linkPreview, state.linkPreviewBannerHeight > 0 {
-                        LinkPreviewBanner(preview: preview, onDismiss: { state.dismissLinkPreview() })
-                            .frame(height: state.linkPreviewBannerHeight > 0 ? 52 : 0)
-                            .clipped()
-                            .opacity(state.linkPreviewBannerHeight > 0 ? 1 : 0)
+                    // Link preview banner — always in hierarchy, visibility via frame/opacity
+                    VStack(spacing: 0) {
+                        if let preview = state.linkPreview {
+                            LinkPreviewBanner(preview: preview, isLoading: state.isLoadingLinkPreview, onDismiss: { state.dismissLinkPreview() })
+                        }
                     }
+                    .frame(height: state.linkPreview != nil ? 52 : 0)
+                    .clipped()
+                    .opacity(state.linkPreview != nil ? 1 : 0)
+                    .animation(.easeOut(duration: 0.2), value: state.linkPreview != nil)
 
                     // Bottom section with text field and buttons
                     VStack(spacing: 0) {

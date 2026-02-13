@@ -965,7 +965,7 @@ final class LinkPreviewBubbleView: UIView {
             accentBar.backgroundColor = .systemBlue
         }
 
-        titleLabel.textColor = isDarkMode ? .white : .black
+        titleLabel.textColor = .label
 
         siteNameLabel.text = preview.siteName
         let hasSiteName = preview.siteName != nil && !preview.siteName!.isEmpty

@@ -20,7 +20,8 @@ struct EditMessageSheet: View {
     let originalVideoFileNames: [String]
     let originalVideoThumbnailFileNames: [String]
     let originalVideoDurations: [Double]
-    let onSave: (String, [TextEntity]?, [String], [String], [String], [Double]) -> Void
+    let originalLinkPreview: LinkPreview?
+    let onSave: (String, [TextEntity]?, [String], [String], [String], [Double], LinkPreview?) -> Void
     let onCancel: () -> Void
 
     init(
@@ -30,7 +31,8 @@ struct EditMessageSheet: View {
         originalVideoFileNames: [String] = [],
         originalVideoThumbnailFileNames: [String] = [],
         originalVideoDurations: [Double] = [],
-        onSave: @escaping (String, [TextEntity]?, [String], [String], [String], [Double]) -> Void,
+        originalLinkPreview: LinkPreview? = nil,
+        onSave: @escaping (String, [TextEntity]?, [String], [String], [String], [Double], LinkPreview?) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.originalText = originalText
@@ -39,6 +41,7 @@ struct EditMessageSheet: View {
         self.originalVideoFileNames = originalVideoFileNames
         self.originalVideoThumbnailFileNames = originalVideoThumbnailFileNames
         self.originalVideoDurations = originalVideoDurations
+        self.originalLinkPreview = originalLinkPreview
         self.onSave = onSave
         self.onCancel = onCancel
     }
@@ -54,6 +57,10 @@ struct EditMessageSheet: View {
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showCamera = false
     @State private var showPhotoPicker = false
+    @State private var linkPreview: LinkPreview?
+    @State private var isLoadingLinkPreview = false
+    @State private var lastDetectedURL: String?
+    @State private var linkPreviewDismissed = false
     private var themeManager: ThemeManager { ThemeManager.shared }
     @Environment(\.colorScheme) private var colorScheme
 
@@ -101,10 +108,11 @@ struct EditMessageSheet: View {
 
                         // Also detect URLs
                         adjustedEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))
-                        onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations)
+                        let previewToSave = extractLinkPreview()
+                        onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, previewToSave)
                     } else if totalMediaCount > 0 {
                         // Allow saving with only media (no text)
-                        onSave("", nil, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations)
+                        onSave("", nil, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, nil)
                     }
                 } label: {
                     Image(systemName: "checkmark")
@@ -145,6 +153,23 @@ struct EditMessageSheet: View {
                 .frame(height: 92)
                 .padding(.bottom, 12)
             }
+
+            // Link preview banner
+            VStack(spacing: 0) {
+                if let preview = linkPreview {
+                    LinkPreviewBanner(preview: preview, isLoading: isLoadingLinkPreview, onDismiss: {
+                        linkPreviewDismissed = true
+                        linkPreview = nil
+                        isLoadingLinkPreview = false
+                        LinkPreviewService.shared.cancel()
+                    })
+                }
+            }
+            .frame(height: linkPreview != nil ? 52 : 0)
+            .clipped()
+            .opacity(linkPreview != nil ? 1 : 0)
+            .animation(.easeOut(duration: 0.2), value: linkPreview != nil)
+            .padding(.horizontal, 4)
 
             // Formatting text editor
             EditFormattingTextView(
@@ -199,8 +224,15 @@ struct EditMessageSheet: View {
             videoFileNames = originalVideoFileNames
             videoThumbnailFileNames = originalVideoThumbnailFileNames
             videoDurations = originalVideoDurations
+            linkPreview = originalLinkPreview
+            if let preview = originalLinkPreview {
+                lastDetectedURL = preview.url
+            }
             loadPhotos()
             loadVideoThumbnails()
+        }
+        .onChange(of: text) { _, newText in
+            detectLinkPreview(in: newText)
         }
         .onChange(of: selectedPhotoItems) { _, newItems in
             Task {
@@ -220,6 +252,57 @@ struct EditMessageSheet: View {
             maxSelectionCount: max(1, 10 - totalMediaCount),
             matching: .images
         )
+    }
+
+    // MARK: - Link Preview
+
+    private func detectLinkPreview(in text: String) {
+        let service = LinkPreviewService.shared
+        guard let url = service.firstURL(in: text) else {
+            if linkPreview != nil || isLoadingLinkPreview {
+                linkPreview = nil
+                lastDetectedURL = nil
+                linkPreviewDismissed = false
+                isLoadingLinkPreview = false
+                service.cancel()
+            }
+            return
+        }
+
+        let urlString = url.absoluteString
+
+        if urlString != lastDetectedURL {
+            linkPreviewDismissed = false
+        }
+        if linkPreviewDismissed { return }
+        if urlString == lastDetectedURL && (linkPreview != nil || isLoadingLinkPreview) { return }
+
+        lastDetectedURL = urlString
+
+        let shortURL = url.host(percentEncoded: false) ?? urlString
+        linkPreview = LinkPreview(url: urlString, siteName: shortURL)
+        isLoadingLinkPreview = true
+
+        service.fetchPreview(for: text) { preview in
+            guard lastDetectedURL == urlString else { return }
+            isLoadingLinkPreview = false
+            if let preview = preview {
+                linkPreview = preview
+            } else {
+                linkPreview = nil
+            }
+        }
+    }
+
+    private func extractLinkPreview() -> LinkPreview? {
+        if let url = lastDetectedURL,
+           let cached = LinkPreviewService.shared.cachedPreview(for: url) {
+            return cached
+        }
+        guard linkPreview?.title != nil || linkPreview?.previewDescription != nil else {
+            return nil
+        }
+        return linkPreview
     }
 
     private var canSave: Bool {
@@ -540,7 +623,7 @@ struct EditFormattingTextView: UIViewRepresentable {
         originalText: text,
         originalEntities: nil,
         originalPhotoFileNames: [],
-        onSave: { _, _, _, _, _, _ in },
+        onSave: { _, _, _, _, _, _, _ in },
         onCancel: { }
     )
 }

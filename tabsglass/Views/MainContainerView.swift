@@ -311,7 +311,8 @@ struct MainContainerView: View {
                 originalVideoFileNames: message.videoFileNames,
                 originalVideoThumbnailFileNames: message.videoThumbnailFileNames,
                 originalVideoDurations: message.videoDurations,
-                onSave: { newText, newEntities, newPhotoFileNames, newVideoFileNames, newVideoThumbnailFileNames, newVideoDurations in
+                originalLinkPreview: message.linkPreview,
+                onSave: { newText, newEntities, newPhotoFileNames, newVideoFileNames, newVideoThumbnailFileNames, newVideoDurations, newLinkPreview in
                     let originalPhotoFileNames = message.photoFileNames
                     let originalPhotoAspectRatios = message.photoAspectRatios
                     let originalVideoFileNames = message.videoFileNames
@@ -410,6 +411,15 @@ struct MainContainerView: View {
                     message.videoAspectRatios = newVideoAspectRatios
                     message.videoDurations = newVideoDurations
                     message.videoThumbnailFileNames = newVideoThumbnailFileNames
+
+                    // Update link preview — clean up old image if changed
+                    let oldPreviewImage = message.linkPreview?.image
+                    let newPreviewImage = newLinkPreview?.image
+                    if let oldImage = oldPreviewImage, oldImage != newPreviewImage {
+                        SharedPhotoStorage.deletePhoto(oldImage)
+                    }
+                    message.linkPreview = newLinkPreview
+
                     try? modelContext.save()
                     reloadTrigger += 1
 

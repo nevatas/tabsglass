@@ -18,6 +18,11 @@ final class LinkPreviewService {
 
     private init() {}
 
+    /// Return the latest cached preview (may include image downloaded after initial return)
+    func cachedPreview(for urlString: String) -> LinkPreview? {
+        return cache[urlString]
+    }
+
     /// Extract first URL from text using NSDataDetector (same pattern as TextEntity.detectURLs)
     func firstURL(in text: String) -> URL? {
         guard !text.isEmpty else { return nil }
@@ -46,7 +51,7 @@ final class LinkPreviewService {
         return result
     }
 
-    /// Fetch preview for the first URL in text. Debounces 0.5s. Calls completion on main thread.
+    /// Fetch preview for the first URL in text. Debounces 0.3s. Calls completion on main thread.
     func fetchPreview(for text: String, completion: @escaping (LinkPreview?) -> Void) {
         guard let url = firstURL(in: text) else {
             completion(nil)
@@ -71,8 +76,8 @@ final class LinkPreviewService {
         currentURL = urlString
 
         currentTask = Task { @MainActor in
-            // Debounce 0.5s
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            // Debounce 0.3s
+            try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
 
             let preview = await self.fetchMetadata(for: url)
@@ -114,29 +119,43 @@ final class LinkPreviewService {
         let siteName = metadata.url?.host(percentEncoded: false)
             ?? url.host(percentEncoded: false)
 
-        // Download preview image if available
-        var imageFileName: String? = nil
-        var imageAspectRatio: Double? = nil
-        if let imageProvider = metadata.imageProvider {
-            let result = await downloadImage(from: imageProvider)
-            imageFileName = result?.fileName
-            imageAspectRatio = result?.aspectRatio
-        }
-
         // Use HTML description, or fall back to nil
         let desc = description
 
         // Need at least a title to show a preview
         guard title != nil || desc != nil else { return nil }
 
-        return LinkPreview(
-            url: url.absoluteString,
+        let urlString = url.absoluteString
+
+        // Return text-only preview immediately (banner doesn't need image)
+        let preview = LinkPreview(
+            url: urlString,
             title: title,
             previewDescription: desc,
-            image: imageFileName,
+            image: nil,
             siteName: siteName,
-            imageAspectRatio: imageAspectRatio
+            imageAspectRatio: nil
         )
+
+        // Download image in background — updates cache silently for send flow
+        if let imageProvider = metadata.imageProvider {
+            Task { [weak self] in
+                guard let result = await self?.downloadImage(from: imageProvider) else { return }
+                await MainActor.run {
+                    let enriched = LinkPreview(
+                        url: urlString,
+                        title: title,
+                        previewDescription: desc,
+                        image: result.fileName,
+                        siteName: siteName,
+                        imageAspectRatio: result.aspectRatio
+                    )
+                    self?.cache[urlString] = enriched
+                }
+            }
+        }
+
+        return preview
     }
 
     private func fetchLPMetadata(for url: URL) async -> LPLinkMetadata? {
