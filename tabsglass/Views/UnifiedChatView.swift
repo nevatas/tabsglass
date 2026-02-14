@@ -27,6 +27,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     let onSend: () -> Void
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
+    var onMoveToNewTab: ((Message) -> Void)?
     var onEditMessage: ((Message) -> Void)?
     var onRestoreMessage: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
@@ -49,6 +50,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onSend = onSend
         vc.onDeleteMessage = onDeleteMessage
         vc.onMoveMessage = onMoveMessage
+        vc.onMoveToNewTab = onMoveToNewTab
         vc.onEditMessage = onEditMessage
         vc.onRestoreMessage = onRestoreMessage
         vc.onToggleTodoItem = onToggleTodoItem
@@ -114,6 +116,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         // Update callbacks (cheap)
         uiViewController.onDeleteMessage = onDeleteMessage
         uiViewController.onMoveMessage = onMoveMessage
+        uiViewController.onMoveToNewTab = onMoveToNewTab
         uiViewController.onEditMessage = onEditMessage
         uiViewController.onRestoreMessage = onRestoreMessage
         uiViewController.onToggleTodoItem = onToggleTodoItem
@@ -212,6 +215,7 @@ final class UnifiedChatViewController: UIViewController {
     private var lastReportedFraction: CGFloat = 0  // For filtering micro-fluctuations
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
+    var onMoveToNewTab: ((Message) -> Void)?
     var onEditMessage: ((Message) -> Void)?
     var onImagesChange: (([UIImage]) -> Void)?
     var onVideosChange: (([AttachedVideo]) -> Void)?
@@ -850,6 +854,9 @@ final class UnifiedChatViewController: UIViewController {
         }
         vc.onMoveMessage = { [weak self] message, targetTabId in
             self?.onMoveMessage?(message, targetTabId)
+        }
+        vc.onMoveToNewTab = { [weak self] message in
+            self?.onMoveToNewTab?(message)
         }
         vc.onEditMessage = { [weak self] message in
             self?.onEditMessage?(message)

@@ -36,6 +36,7 @@
 "tab.move" = "Déplacer";
 "tab.delete" = "Supprimer";
 "tab.cancel" = "Annuler";
+"tab.move_to_new" = "Déplacer vers un nouvel onglet";
 
 // MARK: - Context Menu
 

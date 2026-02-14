@@ -13,13 +13,14 @@ struct SelectionActionBar: View {
     let tabs: [Tab]
     let currentTabId: UUID?
     let onMove: (UUID?) -> Void  // targetTabId (nil = Inbox)
+    let onMoveToNewTab: () -> Void
     let onDelete: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     private var themeManager: ThemeManager { ThemeManager.shared }
 
     private var isMoveDisabled: Bool {
-        selectedCount == 0 || !canMove
+        selectedCount == 0
     }
 
     /// Accent color for icons and text (uses theme color or falls back to primary)
@@ -31,6 +32,12 @@ struct SelectionActionBar: View {
         HStack(spacing: 12) {
             // Move — Menu outside GlassEffectContainer for proper morph animation
             Menu {
+                Button {
+                    onMoveToNewTab()
+                } label: {
+                    Label(L10n.Tab.new, systemImage: "plus")
+                }
+                Divider()
                 if currentTabId != nil {
                     Button {
                         onMove(nil)
@@ -51,7 +58,7 @@ struct SelectionActionBar: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(accentColor)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 10)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
@@ -65,7 +72,7 @@ struct SelectionActionBar: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 10)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
@@ -141,6 +148,7 @@ struct SelectionCancelBar: View {
             tabs: [],
             currentTabId: nil,
             onMove: { _ in },
+            onMoveToNewTab: {},
             onDelete: {}
         )
     }

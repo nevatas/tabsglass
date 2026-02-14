@@ -36,6 +36,7 @@
 "tab.move" = "Переместить";
 "tab.delete" = "Удалить";
 "tab.cancel" = "Отмена";
+"tab.move_to_new" = "Переместить в Новый Таб";
 
 // MARK: - Context Menu
 

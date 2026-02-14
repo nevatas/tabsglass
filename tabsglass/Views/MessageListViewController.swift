@@ -21,6 +21,7 @@ final class MessageListViewController: UIViewController {
     var getSafeAreaBottom: (() -> CGFloat)?
     var onDeleteMessage: ((Message) -> Void)?
     var onMoveMessage: ((Message, UUID?) -> Void)?  // UUID? = target tabId (nil = Inbox)
+    var onMoveToNewTab: ((Message) -> Void)?
     var onEditMessage: ((Message) -> Void)?
     /// Callback when gallery should be opened: (message, startIndex, sourceFrame)
     var onOpenGallery: ((Message, Int, CGRect) -> Void)?
@@ -1137,35 +1138,49 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
             actions.append(editAction)
 
             // Move action (show other tabs + Inbox if not already in Inbox)
-            var moveMenuChildren: [UIAction] = []
+            // "New Tab" in its own inline section so its icon doesn't indent other items
+            let accentUIColor: UIColor = {
+                if let themeAccent = ThemeManager.shared.currentTheme.accentColor {
+                    return UIColor(themeAccent)
+                }
+                return .tintColor
+            }()
+            let plusImage = UIImage(systemName: "plus")?
+                .withTintColor(accentUIColor, renderingMode: .alwaysOriginal)
+            let newTabSection = UIMenu(title: "", options: .displayInline, children: [
+                UIAction(title: L10n.Tab.new, image: plusImage) { [weak self] _ in
+                    self?.onMoveToNewTab?(message)
+                }
+            ])
 
-            // Add Inbox option if not already in Inbox
+            var existingTabActions: [UIAction] = []
             if self.currentTabId != nil {
-                moveMenuChildren.append(UIAction(title: L10n.Reorder.inbox) { [weak self] _ in
+                existingTabActions.append(UIAction(title: L10n.Reorder.inbox) { [weak self] _ in
                     self?.animateDeleteMessage(message) {
                         self?.onMoveMessage?(message, nil)
                     }
                 })
             }
-
-            // Add other real tabs
             let otherTabs = self.allTabs.filter { $0.id != self.currentTabId }
             for tab in otherTabs {
-                moveMenuChildren.append(UIAction(title: tab.title) { [weak self] _ in
+                existingTabActions.append(UIAction(title: tab.title) { [weak self] _ in
                     self?.animateDeleteMessage(message) {
                         self?.onMoveMessage?(message, tab.id)
                     }
                 })
             }
 
-            if !moveMenuChildren.isEmpty {
-                let moveMenu = UIMenu(
-                    title: L10n.Menu.move,
-                    image: UIImage(systemName: "arrow.right.doc.on.clipboard"),
-                    children: moveMenuChildren
-                )
-                actions.append(moveMenu)
+            var moveChildren: [UIMenuElement] = [newTabSection]
+            if !existingTabActions.isEmpty {
+                moveChildren.append(UIMenu(title: "", options: .displayInline, children: existingTabActions))
             }
+
+            let moveMenu = UIMenu(
+                title: L10n.Menu.move,
+                image: UIImage(systemName: "arrow.right.doc.on.clipboard"),
+                children: moveChildren
+            )
+            actions.append(moveMenu)
 
             // Reminder action
             let reminderTitle = message.hasReminder ? L10n.Menu.editReminder : L10n.Menu.remind
