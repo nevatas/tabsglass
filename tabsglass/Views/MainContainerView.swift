@@ -250,15 +250,23 @@ struct MainContainerView: View {
                     } else if neighborHasPin {
                         // Current tab has no pin, but swiping toward pinned tab — fade in
                         return min(1.0, swipeProgress * 2.5)
+                    } else if pinnedMessage != nil && swipeProgress < 0.01 {
+                        // Gap: arrived at pinned tab but onChange hasn't set showPinnedBanner yet
+                        return 1.0
                     }
                     return 0
                 }()
 
-                // Show neighbor's content while swiping in
-                let bannerMessage = showPinnedBanner ? displayedPinnedMessage : neighborPinnedMessage
+                // Show neighbor's content while swiping, fall back to pinnedMessage
+                // to avoid transient nil during the gap between body eval and onChange
+                let bannerMessage: Message? = {
+                    if showPinnedBanner { return displayedPinnedMessage }
+                    if let neighbor = neighborPinnedMessage { return neighbor }
+                    return pinnedMessage
+                }()
 
                 PinnedMessageBanner(
-                    message: bannerOpacity > 0 ? bannerMessage : nil,
+                    message: bannerMessage,
                     onTap: {
                         if let msg = displayedPinnedMessage {
                             immediateScrollMessageId = msg.id
@@ -1317,67 +1325,75 @@ private struct PinnedMessageBanner: View {
     }
 
     var body: some View {
-        if message != nil {
-            HStack(spacing: 0) {
-                Button(action: onTap) {
-                    HStack(spacing: 0) {
-                        PinnedThumbnail(fileName: thumbFileName)
-                            .frame(width: showThumbnail ? 38 : 0, height: 38)
-                            .scaleEffect(showThumbnail ? 1 : 0.01, anchor: .leading)
-                            .opacity(showThumbnail ? 1 : 0)
-                            .clipped()
-                            .padding(.trailing, showThumbnail ? 10 : 0)
+        Group {
+            if message != nil {
+                HStack(spacing: 0) {
+                    Button(action: onTap) {
+                        HStack(spacing: 0) {
+                            PinnedThumbnail(fileName: thumbFileName)
+                                .frame(width: showThumbnail ? 38 : 0, height: 38)
+                                .scaleEffect(showThumbnail ? 1 : 0.01, anchor: .leading)
+                                .opacity(showThumbnail ? 1 : 0)
+                                .clipped()
+                                .padding(.trailing, showThumbnail ? 10 : 0)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "pin.fill")
-                                    .font(.system(size: 10, weight: .semibold))
-                                Text("Pinned Message")
-                                    .font(.system(size: 11, weight: .semibold))
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "pin.fill")
+                                        .font(.system(size: 10, weight: .semibold))
+                                    Text("Pinned Message")
+                                        .font(.system(size: 11, weight: .semibold))
+                                }
+                                .foregroundStyle(Color(themeManager.currentTheme.placeholderColor))
+
+                                Text(previewString)
+                                    .font(.system(size: 13))
+                                    .lineLimit(1)
+                                    .foregroundStyle(colorScheme == .dark ? .white : .black)
                             }
-                            .foregroundStyle(Color(themeManager.currentTheme.placeholderColor))
 
-                            Text(previewString)
-                                .font(.system(size: 13))
-                                .lineLimit(1)
-                                .foregroundStyle(colorScheme == .dark ? .white : .black)
+                            Spacer(minLength: 0)
                         }
-
-                        Spacer(minLength: 0)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color(themeManager.currentTheme.placeholderColor))
-                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color(themeManager.currentTheme.placeholderColor))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .padding(.leading, showThumbnail ? 8 : 14)
+                .padding(.trailing, 6)
+                .padding(.vertical, 4)
+                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
             }
-            .padding(.leading, showThumbnail ? 8 : 14)
-            .padding(.trailing, 6)
-            .padding(.vertical, 4)
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
-            .onChange(of: message?.id, initial: true) {
-                guard let message else { return }
-                let newHasMedia = !message.photoFileNames.isEmpty || !message.videoThumbnailFileNames.isEmpty
-                let newThumbName = message.photoFileNames.first ?? message.videoThumbnailFileNames.first ?? ""
-                let newPreview = Self.makePreview(message)
+        }
+        .onChange(of: message?.id, initial: true) {
+            guard let message else {
+                // Banner disappeared — reset state so next banner starts clean
+                showThumbnail = false
+                thumbFileName = ""
+                previewString = ""
+                return
+            }
+            let newHasMedia = !message.photoFileNames.isEmpty || !message.videoThumbnailFileNames.isEmpty
+            let newThumbName = message.photoFileNames.first ?? message.videoThumbnailFileNames.first ?? ""
+            let newPreview = Self.makePreview(message)
 
-                // Snap content immediately
-                thumbFileName = newThumbName
-                previewString = newPreview
+            // Snap content immediately
+            thumbFileName = newThumbName
+            previewString = newPreview
 
-                // Defer layout animation to next frame so snap changes settle first
-                if newHasMedia != showThumbnail {
-                    DispatchQueue.main.async {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            showThumbnail = newHasMedia
-                        }
+            // Defer layout animation to next frame so snap changes settle first
+            if newHasMedia != showThumbnail {
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showThumbnail = newHasMedia
                     }
                 }
             }
