@@ -150,6 +150,7 @@ struct MainContainerView: View {
             // Always show chat view (Inbox is always available as virtual tab)
             chatView
             .ignoresSafeArea(.keyboard)
+            .scrollEdgeEffectHidden(true, for: .all)
 
             // Header layer (floating on top).
             // Keep it mounted to avoid UIKit tab bar re-creation glitches after selection mode.

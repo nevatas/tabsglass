@@ -481,6 +481,9 @@ final class UnifiedChatViewController: UIViewController {
             if let scrollView = subview as? UIScrollView {
                 pageScrollView = scrollView
                 scrollView.delegate = self
+                // Disable system scroll edge effects (iOS 26 gradient blur is too large)
+                scrollView.topEdgeEffect.isHidden = true
+                scrollView.bottomEdgeEffect.isHidden = true
                 // Disable clipping on all scroll view subviews (page containers)
                 for pageContainer in scrollView.subviews {
                     pageContainer.clipsToBounds = false

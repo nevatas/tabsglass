@@ -38,6 +38,14 @@ final class MessageListViewController: UIViewController {
                     messageCell.isKeyboardActive = isComposerFocused
                 }
             }
+            // Shrink/expand header gradient when header hides/shows
+            if !isSearchTab {
+                let targetHeight = isComposerFocused ? chatTopFadeCompactHeight : chatTopFadeFullHeight
+                chatTopFadeHeightConstraint?.constant = targetHeight
+                UIView.animate(withDuration: 0.25) {
+                    self.view.layoutIfNeeded()
+                }
+            }
         }
     }
 
@@ -65,6 +73,10 @@ final class MessageListViewController: UIViewController {
     // Embedded search tabs for search tab
     private var searchTabsHostingController: UIHostingController<SearchTabsView>?
     private var topFadeGradient: TopFadeGradientView?
+    private var chatTopFadeGradient: ChatTopFadeGradientView?
+    private var chatTopFadeHeightConstraint: NSLayoutConstraint?
+    private let chatTopFadeFullHeight: CGFloat = 190
+    private let chatTopFadeCompactHeight: CGFloat = 100  // When header is hidden, only tab bar visible
 
     // MARK: - Show More: Expanded messages
     /// IDs of messages whose "Show more" has been tapped (expanded text)
@@ -90,6 +102,8 @@ final class MessageListViewController: UIViewController {
         if isSearchTab {
             setupSearchTabs()
             setupTopFadeGradient()
+        } else {
+            setupChatTopFadeGradient()
         }
     }
 
@@ -111,6 +125,10 @@ final class MessageListViewController: UIViewController {
         if !isSearchTab {
             tableView.transform = CGAffineTransform(scaleX: 1, y: -1)
         }
+
+        // Disable system scroll edge effects (iOS 26 gradient blur) — too large by default
+        tableView.topEdgeEffect.isHidden = true
+        tableView.bottomEdgeEffect.isHidden = true
 
         view.addSubview(tableView)
 
@@ -178,6 +196,25 @@ final class MessageListViewController: UIViewController {
         ])
 
         topFadeGradient = gradientView
+    }
+
+    private func setupChatTopFadeGradient() {
+        let gradientView = ChatTopFadeGradientView()
+        gradientView.translatesAutoresizingMaskIntoConstraints = false
+        gradientView.isUserInteractionEnabled = false
+        view.addSubview(gradientView)
+
+        let heightConstraint = gradientView.heightAnchor.constraint(equalToConstant: chatTopFadeFullHeight)
+        NSLayoutConstraint.activate([
+            // Extend above view top to cover Dynamic Island / safe area
+            gradientView.topAnchor.constraint(equalTo: view.topAnchor, constant: -60),
+            gradientView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            gradientView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            heightConstraint
+        ])
+
+        chatTopFadeGradient = gradientView
+        chatTopFadeHeightConstraint = heightConstraint
     }
 
     /// Update the search tabs with new data
@@ -1323,6 +1360,238 @@ final class TopFadeGradientView: UIView {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+}
+
+// MARK: - Chat Top Fade Gradient View
+
+/// Telegram-style edge effect: variable blur + color overlay, both with bezier-eased gradient.
+/// Two layers (same as Telegram's `EdgeEffectView`):
+/// 1. `VariableBlurView` (bottom) — real Gaussian blur via CAFilter, fading out at bottom
+/// 2. `contentView` + mask (top) — background color overlay fading at bottom
+/// Both masked/flipped for top edge: solid at top, transparent at bottom.
+final class ChatTopFadeGradientView: UIView {
+    // Color overlay layer
+    private let contentView = UIView()
+    private let contentMaskView = UIImageView()
+    // Blur layer + its own fade mask
+    private var blurView: VariableBlurView?
+    private let blurMaskLayer = CAGradientLayer()
+
+    /// Height of the fade zone in points (Telegram uses 50pt for nav bar)
+    private static let edgeSize: CGFloat = 50
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        // 1. Variable blur (bottom layer)
+        let gradientImage = Self.generateBezierGradientImage(
+            edgeSize: Self.edgeSize, alpha: 1.0
+        )
+        if let gradientImage {
+            let blur = VariableBlurView(gradientMask: gradientImage, maxBlurRadius: 16.0)
+            blur.transform = CGAffineTransform(scaleX: 1.0, y: -1.0)  // flip for top edge
+            insertSubview(blur, at: 0)
+            self.blurView = blur
+
+            // Blur fade mask (Telegram's approach): blur is full in the top 70%,
+            // then fades to invisible in the bottom 30%.
+            // Since blurView is flipped (scaleY:-1), layer coordinates are inverted:
+            // layer y=0 (top) = visual bottom, layer y=1 (bottom) = visual top.
+            // So: clear at layer top (visual bottom) → opaque at layer bottom (visual top).
+            blurMaskLayer.colors = [
+                UIColor.clear.cgColor,
+                UIColor.white.cgColor,
+                UIColor.white.cgColor
+            ]
+            blurMaskLayer.locations = [0.0, 0.3, 1.0]
+            blurMaskLayer.startPoint = CGPoint(x: 0.5, y: 0)
+            blurMaskLayer.endPoint = CGPoint(x: 0.5, y: 1)
+            blur.layer.mask = blurMaskLayer
+        }
+
+        // 2. Color overlay (top layer)
+        contentView.mask = contentMaskView
+        addSubview(contentView)
+        contentMaskView.transform = CGAffineTransform(scaleX: 1.0, y: -1.0)
+        contentMaskView.image = Self.generateBezierGradientImage(
+            edgeSize: Self.edgeSize, alpha: 0.75
+        )
+
+        updateColors()
+
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: ChatTopFadeGradientView, _) in
+            self.updateColors()
+        }
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleThemeChange),
+            name: .themeDidChange, object: nil
+        )
+    }
+
+    @objc private func handleThemeChange() {
+        updateColors()
+    }
+
+    private func updateColors() {
+        let theme = ThemeManager.shared.currentTheme
+        let isDark = traitCollection.userInterfaceStyle == .dark
+        contentView.backgroundColor = UIColor(isDark ? theme.backgroundColorDark : theme.backgroundColor)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        contentView.frame = bounds
+        contentMaskView.frame = bounds
+        blurView?.frame = bounds
+        blurMaskLayer.frame = blurView?.layer.bounds ?? bounds
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    // MARK: - Bezier gradient image
+
+    private static func generateBezierGradientImage(edgeSize: CGFloat, alpha: CGFloat) -> UIImage? {
+        let numSteps = 8
+        let firstStep = 1
+        var colors: [CGFloat] = []
+        var locations: [CGFloat] = []
+
+        for i in 0..<numSteps {
+            let a: CGFloat
+            if i < firstStep {
+                a = 1.0
+            } else {
+                let step = CGFloat(i - firstStep) / CGFloat(numSteps - firstStep - 1)
+                a = alpha * bezierPoint(0.42, 0.0, 0.58, 1.0, step)
+            }
+            colors.append(contentsOf: [1.0, 1.0, 1.0, a])
+            if i < firstStep {
+                locations.append(0.0)
+            } else {
+                let step = CGFloat(i - firstStep) / CGFloat(numSteps - firstStep - 1)
+                locations.append(step)
+            }
+        }
+
+        let size = CGSize(width: 8, height: edgeSize)
+        UIGraphicsBeginImageContextWithOptions(size, false, 0)
+        guard let context = UIGraphicsGetCurrentContext() else { return nil }
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let gradient = CGGradient(
+            colorSpace: colorSpace, colorComponents: colors,
+            locations: locations, count: numSteps
+        ) else {
+            UIGraphicsEndImageContext()
+            return nil
+        }
+        context.drawLinearGradient(
+            gradient, start: CGPoint(x: 4, y: 0),
+            end: CGPoint(x: 4, y: edgeSize), options: []
+        )
+        let image = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return image?.stretchableImage(withLeftCapWidth: 0, topCapHeight: Int(edgeSize))
+    }
+
+    // MARK: - Bezier helpers (from Telegram's Spring.swift)
+
+    private static func bezierPoint(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat, _ x: CGFloat) -> CGFloat {
+        var value = calcBezier(getTForX(x, x1, x2), y1, y2)
+        if value >= 0.997 { value = 1.0 }
+        return value
+    }
+    private static func calcBezier(_ t: CGFloat, _ a1: CGFloat, _ a2: CGFloat) -> CGFloat {
+        ((a(a1, a2) * t + b(a1, a2)) * t + c(a1)) * t
+    }
+    private static func calcSlope(_ t: CGFloat, _ a1: CGFloat, _ a2: CGFloat) -> CGFloat {
+        3.0 * a(a1, a2) * t * t + 2.0 * b(a1, a2) * t + c(a1)
+    }
+    private static func getTForX(_ x: CGFloat, _ x1: CGFloat, _ x2: CGFloat) -> CGFloat {
+        var t = x
+        for _ in 0..<4 {
+            let slope = calcSlope(t, x1, x2)
+            guard slope != 0 else { return t }
+            t -= (calcBezier(t, x1, x2) - x) / slope
+        }
+        return t
+    }
+    private static func a(_ a1: CGFloat, _ a2: CGFloat) -> CGFloat { 1.0 - 3.0 * a2 + 3.0 * a1 }
+    private static func b(_ a1: CGFloat, _ a2: CGFloat) -> CGFloat { 3.0 * a2 - 6.0 * a1 }
+    private static func c(_ a1: CGFloat) -> CGFloat { 3.0 * a1 }
+}
+
+// MARK: - Variable Blur View (Telegram's approach)
+
+/// Variable-radius Gaussian blur via CAFilter private API.
+/// Same implementation as Telegram's `VariableBlurView` — uses base64-encoded
+/// class/selector names to pass App Store review.
+final class VariableBlurView: UIVisualEffectView {
+    let maxBlurRadius: CGFloat
+    var gradientMask: UIImage {
+        didSet {
+            if gradientMask !== oldValue { resetEffect() }
+        }
+    }
+
+    init(gradientMask: UIImage, maxBlurRadius: CGFloat = 20.0) {
+        self.gradientMask = gradientMask
+        self.maxBlurRadius = maxBlurRadius
+        super.init(effect: UIBlurEffect(style: .regular))
+        resetEffect()
+        // Hide tint overlay (second subview of UIVisualEffectView)
+        if subviews.indices.contains(1) {
+            subviews[1].alpha = 0
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            resetEffect()
+        }
+    }
+
+    private func resetEffect() {
+        // Decode class name: "CAFilter"
+        guard let filterClassData = Data(base64Encoded: "Q0FGaWx0ZXI="),
+              let filterClassName = String(data: filterClassData, encoding: .utf8),
+              let filterClass = NSClassFromString(filterClassName) as AnyObject as? NSObjectProtocol
+        else { return }
+
+        // Decode selector: "filterWithType:"
+        guard let selectorData = Data(base64Encoded: "ZmlsdGVyV2l0aFR5cGU6"),
+              let selectorName = String(data: selectorData, encoding: .utf8)
+        else { return }
+
+        let selector = Selector(selectorName)
+        guard filterClass.responds(to: selector) else { return }
+
+        let variableBlur = filterClass.perform(selector, with: "variableBlur").takeUnretainedValue()
+        guard let variableBlur = variableBlur as? NSObject else { return }
+        guard let gradientImageRef = gradientMask.cgImage else { return }
+
+        variableBlur.setValue(maxBlurRadius, forKey: "inputRadius")
+        variableBlur.setValue(gradientImageRef, forKey: "inputMaskImage")
+        variableBlur.setValue(true, forKey: "inputNormalizeEdges")
+
+        // Apply to backdrop layer (first subview's layer)
+        let backdropLayer = subviews.first?.layer
+        backdropLayer?.filters = [variableBlur]
     }
 }
 

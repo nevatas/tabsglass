@@ -174,28 +174,8 @@ struct TabBarView: View {
         }
         .padding(.top, 4)
         .padding(.bottom, 16)
-        .background {
-            // Gradient blur - extends below header, fades out on Search
-            GeometryReader { geo in
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .frame(height: geo.size.height + 80)
-                    .mask {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .white, location: 0),
-                                .init(color: .white, location: 0.4),
-                                .init(color: .clear, location: 1)
-                        ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    }
-                    .opacity(1 - searchProgress)
-            }
-            .allowsHitTesting(false)
-            .ignoresSafeArea()
-        }
+        // No material background — ChatTopFadeGradientView in MessageListViewController
+        // provides a theme-colored gradient behind the header area
     }
 }
 
