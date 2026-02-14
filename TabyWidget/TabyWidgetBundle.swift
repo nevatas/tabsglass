@@ -10,5 +10,6 @@ import WidgetKit
 struct TabyWidgetBundle: WidgetBundle {
     var body: some Widget {
         IncompleteTodosWidget()
+        LatestMessageWidget()
     }
 }

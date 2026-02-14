@@ -54,7 +54,7 @@ struct ContentView: View {
         .background(backgroundColor.ignoresSafeArea())
         .preferredColorScheme(themeManager.currentTheme.colorSchemeOverride)
         .onOpenURL { url in
-            guard url.scheme == "taby", url.host == "task" else { return }
+            guard url.scheme == "taby", url.host == "task" || url.host == "message" else { return }
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             guard let messageId = components?.queryItems?.first(where: { $0.name == "message" })?.value.flatMap(UUID.init) else { return }
             let tabId = components?.queryItems?.first(where: { $0.name == "tab" })?.value.flatMap(UUID.init)
