@@ -97,6 +97,8 @@ final class MessageTableCell: UITableViewCell {
     private var linkPreviewTopToText: NSLayoutConstraint!
     private var linkPreviewTopToMosaic: NSLayoutConstraint!
     private var linkPreviewTopToShowMore: NSLayoutConstraint!
+    private var linkPreviewTopToTodo: NSLayoutConstraint!
+    private var linkPreviewTopToMixedContent: NSLayoutConstraint!
     private var linkPreviewBottomToBubble: NSLayoutConstraint!
     private var bubbleContainerTopConstraint: NSLayoutConstraint!
     private var traitChangeRegistration: UITraitChangeRegistration?
@@ -281,6 +283,8 @@ final class MessageTableCell: UITableViewCell {
         linkPreviewTopToText = linkPreviewView.topAnchor.constraint(equalTo: messageTextView.bottomAnchor, constant: 4)
         linkPreviewTopToMosaic = linkPreviewView.topAnchor.constraint(equalTo: mosaicView.bottomAnchor, constant: 4)
         linkPreviewTopToShowMore = linkPreviewView.topAnchor.constraint(equalTo: showMoreButton.bottomAnchor, constant: 4)
+        linkPreviewTopToTodo = linkPreviewView.topAnchor.constraint(equalTo: todoView.bottomAnchor, constant: 4)
+        linkPreviewTopToMixedContent = linkPreviewView.topAnchor.constraint(equalTo: mixedContentView.bottomAnchor, constant: 4)
         linkPreviewBottomToBubble = linkPreviewView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -4)
 
         // Height constraint for collapsing long messages (inactive by default)
@@ -535,6 +539,8 @@ final class MessageTableCell: UITableViewCell {
         linkPreviewTopToText.isActive = false
         linkPreviewTopToMosaic.isActive = false
         linkPreviewTopToShowMore.isActive = false
+        linkPreviewTopToTodo.isActive = false
+        linkPreviewTopToMixedContent.isActive = false
         linkPreviewBottomToBubble.isActive = false
         linkPreviewView.isHidden = true
         linkPreviewHeightConstraint.constant = 0
@@ -575,7 +581,7 @@ final class MessageTableCell: UITableViewCell {
         }
 
         // Configure link preview
-        if message.linkPreview != nil && !message.isTodoList && !message.hasContentBlocks {
+        if message.linkPreview != nil {
             let isDarkMode = traitCollection.userInterfaceStyle == .dark
             linkPreviewView.configure(with: message.linkPreview, isDarkMode: isDarkMode)
         }
@@ -707,6 +713,8 @@ final class MessageTableCell: UITableViewCell {
         linkPreviewTopToText.isActive = false
         linkPreviewTopToMosaic.isActive = false
         linkPreviewTopToShowMore.isActive = false
+        linkPreviewTopToTodo.isActive = false
+        linkPreviewTopToMixedContent.isActive = false
         linkPreviewBottomToBubble.isActive = false
 
         // Calculate bubble width (cell width - 32 for margins)
@@ -756,7 +764,17 @@ final class MessageTableCell: UITableViewCell {
             } else {
                 mixedContentTopToBubble.isActive = true
             }
-            mixedContentBottomToBubble.isActive = true
+
+            let hasLinkPreview = message.linkPreview != nil
+            if hasLinkPreview {
+                let previewHeight = LinkPreviewBubbleView.calculateHeight(for: message.linkPreview!, maxWidth: bubbleWidth)
+                linkPreviewHeightConstraint.constant = previewHeight
+                linkPreviewView.isHidden = false
+                linkPreviewTopToMixedContent.isActive = true
+                linkPreviewBottomToBubble.isActive = true
+            } else {
+                mixedContentBottomToBubble.isActive = true
+            }
             return
         }
 
@@ -765,11 +783,23 @@ final class MessageTableCell: UITableViewCell {
             let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             todoViewHeightConstraint.constant = todoHeight
             todoView.isHidden = false
-            todoViewBottomToBubble.isActive = true
             // Hide text and mosaic for todo lists
             messageTextView.isHidden = true
             mosaicView.isHidden = true
             mosaicHeightConstraint.constant = 0
+
+            let hasLinkPreview = message.linkPreview != nil
+            if hasLinkPreview {
+                let previewHeight = LinkPreviewBubbleView.calculateHeight(for: message.linkPreview!, maxWidth: bubbleWidth)
+                linkPreviewHeightConstraint.constant = previewHeight
+                linkPreviewView.isHidden = false
+                linkPreviewTopToTodo.isActive = true
+                linkPreviewBottomToBubble.isActive = true
+            } else {
+                todoViewBottomToBubble.isActive = true
+                linkPreviewHeightConstraint.constant = 0
+                linkPreviewView.isHidden = true
+            }
         } else {
             todoViewHeightConstraint.constant = 0
             todoView.isHidden = true

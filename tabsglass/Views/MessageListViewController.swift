@@ -1025,6 +1025,9 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 height += MosaicMediaView.calculateHeight(for: message.aspectRatios, maxWidth: bubbleWidth)
             }
             height += MixedContentView.calculateHeight(for: blocks, maxWidth: bubbleWidth)
+            if let linkPreview = message.linkPreview {
+                height += LinkPreviewBubbleView.calculateHeight(for: linkPreview, maxWidth: bubbleWidth) + 4
+            }
             return max(height, 50)
         }
 
@@ -1032,6 +1035,9 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         if message.isTodoList, let items = message.todoItems {
             let todoHeight = TodoBubbleView.calculateHeight(for: message.todoTitle, items: items, maxWidth: bubbleWidth)
             height += todoHeight
+            if let linkPreview = message.linkPreview {
+                height += LinkPreviewBubbleView.calculateHeight(for: linkPreview, maxWidth: bubbleWidth) + 4
+            }
             return max(height, 50)
         }
 
@@ -1083,7 +1089,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
 
         // Link preview height (only for non-todo, non-contentBlocks messages)
-        if let linkPreview = message.linkPreview, !message.isTodoList, !message.hasContentBlocks {
+        if let linkPreview = message.linkPreview, !message.hasContentBlocks {
             height += LinkPreviewBubbleView.calculateHeight(for: linkPreview, maxWidth: bubbleWidth) + 4
         }
 
