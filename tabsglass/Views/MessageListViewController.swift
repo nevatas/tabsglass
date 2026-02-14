@@ -199,7 +199,7 @@ final class MessageListViewController: UIViewController {
             gradientView.topAnchor.constraint(equalTo: view.topAnchor, constant: -60),
             gradientView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             gradientView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            gradientView.heightAnchor.constraint(equalToConstant: 190)
+            gradientView.heightAnchor.constraint(equalToConstant: 135)
         ])
 
         chatTopFadeGradient = gradientView
@@ -714,13 +714,13 @@ final class MessageListViewController: UIViewController {
 
         // Safe area top + header content + extra padding
         let safeAreaTop = view.safeAreaInsets.top
-        let headerHeight: CGFloat = 115
+        let headerHeight: CGFloat = 60
         let topInset = safeAreaTop + headerHeight
 
         if isSearchTab {
             // Search tab: normal layout (top to bottom)
             // Smaller top inset - just search input, no tab bar
-            let searchTopInset = safeAreaTop + 70
+            let searchTopInset = safeAreaTop + 60
             tableView.contentInset.top = searchTopInset
             tableView.verticalScrollIndicatorInsets.top = searchTopInset
             // Bottom inset for search input + keyboard

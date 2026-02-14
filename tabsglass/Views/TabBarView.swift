@@ -59,8 +59,6 @@ struct TabBarView: View {
     var inboxTitle: String = AppSettings.shared.inboxTitle
     @Binding var selectedIndex: Int
     @Binding var switchFraction: CGFloat  // -1.0 ... 0 ... 1.0 при свайпе
-    var tabsOffset: CGFloat = 0  // Offset for tabs row only (for Search transition)
-    var tabsOpacity: CGFloat = 1  // Opacity for tabs row only (fades on Search)
     let onAddTap: () -> Void
     let onMenuTap: () -> Void
     let onRenameTab: (Tab) -> Void
@@ -71,7 +69,6 @@ struct TabBarView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     private var themeManager: ThemeManager { ThemeManager.shared }
-    @AppStorage("spaceName") private var spaceName = "Taby"
 
     private var isOnSearch: Bool { selectedIndex == 0 }
 
@@ -93,83 +90,71 @@ struct TabBarView: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            // Header buttons row - stays in place
-            HStack {
-                // Settings button (left) - circular liquid glass
-                Button(action: onMenuTap) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(iconColor)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
-
-                Spacer()
-
-                // Title - changes to "Search" during swipe
-                ZStack {
-                    Text(spaceName)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .opacity(1 - searchProgress)
-                        .scaleEffect(1 - searchProgress * 0.2)
-
-                    Text(L10n.Search.title)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .opacity(searchProgress)
-                        .scaleEffect(0.8 + searchProgress * 0.2)
-                }
-
-                Spacer()
-
-                // Right button - icon morphs between plus and arrow during swipe
-                Button {
-                    if searchProgress >= 0.5 {
-                        onGoToInbox?()
-                    } else {
-                        onAddTap()
-                    }
-                } label: {
-                    ZStack {
-                        Image(systemName: "plus")
-                            .opacity(1 - searchProgress)
-                            .scaleEffect(1 - searchProgress * 0.5)
-
-                        Image(systemName: "chevron.right")
-                            .opacity(searchProgress)
-                            .scaleEffect(0.5 + searchProgress * 0.5)
-                    }
+        HStack(spacing: 8) {
+            // Settings button (left) - circular liquid glass
+            Button(action: onMenuTap) {
+                Image(systemName: "gearshape")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(iconColor)
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
             }
-            .padding(.horizontal, 12)
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
 
-            // Telegram-style unified tab bar - slides during Search transition
-            ScrollingTabBar(
-                tabs: tabs,
-                inboxTitle: inboxTitle,
-                selectedIndex: $selectedIndex,
-                switchFraction: $switchFraction,
-                onRenameTab: onRenameTab,
-                onRenameInbox: onRenameInbox,
-                onReorderTabs: onReorderTabs,
-                onDeleteTab: onDeleteTab
-            )
-            .padding(.horizontal, 12)
-            .offset(x: tabsOffset)
-            .opacity(tabsOpacity)
+            // Middle: Tab bar ↔ "Search" cross-fade
+            ZStack {
+                ScrollingTabBar(
+                    tabs: tabs,
+                    inboxTitle: inboxTitle,
+                    selectedIndex: $selectedIndex,
+                    switchFraction: $switchFraction,
+                    onRenameTab: onRenameTab,
+                    onRenameInbox: onRenameInbox,
+                    onReorderTabs: onReorderTabs,
+                    onDeleteTab: onDeleteTab
+                )
+                .opacity(1 - searchProgress)
+                .allowsHitTesting(searchProgress < 0.5)
+
+                Text(L10n.Search.title)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .opacity(searchProgress)
+                    .scaleEffect(0.8 + searchProgress * 0.2)
+                    .allowsHitTesting(false)
+            }
+            .frame(height: 46)
+
+            // Right button - icon morphs between plus and arrow during swipe
+            Button {
+                if searchProgress >= 0.5 {
+                    onGoToInbox?()
+                } else {
+                    onAddTap()
+                }
+            } label: {
+                ZStack {
+                    Image(systemName: "plus")
+                        .opacity(1 - searchProgress)
+                        .scaleEffect(1 - searchProgress * 0.5)
+
+                    Image(systemName: "chevron.right")
+                        .opacity(searchProgress)
+                        .scaleEffect(0.5 + searchProgress * 0.5)
+                }
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(iconColor)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
         }
+        .padding(.horizontal, 12)
         .padding(.top, 4)
-        .padding(.bottom, 16)
+        .padding(.bottom, 10)
         // No material background — ChatTopFadeGradientView in MessageListViewController
         // provides a theme-colored gradient behind the header area
     }
