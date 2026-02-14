@@ -133,8 +133,9 @@ struct IncompleteTodosProvider: TimelineProvider {
             }
         }
 
-        // Fetch messages that have todos
-        let descriptor = FetchDescriptor<Message>()
+        // Fetch messages that have todos, newest first
+        var descriptor = FetchDescriptor<Message>()
+        descriptor.sortBy = [SortDescriptor(\Message.createdAt, order: .reverse)]
         guard let messages = try? context.fetch(descriptor) else {
             return TodoEntry(date: .now, items: [], totalCount: 0, theme: theme)
         }
@@ -169,7 +170,7 @@ struct IncompleteTodosWidgetEntryView: View {
     @Environment(\.colorScheme) private var systemColorScheme
 
     private var effectiveColorScheme: ColorScheme {
-        entry.theme.colorSchemeOverride ?? systemColorScheme
+        entry.theme == .dark ? .dark : systemColorScheme
     }
 
     private var checkColor: Color {
