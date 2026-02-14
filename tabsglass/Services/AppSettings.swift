@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 import UIKit
 import Combine
+import WidgetKit
 
 // MARK: - App Theme
 
@@ -237,6 +238,8 @@ final class ThemeManager {
             AppSettings.shared.theme = currentTheme
             // Notify UIKit components about theme change
             NotificationCenter.default.post(name: .themeDidChange, object: nil)
+            // Reload widget to reflect new theme
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 
@@ -297,7 +300,14 @@ final class AppSettings {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.theme)
+            // Sync to shared UserDefaults so widget can read the theme
+            UserDefaults(suiteName: SharedConstants.appGroupID)?.set(newValue.rawValue, forKey: Keys.theme)
         }
+    }
+
+    /// Sync current theme to shared UserDefaults (call on app launch)
+    func syncThemeToSharedDefaults() {
+        UserDefaults(suiteName: SharedConstants.appGroupID)?.set(theme.rawValue, forKey: Keys.theme)
     }
 
     // MARK: - Legacy User (Grandfathering)
