@@ -717,20 +717,8 @@ final class MessageTableCell: UITableViewCell {
             let mosaicHeight = MosaicMediaView.calculateHeight(for: aspectRatios, maxWidth: bubbleWidth)
             mosaicHeightConstraint.constant = mosaicHeight
 
-            // Build MediaItems array (photos first, then videos)
-            var mediaItems: [MediaItem] = []
-            for fileName in message.photoFileNames {
-                mediaItems.append(.photo(fileName))
-            }
-            for (index, fileName) in message.videoFileNames.enumerated() {
-                let thumbnailFileName = index < message.videoThumbnailFileNames.count
-                    ? message.videoThumbnailFileNames[index]
-                    : ""
-                let duration = index < message.videoDurations.count
-                    ? message.videoDurations[index]
-                    : 0
-                mediaItems.append(.video(fileName, thumbnailFileName: thumbnailFileName, duration: duration))
-            }
+            // Build MediaItems array in display order (respects mediaOrder)
+            let mediaItems = message.orderedMediaItems
 
             // isAtBottom: true only when there's no text below (media-only message)
             mosaicView.configure(with: mediaItems, aspectRatios: aspectRatios, maxWidth: bubbleWidth, isAtBottom: !hasText && !hasTodo)
@@ -2073,38 +2061,23 @@ final class SearchResultCell: UITableViewCell {
 
     /// Configure thumbnail images for search result
     private func configureThumbnails(for message: Message) {
-        let totalMedia = message.photoFileNames.count + message.videoFileNames.count
+        let orderedItems = message.orderedMediaItems
+        let totalMedia = orderedItems.count
         let visibleCount = min(totalMedia, Self.maxVisibleThumbnails)
         let hiddenCount = totalMedia - visibleCount
 
-        for (index, fileName) in message.photoFileNames.prefix(visibleCount).enumerated() {
+        for index in 0..<visibleCount {
+            let item = orderedItems[index]
             let isLast = (index == visibleCount - 1) && hiddenCount > 0
-            let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount)
+            let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount, isVideo: item.isVideo)
             thumbnailStack.addArrangedSubview(thumbnailView)
 
             let thumbSize = CGSize(width: Self.thumbnailSize * 2, height: Self.thumbnailSize * 2)
-            ImageCache.shared.loadThumbnail(for: fileName, targetSize: thumbSize) { [weak thumbnailView] image in
+            let fileNameToLoad = item.isVideo ? (item.thumbnailFileName ?? item.fileName) : item.fileName
+            ImageCache.shared.loadThumbnail(for: fileNameToLoad, targetSize: thumbSize) { [weak thumbnailView] image in
                 DispatchQueue.main.async {
                     guard let imageView = thumbnailView?.subviews.first as? UIImageView else { return }
                     imageView.image = image
-                }
-            }
-        }
-
-        let remainingSlots = visibleCount - message.photoFileNames.count
-        if remainingSlots > 0 {
-            for (index, thumbFileName) in message.videoThumbnailFileNames.prefix(remainingSlots).enumerated() {
-                let actualIndex = message.photoFileNames.count + index
-                let isLast = (actualIndex == visibleCount - 1) && hiddenCount > 0
-                let thumbnailView = createThumbnailView(isLast: isLast, hiddenCount: hiddenCount, isVideo: true)
-                thumbnailStack.addArrangedSubview(thumbnailView)
-
-                let thumbSize = CGSize(width: Self.thumbnailSize * 2, height: Self.thumbnailSize * 2)
-                ImageCache.shared.loadThumbnail(for: thumbFileName, targetSize: thumbSize) { [weak thumbnailView] image in
-                    DispatchQueue.main.async {
-                        guard let imageView = thumbnailView?.subviews.first as? UIImageView else { return }
-                        imageView.image = image
-                    }
                 }
             }
         }

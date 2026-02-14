@@ -21,7 +21,8 @@ struct EditMessageSheet: View {
     let originalVideoThumbnailFileNames: [String]
     let originalVideoDurations: [Double]
     let originalLinkPreview: LinkPreview?
-    let onSave: (String, [TextEntity]?, [String], [String], [String], [Double], LinkPreview?) -> Void
+    let originalMediaOrder: [String]?
+    let onSave: (String, [TextEntity]?, [String], [String], [String], [Double], LinkPreview?, [String]?) -> Void
     let onCancel: () -> Void
 
     init(
@@ -32,7 +33,8 @@ struct EditMessageSheet: View {
         originalVideoThumbnailFileNames: [String] = [],
         originalVideoDurations: [Double] = [],
         originalLinkPreview: LinkPreview? = nil,
-        onSave: @escaping (String, [TextEntity]?, [String], [String], [String], [Double], LinkPreview?) -> Void,
+        originalMediaOrder: [String]? = nil,
+        onSave: @escaping (String, [TextEntity]?, [String], [String], [String], [Double], LinkPreview?, [String]?) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.originalText = originalText
@@ -42,6 +44,7 @@ struct EditMessageSheet: View {
         self.originalVideoThumbnailFileNames = originalVideoThumbnailFileNames
         self.originalVideoDurations = originalVideoDurations
         self.originalLinkPreview = originalLinkPreview
+        self.originalMediaOrder = originalMediaOrder
         self.onSave = onSave
         self.onCancel = onCancel
     }
@@ -61,6 +64,7 @@ struct EditMessageSheet: View {
     @State private var isLoadingLinkPreview = false
     @State private var lastDetectedURL: String?
     @State private var linkPreviewDismissed = false
+    @State private var mediaOrder: [String]? = nil
     @State private var showDiscardAlert = false
     private var themeManager: ThemeManager { ThemeManager.shared }
     @Environment(\.colorScheme) private var colorScheme
@@ -170,6 +174,7 @@ struct EditMessageSheet: View {
             videoFileNames = originalVideoFileNames
             videoThumbnailFileNames = originalVideoThumbnailFileNames
             videoDurations = originalVideoDurations
+            mediaOrder = originalMediaOrder
             linkPreview = originalLinkPreview
             if let preview = originalLinkPreview {
                 lastDetectedURL = preview.url
@@ -317,9 +322,9 @@ struct EditMessageSheet: View {
 
             adjustedEntities.append(contentsOf: TextEntity.detectURLs(in: trimmed))
             let previewToSave = extractLinkPreview()
-            onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, previewToSave)
+            onSave(trimmed, adjustedEntities.isEmpty ? nil : adjustedEntities, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, previewToSave, mediaOrder)
         } else if totalMediaCount > 0 {
-            onSave("", nil, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, nil)
+            onSave("", nil, photoFileNames, videoFileNames, videoThumbnailFileNames, videoDurations, nil, mediaOrder)
         }
     }
 
@@ -345,6 +350,20 @@ struct EditMessageSheet: View {
         if index < photos.count {
             photos.remove(at: index)
         }
+        // Remove the (index+1)th "p" from mediaOrder
+        if var order = mediaOrder {
+            var pCount = 0
+            for (i, tag) in order.enumerated() {
+                if tag == "p" {
+                    if pCount == index {
+                        order.remove(at: i)
+                        break
+                    }
+                    pCount += 1
+                }
+            }
+            mediaOrder = order.isEmpty ? nil : order
+        }
     }
 
     private func removeVideo(at index: Int) {
@@ -359,6 +378,20 @@ struct EditMessageSheet: View {
         if index < videoThumbnails.count {
             videoThumbnails.remove(at: index)
         }
+        // Remove the (index+1)th "v" from mediaOrder
+        if var order = mediaOrder {
+            var vCount = 0
+            for (i, tag) in order.enumerated() {
+                if tag == "v" {
+                    if vCount == index {
+                        order.remove(at: i)
+                        break
+                    }
+                    vCount += 1
+                }
+            }
+            mediaOrder = order.isEmpty ? nil : order
+        }
     }
 
     private func addPhoto(_ image: UIImage) {
@@ -366,6 +399,10 @@ struct EditMessageSheet: View {
         if let result = Message.savePhoto(image) {
             photoFileNames.append(result.fileName)
             photos.append(image)
+            // Append "p" to mediaOrder
+            if mediaOrder != nil {
+                mediaOrder?.append("p")
+            }
         }
     }
 
@@ -638,7 +675,7 @@ struct EditFormattingTextView: UIViewRepresentable {
         originalText: text,
         originalEntities: nil,
         originalPhotoFileNames: [],
-        onSave: { _, _, _, _, _, _, _ in },
+        onSave: { _, _, _, _, _, _, _, _ in },
         onCancel: { }
     )
 }

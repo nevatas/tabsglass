@@ -21,6 +21,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     @Binding var switchFraction: CGFloat  // -1.0 to 1.0 swipe progress
     @Binding var attachedImages: [UIImage]
     @Binding var attachedVideos: [AttachedVideo]
+    @Binding var mediaOrderTags: [String]
     @Binding var formattingEntities: [TextEntity]  // Entities from formatting
     @Binding var composerContent: FormattingTextView.ComposerContent?
     @Binding var linkPreview: LinkPreview?
@@ -73,6 +74,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         }
         vc.onVideosChange = { videos in
             attachedVideos = videos
+        }
+        vc.onMediaOrderChange = { tags in
+            mediaOrderTags = tags
         }
         vc.onEntitiesExtracted = { entities in
             formattingEntities = entities
@@ -218,6 +222,7 @@ final class UnifiedChatViewController: UIViewController {
     var onEditMessage: ((Message) -> Void)?
     var onImagesChange: (([UIImage]) -> Void)?
     var onVideosChange: (([AttachedVideo]) -> Void)?
+    var onMediaOrderChange: (([String]) -> Void)?
     var onRestoreMessage: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
@@ -352,9 +357,7 @@ final class UnifiedChatViewController: UIViewController {
     private let mediaWarmupQueue = DispatchQueue(label: "com.tabsglass.mediawarmup", qos: .utility)
 
     private struct MediaWarmupSnapshot {
-        let photoFileNames: [String]
-        let videoFileNames: [String]
-        let videoThumbnailFileNames: [String]
+        let orderedMediaItems: [MediaItem]
         let aspectRatios: [CGFloat]
     }
 
@@ -543,10 +546,12 @@ final class UnifiedChatViewController: UIViewController {
 
         inputContainer.onImagesChange = { [weak self] images in
             self?.onImagesChange?(images)
+            self?.onMediaOrderChange?(self?.inputContainer.mediaOrderTags ?? [])
         }
 
         inputContainer.onVideosChange = { [weak self] videos in
             self?.onVideosChange?(videos)
+            self?.onMediaOrderChange?(self?.inputContainer.mediaOrderTags ?? [])
         }
 
         // Bottom fade gradient (behind inputContainer, at screen/keyboard bottom)
@@ -946,9 +951,7 @@ final class UnifiedChatViewController: UIViewController {
             .prefix(10)
             .map {
                 MediaWarmupSnapshot(
-                    photoFileNames: $0.photoFileNames,
-                    videoFileNames: $0.videoFileNames,
-                    videoThumbnailFileNames: $0.videoThumbnailFileNames,
+                    orderedMediaItems: $0.orderedMediaItems,
                     aspectRatios: $0.aspectRatios
                 )
             }
@@ -966,27 +969,26 @@ final class UnifiedChatViewController: UIViewController {
                 guard !layoutItems.isEmpty else { continue }
 
                 let loadLimit = min(layoutItems.count, maxMediaItemsPerMessage)
-                let photoCount = snapshot.photoFileNames.count
 
                 for itemIndex in 0..<loadLimit {
                     let targetSize = layoutItems[itemIndex].frame.size
-                    if itemIndex < photoCount {
+                    guard itemIndex < snapshot.orderedMediaItems.count else { continue }
+                    let item = snapshot.orderedMediaItems[itemIndex]
+
+                    if item.isVideo {
+                        if let thumbFileName = item.thumbnailFileName, !thumbFileName.isEmpty {
+                            ImageCache.shared.prefetchVideoThumbnails(
+                                videoFileNames: [item.fileName],
+                                thumbnailFileNames: [thumbFileName],
+                                targetSize: targetSize
+                            )
+                        }
+                    } else {
                         ImageCache.shared.prefetchThumbnails(
-                            for: [snapshot.photoFileNames[itemIndex]],
+                            for: [item.fileName],
                             targetSize: targetSize
                         )
-                        continue
                     }
-
-                    let videoIndex = itemIndex - photoCount
-                    guard videoIndex < snapshot.videoFileNames.count,
-                          videoIndex < snapshot.videoThumbnailFileNames.count else { continue }
-
-                    ImageCache.shared.prefetchVideoThumbnails(
-                        videoFileNames: [snapshot.videoFileNames[videoIndex]],
-                        thumbnailFileNames: [snapshot.videoThumbnailFileNames[videoIndex]],
-                        targetSize: targetSize
-                    )
                 }
             }
         }
@@ -1255,49 +1257,40 @@ final class UnifiedChatViewController: UIViewController {
     // MARK: - Gallery
 
     private func presentGallery(message: Message, startIndex: Int, sourceFrame: CGRect) {
-        let totalMedia = message.totalMediaCount
-        guard totalMedia > 0, startIndex < totalMedia else { return }
+        let orderedItems = message.orderedMediaItems
+        guard !orderedItems.isEmpty, startIndex < orderedItems.count else { return }
 
-        // Load all media asynchronously
+        // Load all media asynchronously in display order
         let group = DispatchGroup()
         var loadedMedia: [Int: GalleryMediaItem] = [:]
 
-        // Load photos
-        for (index, fileName) in message.photoFileNames.enumerated() {
-            group.enter()
-            ImageCache.shared.loadFullImage(for: fileName) { image in
-                if let image = image {
-                    loadedMedia[index] = .photo(image: image)
-                }
-                group.leave()
-            }
-        }
-
-        // Load video thumbnails and prepare video items
-        let photoCount = message.photoFileNames.count
-        for (videoIndex, videoFileName) in message.videoFileNames.enumerated() {
-            let mediaIndex = photoCount + videoIndex
-            let videoURL = SharedVideoStorage.videoURL(for: videoFileName)
-
-            // Load thumbnail if available
-            if videoIndex < message.videoThumbnailFileNames.count {
-                let thumbFileName = message.videoThumbnailFileNames[videoIndex]
-                group.enter()
-                ImageCache.shared.loadFullImage(for: thumbFileName) { thumbnail in
-                    loadedMedia[mediaIndex] = .video(url: videoURL, thumbnail: thumbnail)
-                    group.leave()
+        for (index, item) in orderedItems.enumerated() {
+            if item.isVideo {
+                let videoURL = SharedVideoStorage.videoURL(for: item.fileName)
+                if let thumbFileName = item.thumbnailFileName, !thumbFileName.isEmpty {
+                    group.enter()
+                    ImageCache.shared.loadFullImage(for: thumbFileName) { thumbnail in
+                        loadedMedia[index] = .video(url: videoURL, thumbnail: thumbnail)
+                        group.leave()
+                    }
+                } else {
+                    loadedMedia[index] = .video(url: videoURL, thumbnail: nil)
                 }
             } else {
-                loadedMedia[mediaIndex] = .video(url: videoURL, thumbnail: nil)
+                group.enter()
+                ImageCache.shared.loadFullImage(for: item.fileName) { image in
+                    if let image = image {
+                        loadedMedia[index] = .photo(image: image)
+                    }
+                    group.leave()
+                }
             }
         }
 
         group.notify(queue: .main) { [weak self] in
-            // Convert to ordered array
-            let mediaItems = (0..<totalMedia).compactMap { loadedMedia[$0] }
+            let mediaItems = (0..<orderedItems.count).compactMap { loadedMedia[$0] }
             guard !mediaItems.isEmpty, startIndex < mediaItems.count else { return }
 
-            // Get source image for transition
             let sourceImage = mediaItems[startIndex].thumbnail
 
             let galleryVC = GalleryViewController(

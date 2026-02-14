@@ -22,6 +22,30 @@ struct AttachedVideo: Identifiable {
     let duration: Double
 }
 
+// MARK: - Composer Media Item (unified ordered media)
+
+enum ComposerMediaItem: Identifiable {
+    case image(IdentifiableImage)
+    case video(AttachedVideo)
+
+    var id: UUID {
+        switch self {
+        case .image(let img): return img.id
+        case .video(let vid): return vid.id
+        }
+    }
+
+    var isVideo: Bool {
+        if case .video = self { return true }
+        return false
+    }
+
+    /// Media order tag: "p" for photo, "v" for video
+    var orderTag: String {
+        isVideo ? "v" : "p"
+    }
+}
+
 // MARK: - Composer State (Observable)
 
 @Observable
@@ -29,8 +53,7 @@ final class ComposerState {
     var text: String = ""
     var attributedText: NSAttributedString = NSAttributedString()
     var shouldFocus: Bool = false
-    var attachedImages: [IdentifiableImage] = []
-    var attachedVideos: [AttachedVideo] = []
+    var attachedMedia: [ComposerMediaItem] = []
     var textViewHeight: CGFloat = 24
     var onTextChange: ((String) -> Void)?
     var onSend: (() -> Void)?
@@ -41,6 +64,22 @@ final class ComposerState {
     var onShowCamera: (() -> Void)?
     /// Reference to the formatting text view for extracting entities
     weak var formattingTextView: FormattingTextView?
+
+    /// Filtered images from attachedMedia (backward compat)
+    var attachedImages: [IdentifiableImage] {
+        attachedMedia.compactMap {
+            if case .image(let img) = $0 { return img }
+            return nil
+        }
+    }
+
+    /// Filtered videos from attachedMedia (backward compat)
+    var attachedVideos: [AttachedVideo] {
+        attachedMedia.compactMap {
+            if case .video(let vid) = $0 { return vid }
+            return nil
+        }
+    }
 
     /// Height of media section (80 when visible, 0 when hidden)
     var mediaSectionHeight: CGFloat = 0
@@ -53,7 +92,7 @@ final class ComposerState {
 
     /// Total count of attached media (photos + videos)
     var totalMediaCount: Int {
-        attachedImages.count + attachedVideos.count
+        attachedMedia.count
     }
 
     /// Whether more media can be added
@@ -130,55 +169,36 @@ final class ComposerState {
         onLinkPreviewChange?()
     }
 
-    func removeImage(at index: Int) {
-        guard index < attachedImages.count else { return }
+    func removeMedia(id: UUID) {
+        guard let index = attachedMedia.firstIndex(where: { $0.id == id }) else { return }
         let isLastMedia = totalMediaCount == 1
 
         if isLastMedia {
-            // Last media: remove without animation
             mediaSectionHeight = 0
-            attachedImages.removeAll()
+            attachedMedia.removeAll()
         } else {
             _ = withAnimation(.easeOut(duration: 0.2)) {
-                attachedImages.remove(at: index)
+                attachedMedia.remove(at: index)
             }
         }
         onAttachmentChange?()
     }
 
     func removeImage(id: UUID) {
-        guard let index = attachedImages.firstIndex(where: { $0.id == id }) else { return }
-        removeImage(at: index)
-    }
-
-    func removeVideo(at index: Int) {
-        guard index < attachedVideos.count else { return }
-        let isLastMedia = totalMediaCount == 1
-
-        if isLastMedia {
-            // Last media: remove without animation
-            mediaSectionHeight = 0
-            attachedVideos.removeAll()
-        } else {
-            _ = withAnimation(.easeOut(duration: 0.2)) {
-                attachedVideos.remove(at: index)
-            }
-        }
-        onAttachmentChange?()
+        removeMedia(id: id)
     }
 
     func removeVideo(id: UUID) {
-        guard let index = attachedVideos.firstIndex(where: { $0.id == id }) else { return }
-        removeVideo(at: index)
+        removeMedia(id: id)
     }
 
     func addImages(_ images: [UIImage]) {
         let available = 10 - totalMediaCount
-        let toAdd = images.prefix(available).map { IdentifiableImage(image: $0) }
-        attachedImages.append(contentsOf: toAdd)
-        // Set height when adding first media (80 + 12 spacing = 92)
-        if mediaSectionHeight == 0 && totalMediaCount > 0 {
-            withAnimation(.easeOut(duration: 0.25)) {
+        let toAdd = images.prefix(available).map { ComposerMediaItem.image(IdentifiableImage(image: $0)) }
+        let isFirst = mediaSectionHeight == 0
+        withAnimation(.easeOut(duration: 0.25)) {
+            attachedMedia.append(contentsOf: toAdd)
+            if isFirst && totalMediaCount > 0 {
                 mediaSectionHeight = 92
             }
         }
@@ -187,10 +207,10 @@ final class ComposerState {
 
     func addVideo(_ video: AttachedVideo) {
         guard canAddMedia else { return }
-        attachedVideos.append(video)
-        // Set height when adding first media
-        if mediaSectionHeight == 0 && totalMediaCount > 0 {
-            withAnimation(.easeOut(duration: 0.25)) {
+        let isFirst = mediaSectionHeight == 0
+        withAnimation(.easeOut(duration: 0.25)) {
+            attachedMedia.append(.video(video))
+            if isFirst && totalMediaCount > 0 {
                 mediaSectionHeight = 92
             }
         }
@@ -198,8 +218,7 @@ final class ComposerState {
     }
 
     func clearAttachments() {
-        attachedImages.removeAll()
-        attachedVideos.removeAll()
+        attachedMedia.removeAll()
         mediaSectionHeight = 0
     }
 
@@ -327,6 +346,11 @@ final class SwiftUIComposerContainer: UIView {
     /// Total media count (images + videos)
     var totalMediaCount: Int {
         composerState.totalMediaCount
+    }
+
+    /// Media order tags reflecting current composer media order
+    var mediaOrderTags: [String] {
+        composerState.attachedMedia.map { $0.orderTag }
     }
 
     /// Add images from picker
@@ -695,19 +719,19 @@ struct EmbeddedComposerView: View {
                         VStack(spacing: 0) {
                             ScrollView(.horizontal) {
                                 LazyHStack(spacing: 8) {
-                                    // Images first
-                                    ForEach(state.attachedImages) { item in
-                                        AttachedImageView(image: item.image) {
-                                            state.removeImage(id: item.id)
+                                    ForEach(state.attachedMedia) { item in
+                                        switch item {
+                                        case .image(let img):
+                                            AttachedImageView(image: img.image) {
+                                                state.removeMedia(id: item.id)
+                                            }
+                                            .transition(.scale.combined(with: .opacity))
+                                        case .video(let vid):
+                                            AttachedVideoView(video: vid) {
+                                                state.removeMedia(id: item.id)
+                                            }
+                                            .transition(.scale.combined(with: .opacity))
                                         }
-                                        .transition(.scale.combined(with: .opacity))
-                                    }
-                                    // Videos after
-                                    ForEach(state.attachedVideos) { video in
-                                        AttachedVideoView(video: video) {
-                                            state.removeVideo(id: video.id)
-                                        }
-                                        .transition(.scale.combined(with: .opacity))
                                     }
                                 }
                                 .padding(.horizontal, 8)

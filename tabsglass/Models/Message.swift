@@ -335,6 +335,7 @@ final class Message: Identifiable {
     var videoAspectRatios: [Double] = []
     var videoDurations: [Double] = []
     var videoThumbnailFileNames: [String] = []
+    var mediaOrder: [String]?       // Interleaved order tags: "p" = photo, "v" = video (nil = photos-first legacy)
     var todoItems: [TodoItem]?      // Todo list items (nil = not a todo list)
     var todoTitle: String?          // Optional title for todo list
     var contentBlocks: [ContentBlock]?  // Ordered mixed content blocks (nil = old format)
@@ -394,6 +395,7 @@ final class Message: Identifiable {
         videoAspectRatios: [Double] = [],
         videoDurations: [Double] = [],
         videoThumbnailFileNames: [String] = [],
+        mediaOrder: [String]? = nil,
         position: Int = 0,
         sourceUrl: String? = nil,
         linkPreview: LinkPreview? = nil,
@@ -415,11 +417,58 @@ final class Message: Identifiable {
         self.videoAspectRatios = videoAspectRatios
         self.videoDurations = videoDurations
         self.videoThumbnailFileNames = videoThumbnailFileNames
+        self.mediaOrder = mediaOrder
     }
 
-    /// Get aspect ratios as CGFloat array (photos + videos combined)
+    /// Get media items in display order, respecting `mediaOrder` when present
+    var orderedMediaItems: [MediaItem] {
+        guard let order = mediaOrder, order.count == totalMediaCount else {
+            // Legacy fallback: photos first, then videos
+            var items: [MediaItem] = photoFileNames.map { .photo($0) }
+            for (i, fileName) in videoFileNames.enumerated() {
+                let thumb = i < videoThumbnailFileNames.count ? videoThumbnailFileNames[i] : ""
+                let dur = i < videoDurations.count ? videoDurations[i] : 0
+                items.append(.video(fileName, thumbnailFileName: thumb, duration: dur))
+            }
+            return items
+        }
+
+        var items: [MediaItem] = []
+        var photoIdx = 0
+        var videoIdx = 0
+        for tag in order {
+            if tag == "p", photoIdx < photoFileNames.count {
+                items.append(.photo(photoFileNames[photoIdx]))
+                photoIdx += 1
+            } else if tag == "v", videoIdx < videoFileNames.count {
+                let thumb = videoIdx < videoThumbnailFileNames.count ? videoThumbnailFileNames[videoIdx] : ""
+                let dur = videoIdx < videoDurations.count ? videoDurations[videoIdx] : 0
+                items.append(.video(videoFileNames[videoIdx], thumbnailFileName: thumb, duration: dur))
+                videoIdx += 1
+            }
+        }
+        return items
+    }
+
+    /// Get aspect ratios in display order, respecting `mediaOrder` when present
     var aspectRatios: [CGFloat] {
-        (photoAspectRatios + videoAspectRatios).map { CGFloat($0) }
+        guard let order = mediaOrder, order.count == totalMediaCount else {
+            return (photoAspectRatios + videoAspectRatios).map { CGFloat($0) }
+        }
+
+        var ratios: [CGFloat] = []
+        var photoIdx = 0
+        var videoIdx = 0
+        for tag in order {
+            if tag == "p", photoIdx < photoAspectRatios.count {
+                ratios.append(CGFloat(photoAspectRatios[photoIdx]))
+                photoIdx += 1
+            } else if tag == "v", videoIdx < videoAspectRatios.count {
+                ratios.append(CGFloat(videoAspectRatios[videoIdx]))
+                videoIdx += 1
+            }
+        }
+        return ratios
     }
 
     /// Get photo-only aspect ratios as CGFloat array
