@@ -8,10 +8,16 @@
 import SwiftUI
 import SwiftData
 
+struct DeepLink {
+    let tabId: UUID?
+    let messageId: UUID
+}
+
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var showOnboarding = false // TODO: revert to !AppSettings.shared.hasCompletedOnboarding
     @State private var showPaywall = false // TODO: revert to AppSettings.shared.hasCompletedOnboarding
+    @State private var pendingDeepLink: DeepLink?
     private var themeManager: ThemeManager { ThemeManager.shared }
 
     private var backgroundColor: Color {
@@ -29,7 +35,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            MainContainerView()
+            MainContainerView(pendingDeepLink: $pendingDeepLink)
                 .onAppear {
                     KeyboardWarmer.shared.warmUp()
                 }
@@ -47,6 +53,13 @@ struct ContentView: View {
         }
         .background(backgroundColor.ignoresSafeArea())
         .preferredColorScheme(themeManager.currentTheme.colorSchemeOverride)
+        .onOpenURL { url in
+            guard url.scheme == "taby", url.host == "task" else { return }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            guard let messageId = components?.queryItems?.first(where: { $0.name == "message" })?.value.flatMap(UUID.init) else { return }
+            let tabId = components?.queryItems?.first(where: { $0.name == "tab" })?.value.flatMap(UUID.init)
+            pendingDeepLink = DeepLink(tabId: tabId, messageId: messageId)
+        }
     }
 }
 

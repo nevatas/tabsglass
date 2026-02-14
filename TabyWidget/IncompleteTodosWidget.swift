@@ -66,6 +66,20 @@ struct WidgetTodoItem: Identifiable {
     let id: UUID
     let text: String
     let tabName: String
+    let messageId: UUID
+    let tabId: UUID?
+
+    var deepLinkURL: URL {
+        var components = URLComponents()
+        components.scheme = "taby"
+        components.host = "task"
+        var queryItems = [URLQueryItem(name: "message", value: messageId.uuidString)]
+        if let tabId = tabId {
+            queryItems.insert(URLQueryItem(name: "tab", value: tabId.uuidString), at: 0)
+        }
+        components.queryItems = queryItems
+        return components.url!
+    }
 }
 
 struct TodoEntry: TimelineEntry {
@@ -84,8 +98,8 @@ struct IncompleteTodosProvider: TimelineProvider {
         TodoEntry(
             date: .now,
             items: [
-                WidgetTodoItem(id: UUID(), text: "Buy groceries", tabName: "Shopping"),
-                WidgetTodoItem(id: UUID(), text: "Call dentist", tabName: "\u{1F4E5} Inbox")
+                WidgetTodoItem(id: UUID(), text: "Buy groceries", tabName: "Shopping", messageId: UUID(), tabId: UUID()),
+                WidgetTodoItem(id: UUID(), text: "Call dentist", tabName: "\u{1F4E5} Inbox", messageId: UUID(), tabId: nil)
             ],
             totalCount: 2,
             theme: .current()
@@ -132,11 +146,11 @@ struct IncompleteTodosProvider: TimelineProvider {
 
             if let blocks = message.contentBlocks, !blocks.isEmpty {
                 for block in blocks where block.type == "todo" && !block.isCompleted {
-                    allItems.append(WidgetTodoItem(id: block.id, text: block.text, tabName: tabName))
+                    allItems.append(WidgetTodoItem(id: block.id, text: block.text, tabName: tabName, messageId: message.id, tabId: message.tabId))
                 }
             } else if let todos = message.todoItems, !todos.isEmpty {
                 for item in todos where !item.isCompleted {
-                    allItems.append(WidgetTodoItem(id: item.id, text: item.text, tabName: tabName))
+                    allItems.append(WidgetTodoItem(id: item.id, text: item.text, tabName: tabName, messageId: message.id, tabId: message.tabId))
                 }
             }
         }
@@ -218,24 +232,27 @@ struct IncompleteTodosWidgetEntryView: View {
                     .foregroundStyle(secondaryText)
                 Spacer()
             }
+            .padding(.bottom, remaining > 0 ? 0 : 4)
 
             // Todo items
             ForEach(visible) { item in
-                HStack(spacing: 8) {
-                    Image(systemName: "circle")
-                        .font(.system(size: 14))
-                        .foregroundStyle(checkColor)
-                    Text(item.text)
-                        .font(.callout)
-                        .foregroundStyle(primaryText)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Text(item.tabName)
-                        .font(.caption)
-                        .foregroundStyle(tertiaryText)
-                        .lineLimit(1)
-                        .layoutPriority(1)
+                Link(destination: item.deepLinkURL) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "circle")
+                            .font(.system(size: 14))
+                            .foregroundStyle(checkColor)
+                        Text(item.text)
+                            .font(.callout)
+                            .foregroundStyle(primaryText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 4)
+                        Text(item.tabName)
+                            .font(.caption)
+                            .foregroundStyle(tertiaryText)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                    }
                 }
             }
 
@@ -245,6 +262,8 @@ struct IncompleteTodosWidgetEntryView: View {
                     .font(.caption)
                     .foregroundStyle(tertiaryText)
             }
+
+            Spacer(minLength: 0)
         }
         .padding(.top, -4)
         .padding(.bottom, -4)

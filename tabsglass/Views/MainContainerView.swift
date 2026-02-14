@@ -10,11 +10,13 @@ import UIKit
 import WidgetKit
 
 struct MainContainerView: View {
+    @Binding var pendingDeepLink: DeepLink?
     @Environment(\.modelContext) private var modelContext
     @Environment(\.requestReview) private var requestReview
     @Query(sort: \Tab.position) private var tabs: [Tab]
     @Query(sort: \Message.createdAt) private var allMessages: [Message]
     @State private var selectedTabIndex = 1  // 0 = Search, 1 = Inbox (virtual), 2+ = real tabs
+    @State private var pendingScrollMessageId: UUID?
     @State private var showNewTabAlert = false
     @State private var showRenameAlert = false
     @State private var showRenameInboxAlert = false
@@ -138,7 +140,8 @@ struct MainContainerView: View {
                     }
                 }
             },
-            reloadTrigger: reloadTrigger
+            reloadTrigger: reloadTrigger,
+            pendingScrollMessageId: $pendingScrollMessageId
         )
     }
 
@@ -346,6 +349,25 @@ struct MainContainerView: View {
             if abs(switchFraction) > 0.01 {
                 switchFraction = 0
             }
+        }
+        .onChange(of: pendingDeepLink?.messageId) { _, newValue in
+            guard let deepLink = pendingDeepLink else { return }
+            // Resolve tab index from tabId
+            let targetIndex: Int
+            if let tabId = deepLink.tabId,
+               let idx = tabs.firstIndex(where: { $0.id == tabId }) {
+                targetIndex = idx + 2  // 0=Search, 1=Inbox, 2+=real tabs
+            } else {
+                targetIndex = 1  // Inbox
+            }
+            // Navigate to tab
+            withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                selectedTabIndex = targetIndex
+                switchFraction = 0
+            }
+            // Schedule scroll after page transition completes
+            pendingScrollMessageId = deepLink.messageId
+            pendingDeepLink = nil
         }
         .sheet(item: $messageToEdit) { message in
             EditMessageSheet(
@@ -1146,6 +1168,6 @@ extension Character {
 }
 
 #Preview {
-    MainContainerView()
+    MainContainerView(pendingDeepLink: .constant(nil))
         .modelContainer(for: [Tab.self, Message.self], inMemory: true)
 }

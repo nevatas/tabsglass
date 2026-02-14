@@ -43,6 +43,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     /// Incremented to force UIKit reload when SwiftData mutations aren't detectable via reference comparison
     var reloadTrigger: Int = 0
 
+    /// Set by deep link handler to scroll to a specific message after tab navigation
+    @Binding var pendingScrollMessageId: UUID?
+
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
         vc.tabs = tabs
@@ -190,6 +193,17 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             uiViewController.updatePageSelection(animated: true)
         } else if idsChanged || contentChanged || forceReload {
             uiViewController.reloadCurrentTab()
+        }
+
+        // Deep link: scroll to message after page transition completes
+        if let messageId = pendingScrollMessageId {
+            let targetIndex = selectedIndex
+            DispatchQueue.main.async {
+                self.pendingScrollMessageId = nil
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                uiViewController.scrollToMessage(id: messageId, inTabAtIndex: targetIndex)
+            }
         }
     }
 }
@@ -1116,6 +1130,13 @@ final class UnifiedChatViewController: UIViewController {
                 cachedVC.reloadMessages(invalidateHeights: true)
             }
         } else {
+        }
+    }
+
+    /// Scroll to a specific message in the given tab (used by deep links)
+    func scrollToMessage(id messageId: UUID, inTabAtIndex index: Int) {
+        if let targetVC = messageControllers[index] {
+            targetVC.scrollToMessage(id: messageId, animated: true)
         }
     }
 

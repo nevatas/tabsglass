@@ -99,12 +99,20 @@
 			);
 			target = D6C2B14A2F2B909B000F3043 /* share */;
 		};
+		D6DEEP012F600D0100000001 /* Exceptions for "tabsglass" folder in "tabsglass" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D63BFDE92F217BAC00B28B56 /* tabsglass */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D63BFDEC2F217BAC00B28B56 /* tabsglass */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				D6DEEP012F600D0100000001 /* Exceptions for "tabsglass" folder in "tabsglass" target */,
 				D6C2B15E2F2B91CB000F3043 /* Exceptions for "tabsglass" folder in "share" target */,
 				D6AAAA0D2F400D0D00000001 /* Exceptions for "tabsglass" folder in "TabyWidget" target */,
 			);
@@ -613,6 +621,7 @@
 				DEVELOPMENT_TEAM = Y33Y2LGZBR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = tabsglass/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Taby;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -651,6 +660,7 @@
 				DEVELOPMENT_TEAM = Y33Y2LGZBR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = tabsglass/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Taby;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
