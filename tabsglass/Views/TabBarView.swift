@@ -68,7 +68,6 @@ struct TabBarView: View {
     let onReorderTabs: () -> Void
     let onDeleteTab: (Tab) -> Void
     var onGoToInbox: (() -> Void)? = nil  // Called when arrow button tapped on Search
-    var isHeaderHidden: Bool = false
 
     @Environment(\.colorScheme) private var colorScheme
     private var themeManager: ThemeManager { ThemeManager.shared }
@@ -94,7 +93,7 @@ struct TabBarView: View {
     }
 
     var body: some View {
-        VStack(spacing: isHeaderHidden ? 0 : 10) {
+        VStack(spacing: 10) {
             // Header buttons row - stays in place
             HStack {
                 // Settings button (left) - circular liquid glass
@@ -153,9 +152,6 @@ struct TabBarView: View {
                 .glassEffect(.regular.interactive(), in: .circle)
             }
             .padding(.horizontal, 12)
-            .offset(y: isHeaderHidden ? -54 : 0)
-            .padding(.bottom, isHeaderHidden ? -44 : 0)
-            .opacity(isHeaderHidden ? 0 : 1)
 
             // Telegram-style unified tab bar - slides during Search transition
             ScrollingTabBar(

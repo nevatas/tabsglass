@@ -31,7 +31,6 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     var onRestoreMessage: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
-    var onComposerFocusChange: ((Bool) -> Void)?
 
     // Selection mode
     @Binding var isSelectionMode: Bool
@@ -83,7 +82,6 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onLinkPreviewExtracted = { preview in
             linkPreview = preview
         }
-        vc.onComposerFocusChange = onComposerFocusChange
         // Selection mode
         vc.isSelectionMode = isSelectionMode
         vc.selectedMessageIds = selectedMessageIds
@@ -120,7 +118,6 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onRestoreMessage = onRestoreMessage
         uiViewController.onToggleTodoItem = onToggleTodoItem
         uiViewController.onToggleReminder = onToggleReminder
-        uiViewController.onComposerFocusChange = onComposerFocusChange
         uiViewController.onEnterSelectionMode = onEnterSelectionMode
         uiViewController.onToggleMessageSelection = onToggleMessageSelection
 
@@ -221,7 +218,6 @@ final class UnifiedChatViewController: UIViewController {
     var onRestoreMessage: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
-    var onComposerFocusChange: ((Bool) -> Void)?
 
     // Selection mode
     var isSelectionMode: Bool = false {
@@ -533,7 +529,6 @@ final class UnifiedChatViewController: UIViewController {
             for (_, vc) in self.messageControllers {
                 vc.isComposerFocused = isFocused
             }
-            self.onComposerFocusChange?(isFocused)
         }
 
         inputContainer.onShowPhotoPicker = { [weak self] in

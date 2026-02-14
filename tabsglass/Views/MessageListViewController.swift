@@ -713,7 +713,7 @@ final class MessageListViewController: UIViewController {
 
         // Safe area top + header content + extra padding
         let safeAreaTop = view.safeAreaInsets.top
-        let headerHeight: CGFloat = isComposerFocused ? 61 : 115
+        let headerHeight: CGFloat = 115
         let topInset = safeAreaTop + headerHeight
 
         if isSearchTab {
