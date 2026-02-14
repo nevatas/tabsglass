@@ -16,6 +16,9 @@ final class FormattingTextView: UITextView {
     static let checkboxPrefix = "\u{25CB} "  // "○ "
     private static let checkboxPrefixCount = 2  // "○" + " "
 
+    static let bulletPrefix = "\u{2013} "   // "– "
+    private static let bulletPrefixCount = 2  // "–" + " "
+
     var onTextChange: ((NSAttributedString) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     private var capitalizeNextCharacter = false
@@ -186,6 +189,45 @@ final class FormattingTextView: UITextView {
         if range.length > 0 {
             mutable.addAttribute(.paragraphStyle, value: NSParagraphStyle.default, range: range)
         }
+    }
+
+    /// Detect bullet prefix "• " at start of line. Returns the prefix string if found.
+    private func detectBulletPrefix(in nsText: NSString, lineStart: Int) -> String? {
+        let remaining = nsText.length - lineStart
+        guard remaining >= Self.bulletPrefixCount else { return nil }
+        let candidate = nsText.substring(with: NSRange(location: lineStart, length: Self.bulletPrefixCount))
+        return candidate == Self.bulletPrefix ? candidate : nil
+    }
+
+    /// Detect numbered prefix like "1. ", "12. " at start of line.
+    /// Returns (fullPrefix, number, prefixUTF16Length) or nil.
+    private func detectNumberedPrefix(in nsText: NSString, lineStart: Int, cursorPos: Int) -> (prefix: String, number: Int, length: Int)? {
+        let lineLength = cursorPos - lineStart
+        guard lineLength >= 3 else { return nil } // minimum "1. "
+
+        // Scan digits from lineStart
+        var digitEnd = lineStart
+        while digitEnd < cursorPos && digitEnd - lineStart < 10 { // cap at 10 digits
+            let ch = nsText.character(at: digitEnd)
+            guard ch >= 0x30 && ch <= 0x39 else { break } // '0'-'9'
+            digitEnd += 1
+        }
+
+        let digitCount = digitEnd - lineStart
+        guard digitCount >= 1 else { return nil }
+
+        // Must be followed by ". "
+        guard digitEnd + 2 <= nsText.length,
+              nsText.character(at: digitEnd) == 0x2E,       // '.'
+              nsText.character(at: digitEnd + 1) == 0x20     // ' '
+        else { return nil }
+
+        let prefixLength = digitCount + 2  // digits + ". "
+        let prefixStr = nsText.substring(with: NSRange(location: lineStart, length: prefixLength))
+        let digitStr = nsText.substring(with: NSRange(location: lineStart, length: digitCount))
+        guard let number = Int(digitStr) else { return nil }
+
+        return (prefixStr, number, prefixLength)
     }
 
     @objc private func textDidChange() {
@@ -640,10 +682,34 @@ final class FormattingTextView: UITextView {
         }
         capitalizeNextCharacter = false
 
-        // Auto-capitalize first letter after checkbox prefix "○ "
+        // Dash-to-bullet conversion: typing " " when line is just "-" → replace with "• "
+        if newText == " " {
+            let nsText = text as NSString
+            let cursorPos = selectedRange.location
+            if cursorPos >= 1 {
+                var lineStart = cursorPos
+                while lineStart > 0 && nsText.character(at: lineStart - 1) != 0x0A {
+                    lineStart -= 1
+                }
+                // Check if line content from lineStart to cursor is exactly "-"
+                if cursorPos - lineStart == 1 && nsText.character(at: lineStart) == 0x2D /* '-' */ {
+                    let mutable = NSMutableAttributedString(attributedString: attributedText)
+                    mutable.replaceCharacters(in: NSRange(location: lineStart, length: 1), with: "\u{2013}")
+                    attributedText = mutable
+                    selectedRange = NSRange(location: lineStart + 1, length: 0)
+                    super.insertText(" ")
+                    capitalizeNextCharacter = true
+                    return
+                }
+            }
+        }
+
+        // Auto-capitalize first letter after checkbox prefix "○ ", bullet "• ", or numbered "N. "
         if newText.count == 1, let first = newText.first, first.isLetter, first.isLowercase {
             let nsText = text as NSString
             let cursorPos = selectedRange.location
+
+            // Check checkbox prefix "○ "
             if cursorPos >= Self.checkboxPrefixCount {
                 let prefixStart = cursorPos - Self.checkboxPrefixCount
                 let prefix = nsText.substring(with: NSRange(location: prefixStart, length: Self.checkboxPrefixCount))
@@ -651,6 +717,27 @@ final class FormattingTextView: UITextView {
                     super.insertText(newText.uppercased())
                     return
                 }
+            }
+
+            // Check bullet prefix "• "
+            if cursorPos >= Self.bulletPrefixCount {
+                let prefixStart = cursorPos - Self.bulletPrefixCount
+                let prefix = nsText.substring(with: NSRange(location: prefixStart, length: Self.bulletPrefixCount))
+                if prefix == Self.bulletPrefix && (prefixStart == 0 || nsText.character(at: prefixStart - 1) == 0x0A) {
+                    super.insertText(newText.uppercased())
+                    return
+                }
+            }
+
+            // Check numbered prefix "N. " at line start
+            var lineStart = cursorPos
+            while lineStart > 0 && nsText.character(at: lineStart - 1) != 0x0A {
+                lineStart -= 1
+            }
+            if let numInfo = detectNumberedPrefix(in: nsText, lineStart: lineStart, cursorPos: cursorPos),
+               cursorPos == lineStart + numInfo.length {
+                super.insertText(newText.uppercased())
+                return
             }
         }
 
@@ -668,43 +755,102 @@ final class FormattingTextView: UITextView {
             lineStart -= 1
         }
 
-        let prefix = Self.checkboxPrefix
-        let lineEnd = min(lineStart + Self.checkboxPrefixCount, nsText.length)
-        let linePrefix = lineEnd > lineStart ? nsText.substring(with: NSRange(location: lineStart, length: min(Self.checkboxPrefixCount, nsText.length - lineStart))) : ""
+        // --- Checkbox continuation ---
+        let cbPrefix = Self.checkboxPrefix
+        let cbEnd = min(lineStart + Self.checkboxPrefixCount, nsText.length)
+        let cbLinePrefix = cbEnd > lineStart ? nsText.substring(with: NSRange(location: lineStart, length: min(Self.checkboxPrefixCount, nsText.length - lineStart))) : ""
 
-        guard linePrefix == prefix else {
-            super.insertText(newText)
+        if cbLinePrefix == cbPrefix {
+            let lineContentStart = lineStart + Self.checkboxPrefixCount
+            let lineContentLength = cursorPos - lineContentStart
+            let lineContent = lineContentLength > 0 ? nsText.substring(with: NSRange(location: lineContentStart, length: lineContentLength)).trimmingCharacters(in: .whitespaces) : ""
+
+            if lineContent.isEmpty {
+                let mutable = NSMutableAttributedString(attributedString: attributedText)
+                mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
+                removeCheckboxIndent(from: mutable, lineStart: lineStart)
+                attributedText = mutable
+                selectedRange = NSRange(location: lineStart, length: 0)
+                typingAttributes = defaultTypingAttributesWithDefaultParagraph
+                capitalizeNextCharacter = true
+                textDidChange()
+            } else {
+                let insertion = NSMutableAttributedString(string: "\n", attributes: defaultTypingAttributes)
+                insertion.append(styledCheckboxPrefix())
+                let mutable = NSMutableAttributedString(attributedString: attributedText)
+                mutable.replaceCharacters(in: selectedRange, with: insertion)
+                let newLineStart = cursorPos + 1
+                applyCheckboxIndent(to: mutable, lineStart: newLineStart)
+                attributedText = mutable
+                selectedRange = NSRange(location: cursorPos + 1 + Self.checkboxPrefixCount, length: 0)
+                typingAttributes = defaultTypingAttributes.merging([.paragraphStyle: checkboxParagraphStyle]) { _, new in new }
+                textDidChange()
+            }
             return
         }
 
-        // Current line starts with "○ "
-        let lineContentStart = lineStart + Self.checkboxPrefixCount
-        let lineContentLength = cursorPos - lineContentStart
-        let lineContent = lineContentLength > 0 ? nsText.substring(with: NSRange(location: lineContentStart, length: lineContentLength)).trimmingCharacters(in: .whitespaces) : ""
+        // --- Bullet continuation ---
+        if detectBulletPrefix(in: nsText, lineStart: lineStart) != nil {
+            let lineContentStart = lineStart + Self.bulletPrefixCount
+            let lineContentLength = cursorPos - lineContentStart
+            let lineContent = lineContentLength > 0 ? nsText.substring(with: NSRange(location: lineContentStart, length: lineContentLength)).trimmingCharacters(in: .whitespaces) : ""
 
-        if lineContent.isEmpty {
-            // Empty checkbox line — remove prefix (exit list mode)
-            let mutable = NSMutableAttributedString(attributedString: attributedText)
-            mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
-            removeCheckboxIndent(from: mutable, lineStart: lineStart)
-            attributedText = mutable
-            selectedRange = NSRange(location: lineStart, length: 0)
-            typingAttributes = defaultTypingAttributesWithDefaultParagraph
-            capitalizeNextCharacter = true
-            textDidChange()
-        } else {
-            // Has text — auto-continue checkbox on next line
-            let insertion = NSMutableAttributedString(string: "\n", attributes: defaultTypingAttributes)
-            insertion.append(styledCheckboxPrefix())
-            let mutable = NSMutableAttributedString(attributedString: attributedText)
-            mutable.replaceCharacters(in: selectedRange, with: insertion)
-            let newLineStart = cursorPos + 1
-            applyCheckboxIndent(to: mutable, lineStart: newLineStart)
-            attributedText = mutable
-            selectedRange = NSRange(location: cursorPos + 1 + Self.checkboxPrefixCount, length: 0)
-            typingAttributes = defaultTypingAttributes.merging([.paragraphStyle: checkboxParagraphStyle]) { _, new in new }
-            textDidChange()
+            if lineContent.isEmpty {
+                // Empty bullet line — remove prefix
+                let mutable = NSMutableAttributedString(attributedString: attributedText)
+                mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.bulletPrefixCount))
+                attributedText = mutable
+                selectedRange = NSRange(location: lineStart, length: 0)
+                typingAttributes = defaultTypingAttributes
+                capitalizeNextCharacter = true
+                textDidChange()
+            } else {
+                // Continue bullet on next line
+                let mutable = NSMutableAttributedString(attributedString: attributedText)
+                let insertStr = NSAttributedString(string: "\n" + Self.bulletPrefix, attributes: defaultTypingAttributes)
+                mutable.replaceCharacters(in: selectedRange, with: insertStr)
+                attributedText = mutable
+                selectedRange = NSRange(location: cursorPos + 1 + Self.bulletPrefixCount, length: 0)
+                typingAttributes = defaultTypingAttributes
+                capitalizeNextCharacter = true
+                textDidChange()
+            }
+            return
         }
+
+        // --- Numbered list continuation ---
+        if let numInfo = detectNumberedPrefix(in: nsText, lineStart: lineStart, cursorPos: cursorPos) {
+            let lineContentStart = lineStart + numInfo.length
+            let lineContentLength = cursorPos - lineContentStart
+            let lineContent = lineContentLength > 0 ? nsText.substring(with: NSRange(location: lineContentStart, length: lineContentLength)).trimmingCharacters(in: .whitespaces) : ""
+
+            if lineContent.isEmpty {
+                // Empty numbered line — remove prefix
+                let mutable = NSMutableAttributedString(attributedString: attributedText)
+                mutable.deleteCharacters(in: NSRange(location: lineStart, length: numInfo.length))
+                attributedText = mutable
+                selectedRange = NSRange(location: lineStart, length: 0)
+                typingAttributes = defaultTypingAttributes
+                capitalizeNextCharacter = true
+                textDidChange()
+            } else {
+                // Continue with next number
+                let nextPrefix = "\(numInfo.number + 1). "
+                let mutable = NSMutableAttributedString(attributedString: attributedText)
+                let insertStr = NSAttributedString(string: "\n" + nextPrefix, attributes: defaultTypingAttributes)
+                mutable.replaceCharacters(in: selectedRange, with: insertStr)
+                attributedText = mutable
+                let nextPrefixLength = (nextPrefix as NSString).length
+                selectedRange = NSRange(location: cursorPos + 1 + nextPrefixLength, length: 0)
+                typingAttributes = defaultTypingAttributes
+                capitalizeNextCharacter = true
+                textDidChange()
+            }
+            return
+        }
+
+        // --- Default: plain newline ---
+        super.insertText(newText)
     }
 
     override func deleteBackward() {
@@ -722,13 +868,12 @@ final class FormattingTextView: UITextView {
             lineStart -= 1
         }
 
-        let prefix = Self.checkboxPrefix
-        // Check if cursor is right after the prefix and there's no other text after
+        // --- Checkbox prefix deletion ---
+        let cbPrefix = Self.checkboxPrefix
         if cursorPos == lineStart + Self.checkboxPrefixCount {
-            let lineEnd = min(lineStart + Self.checkboxPrefixCount, nsText.length)
-            let linePrefix = lineEnd > lineStart ? nsText.substring(with: NSRange(location: lineStart, length: min(Self.checkboxPrefixCount, nsText.length - lineStart))) : ""
-            if linePrefix == prefix {
-                // Delete the entire prefix
+            let cbEnd = min(lineStart + Self.checkboxPrefixCount, nsText.length)
+            let cbLinePrefix = cbEnd > lineStart ? nsText.substring(with: NSRange(location: lineStart, length: min(Self.checkboxPrefixCount, nsText.length - lineStart))) : ""
+            if cbLinePrefix == cbPrefix {
                 let mutable = NSMutableAttributedString(attributedString: attributedText)
                 mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.checkboxPrefixCount))
                 removeCheckboxIndent(from: mutable, lineStart: lineStart)
@@ -739,6 +884,33 @@ final class FormattingTextView: UITextView {
                 textDidChange()
                 return
             }
+        }
+
+        // --- Bullet prefix deletion ---
+        if cursorPos == lineStart + Self.bulletPrefixCount {
+            if detectBulletPrefix(in: nsText, lineStart: lineStart) != nil {
+                let mutable = NSMutableAttributedString(attributedString: attributedText)
+                mutable.deleteCharacters(in: NSRange(location: lineStart, length: Self.bulletPrefixCount))
+                attributedText = mutable
+                selectedRange = NSRange(location: lineStart, length: 0)
+                typingAttributes = defaultTypingAttributes
+                capitalizeNextCharacter = true
+                textDidChange()
+                return
+            }
+        }
+
+        // --- Numbered prefix deletion ---
+        if let numInfo = detectNumberedPrefix(in: nsText, lineStart: lineStart, cursorPos: cursorPos),
+           cursorPos == lineStart + numInfo.length {
+            let mutable = NSMutableAttributedString(attributedString: attributedText)
+            mutable.deleteCharacters(in: NSRange(location: lineStart, length: numInfo.length))
+            attributedText = mutable
+            selectedRange = NSRange(location: lineStart, length: 0)
+            typingAttributes = defaultTypingAttributes
+            capitalizeNextCharacter = true
+            textDidChange()
+            return
         }
 
         super.deleteBackward()
