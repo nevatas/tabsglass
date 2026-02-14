@@ -36,6 +36,7 @@
 "tab.move" = "Mover";
 "tab.delete" = "Eliminar";
 "tab.cancel" = "Cancelar";
+"tab.move_to_new" = "Mover a nueva pestaña";
 
 // MARK: - Context Menu
 

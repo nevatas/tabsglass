@@ -47,6 +47,7 @@ enum L10n {
         static var move: String { NSLocalizedString("tab.move", comment: "Move tab action") }
         static var delete: String { NSLocalizedString("tab.delete", comment: "Delete button") }
         static var cancel: String { NSLocalizedString("tab.cancel", comment: "Cancel button") }
+        static var moveToNew: String { NSLocalizedString("tab.move_to_new", comment: "Move to new tab dialog title") }
     }
 
     // MARK: - Context Menu

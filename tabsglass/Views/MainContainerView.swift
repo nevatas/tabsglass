@@ -41,6 +41,8 @@ struct MainContainerView: View {
     @State private var isSelectionMode = false
     @State private var selectedMessageIds: Set<UUID> = []
     @State private var showDeleteSelectedAlert = false
+    @State private var showMoveToNewTabAlert = false
+    @State private var pendingMoveMessageIds: Set<UUID> = []
     @State private var reloadTrigger = 0
 
     /// Total number of tabs including Search and virtual Inbox
@@ -102,6 +104,10 @@ struct MainContainerView: View {
             },
             onMoveMessage: { message, targetTabId in
                 moveMessage(message, toTabId: targetTabId)
+            },
+            onMoveToNewTab: { message in
+                pendingMoveMessageIds = [message.id]
+                withAnimation(.easeOut(duration: 0.1)) { showMoveToNewTabAlert = true }
             },
             onEditMessage: { message in
                 messageToEdit = message
@@ -219,6 +225,13 @@ struct MainContainerView: View {
                     onMove: { targetTabId in
                         moveSelectedMessages(to: targetTabId)
                     },
+                    onMoveToNewTab: {
+                        pendingMoveMessageIds = selectedMessageIds
+                        exitSelectionMode()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            withAnimation(.easeOut(duration: 0.1)) { showMoveToNewTabAlert = true }
+                        }
+                    },
                     onDelete: { showDeleteSelectedAlert = true }
                 )
             }
@@ -272,6 +285,20 @@ struct MainContainerView: View {
                     inboxTitle = result
                 } onDismiss: {
                     withAnimation(.easeOut(duration: 0.1)) { showRenameInboxAlert = false }
+                }
+                .transition(.opacity.combined(with: .offset(y: 10)))
+            }
+
+            if showMoveToNewTabAlert {
+                TabInputSheet(
+                    title: L10n.Tab.moveToNew,
+                    subtitle: L10n.Tab.newHint,
+                    buttonTitle: L10n.Tab.create,
+                    initialText: ""
+                ) { result in
+                    createTabAndMoveMessages(title: result)
+                } onDismiss: {
+                    withAnimation(.easeOut(duration: 0.1)) { showMoveToNewTabAlert = false }
                 }
                 .transition(.opacity.combined(with: .offset(y: 10)))
             }
@@ -805,6 +832,24 @@ struct MainContainerView: View {
                 requestReview()
             }
         }
+    }
+
+    private func createTabAndMoveMessages(title: String) {
+        let maxPosition = tabs.map(\.position).max() ?? -1
+        let newTab = Tab(title: title, position: maxPosition + 1)
+        modelContext.insert(newTab)
+
+        let idsToMove = pendingMoveMessageIds
+        let messagesToMove = allMessages.filter { idsToMove.contains($0.id) }
+        for message in messagesToMove {
+            message.tabId = newTab.id
+        }
+
+        try? modelContext.save()
+        syncTabsToExtension()
+        reloadTrigger += 1
+
+        pendingMoveMessageIds = []
     }
 
     private func renameTab(_ tab: Tab, to newTitle: String) {
