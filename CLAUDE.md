@@ -11,6 +11,15 @@ User data is the most valuable thing in this app. **NEVER** make changes that co
 
 When in doubt, always preserve backward compatibility. New fields should have defaults. Old fields should never be removed — only deprecated. Test every change against the assumption that a user has existing data from the previous version.
 
+## Documentation Lookup
+
+When you need to check the latest API, find usage examples, or verify current syntax for **any** library or framework (SwiftUI, SwiftData, UIKit, StoreKit, etc.), **always** use the MCP Context7 server first:
+
+1. `resolve-library-id` — find the library by name
+2. `query-docs` — fetch up-to-date docs and code examples
+
+Do NOT rely on memory for new/changed APIs (especially iOS 26+, Liquid Glass, Swift 6, StoreKit 2). Look it up via Context7.
+
 ## Git Policy
 
 **NEVER** commit or push without an explicit user request. Only run `git commit` and `git push` when the user directly asks for it.
