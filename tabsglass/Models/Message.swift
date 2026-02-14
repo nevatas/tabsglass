@@ -5,7 +5,9 @@
 
 import Foundation
 import SwiftData
+#if !WIDGET_EXTENSION
 import UIKit
+#endif
 import os.log
 
 // MARK: - Reminder Repeat Interval
@@ -420,6 +422,7 @@ final class Message: Identifiable {
         self.mediaOrder = mediaOrder
     }
 
+    #if !WIDGET_EXTENSION
     /// Get media items in display order, respecting `mediaOrder` when present
     var orderedMediaItems: [MediaItem] {
         guard let order = mediaOrder, order.count == totalMediaCount else {
@@ -484,6 +487,7 @@ final class Message: Identifiable {
             return UIImage(data: data)
         }
     }
+    #endif
 
     /// Check if message has no content (no text, no media, no todo items)
     var isEmpty: Bool {
@@ -495,6 +499,7 @@ final class Message: Identifiable {
         return true
     }
 
+    #if !WIDGET_EXTENSION
     /// Directory for storing message photos (uses shared container for extension support)
     static var photosDirectory: URL {
         SharedPhotoStorage.photosDirectory
@@ -547,4 +552,5 @@ final class Message: Identifiable {
             SharedPhotoStorage.deletePhoto(imageFileName)
         }
     }
+    #endif
 }

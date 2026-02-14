@@ -22,6 +22,9 @@ struct tabsglassApp: App {
         // Stamp first install date in Keychain for future grandfathering (survives reinstalls)
         AppSettings.shared.stampFirstInstallDateIfNeeded()
 
+        // Sync theme to shared UserDefaults so widget can read it
+        AppSettings.shared.syncThemeToSharedDefaults()
+
         // Keyboard warmup is deferred until after paywall dismissal (see ContentView)
 
         // Warm up Liquid Glass effects to avoid delay on first render

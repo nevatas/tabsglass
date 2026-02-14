@@ -7,13 +7,16 @@ import SwiftUI
 import SwiftData
 import StoreKit
 import UIKit
+import WidgetKit
 
 struct MainContainerView: View {
+    @Binding var pendingDeepLink: DeepLink?
     @Environment(\.modelContext) private var modelContext
     @Environment(\.requestReview) private var requestReview
     @Query(sort: \Tab.position) private var tabs: [Tab]
     @Query(sort: \Message.createdAt) private var allMessages: [Message]
     @State private var selectedTabIndex = 1  // 0 = Search, 1 = Inbox (virtual), 2+ = real tabs
+    @State private var pendingScrollMessageId: UUID?
     @State private var showNewTabAlert = false
     @State private var showRenameAlert = false
     @State private var showRenameInboxAlert = false
@@ -137,7 +140,8 @@ struct MainContainerView: View {
                     }
                 }
             },
-            reloadTrigger: reloadTrigger
+            reloadTrigger: reloadTrigger,
+            pendingScrollMessageId: $pendingScrollMessageId
         )
     }
 
@@ -346,6 +350,25 @@ struct MainContainerView: View {
                 switchFraction = 0
             }
         }
+        .onChange(of: pendingDeepLink?.messageId) { _, newValue in
+            guard let deepLink = pendingDeepLink else { return }
+            // Resolve tab index from tabId
+            let targetIndex: Int
+            if let tabId = deepLink.tabId,
+               let idx = tabs.firstIndex(where: { $0.id == tabId }) {
+                targetIndex = idx + 2  // 0=Search, 1=Inbox, 2+=real tabs
+            } else {
+                targetIndex = 1  // Inbox
+            }
+            // Navigate to tab
+            withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                selectedTabIndex = targetIndex
+                switchFraction = 0
+            }
+            // Schedule scroll after page transition completes
+            pendingScrollMessageId = deepLink.messageId
+            pendingDeepLink = nil
+        }
         .sheet(item: $messageToEdit) { message in
             EditMessageSheet(
                 originalText: message.hasContentBlocks ? message.composerText : message.content,
@@ -465,7 +488,7 @@ struct MainContainerView: View {
                     }
                     message.linkPreview = newLinkPreview
 
-                    try? modelContext.save()
+                    saveAndReloadWidgets()
                     reloadTrigger += 1
 
                     messageToEdit = nil
@@ -500,6 +523,11 @@ struct MainContainerView: View {
             // Sync tabs to extension on app launch
             TabsSync.saveTabs(Array(tabs))
         }
+    }
+
+    private func saveAndReloadWidgets() {
+        try? modelContext.save()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func sendMessage() {
@@ -665,7 +693,7 @@ struct MainContainerView: View {
                 message.linkPreview = linkPreviewToSave
 
                 modelContext.insert(message)
-                try? modelContext.save()
+                saveAndReloadWidgets()
 
                 // Background fetch real preview if placeholder was sent
                 if linkPreviewToSave?.isPlaceholder == true {
@@ -686,7 +714,7 @@ struct MainContainerView: View {
                     // Fetch failed — remove stale placeholder
                     message.linkPreview = nil
                 }
-                try? modelContext.save()
+                saveAndReloadWidgets()
                 reloadTrigger += 1
             }
         }
@@ -719,12 +747,12 @@ struct MainContainerView: View {
 
         // Delete from database (media kept for potential restore)
         modelContext.delete(message)
-        try? modelContext.save()
+        saveAndReloadWidgets()
     }
 
     private func moveMessage(_ message: Message, toTabId targetTabId: UUID?) {
         message.tabId = targetTabId
-        try? modelContext.save()
+        saveAndReloadWidgets()
         reloadTrigger += 1
     }
 
@@ -741,7 +769,7 @@ struct MainContainerView: View {
             message.contentBlocks = blocks
         }
 
-        try? modelContext.save()
+        saveAndReloadWidgets()
         reloadTrigger += 1
     }
 
@@ -760,7 +788,7 @@ struct MainContainerView: View {
                     message.reminderDate = date
                     message.reminderRepeatInterval = repeatInterval
                     message.notificationId = notificationId
-                    try? modelContext.save()
+                    saveAndReloadWidgets()
                 }
             }
         }
@@ -773,7 +801,7 @@ struct MainContainerView: View {
         message.reminderDate = nil
         message.reminderRepeatInterval = nil
         message.notificationId = nil
-        try? modelContext.save()
+        saveAndReloadWidgets()
     }
 
     private func restoreDeletedMessage() {
@@ -807,7 +835,7 @@ struct MainContainerView: View {
         message.notificationId = nil
 
         modelContext.insert(message)
-        try? modelContext.save()
+        saveAndReloadWidgets()
 
         if let reminderDate = snapshot.reminderDate, reminderDate > Date() {
             saveReminder(
@@ -822,7 +850,7 @@ struct MainContainerView: View {
         let maxPosition = tabs.map(\.position).max() ?? -1
         let newTab = Tab(title: title, position: maxPosition + 1)
         modelContext.insert(newTab)
-        try? modelContext.save()
+        saveAndReloadWidgets()
         syncTabsToExtension()
 
         let key = "hasRequestedReviewAfterTabCreate"
@@ -845,7 +873,7 @@ struct MainContainerView: View {
             message.tabId = newTab.id
         }
 
-        try? modelContext.save()
+        saveAndReloadWidgets()
         syncTabsToExtension()
         reloadTrigger += 1
 
@@ -854,7 +882,7 @@ struct MainContainerView: View {
 
     private func renameTab(_ tab: Tab, to newTitle: String) {
         tab.title = newTitle
-        try? modelContext.save()
+        saveAndReloadWidgets()
         syncTabsToExtension()
     }
 
@@ -896,7 +924,7 @@ struct MainContainerView: View {
 
             // Delete tab and save
             modelContext.delete(tab)
-            try? modelContext.save()
+            saveAndReloadWidgets()
 
             // Clean up media files AFTER saving context
             for fileName in photoFilesToDelete {
@@ -917,7 +945,7 @@ struct MainContainerView: View {
                 }
             }
             modelContext.delete(tab)
-            try? modelContext.save()
+            saveAndReloadWidgets()
         }
 
         syncTabsToExtension()
@@ -961,7 +989,7 @@ struct MainContainerView: View {
             DeletedMessageStore.shared.store(message)
             modelContext.delete(message)
         }
-        try? modelContext.save()
+        saveAndReloadWidgets()
         reloadTrigger += 1
     }
 
@@ -970,7 +998,7 @@ struct MainContainerView: View {
         for message in messagesToMove {
             message.tabId = targetTabId
         }
-        try? modelContext.save()
+        saveAndReloadWidgets()
         reloadTrigger += 1
         exitSelectionMode()
     }
@@ -1140,6 +1168,6 @@ extension Character {
 }
 
 #Preview {
-    MainContainerView()
+    MainContainerView(pendingDeepLink: .constant(nil))
         .modelContainer(for: [Tab.self, Message.self], inMemory: true)
 }
