@@ -62,6 +62,8 @@ enum L10n {
         static var remind: String { NSLocalizedString("menu.remind", comment: "Remind action") }
         static var editReminder: String { NSLocalizedString("menu.edit_reminder", comment: "Edit reminder action") }
         static var removeReminder: String { NSLocalizedString("menu.remove_reminder", comment: "Remove reminder action") }
+        static var pin: String { NSLocalizedString("menu.pin", comment: "Pin action") }
+        static var unpin: String { NSLocalizedString("menu.unpin", comment: "Unpin action") }
     }
 
     // MARK: - Themes

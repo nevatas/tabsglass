@@ -33,6 +33,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
     var onRestoreMessage: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
+    var onTogglePin: ((Message) -> Void)?
 
     // Selection mode
     @Binding var isSelectionMode: Bool
@@ -45,6 +46,9 @@ struct UnifiedChatView: UIViewControllerRepresentable {
 
     /// Set by deep link handler to scroll to a specific message after tab navigation
     @Binding var pendingScrollMessageId: UUID?
+
+    /// Set by pinned banner tap to scroll immediately (no delay)
+    @Binding var immediateScrollMessageId: UUID?
 
     func makeUIViewController(context: Context) -> UnifiedChatViewController {
         let vc = UnifiedChatViewController()
@@ -59,6 +63,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         vc.onRestoreMessage = onRestoreMessage
         vc.onToggleTodoItem = onToggleTodoItem
         vc.onToggleReminder = onToggleReminder
+        vc.onTogglePin = onTogglePin
         vc.onIndexChange = { newIndex in
             selectedIndex = newIndex
         }
@@ -110,6 +115,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             hasher.combine(message.todoItems?.count ?? -1)
             hasher.combine(message.contentBlocks?.count ?? -1)
             hasher.combine(message.hasReminder)
+            hasher.combine(message.isPinned)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
             hasher.combine(message.linkPreview?.url)
@@ -128,6 +134,7 @@ struct UnifiedChatView: UIViewControllerRepresentable {
         uiViewController.onRestoreMessage = onRestoreMessage
         uiViewController.onToggleTodoItem = onToggleTodoItem
         uiViewController.onToggleReminder = onToggleReminder
+        uiViewController.onTogglePin = onTogglePin
         uiViewController.onEnterSelectionMode = onEnterSelectionMode
         uiViewController.onToggleMessageSelection = onToggleMessageSelection
 
@@ -195,6 +202,14 @@ struct UnifiedChatView: UIViewControllerRepresentable {
             uiViewController.reloadCurrentTab()
         }
 
+        // Immediate scroll (pinned banner tap — already on correct tab)
+        if let messageId = immediateScrollMessageId {
+            DispatchQueue.main.async {
+                self.immediateScrollMessageId = nil
+            }
+            uiViewController.scrollToMessage(id: messageId, inTabAtIndex: selectedIndex)
+        }
+
         // Deep link: scroll to message after page transition completes
         if let messageId = pendingScrollMessageId {
             let targetIndex = selectedIndex
@@ -241,6 +256,7 @@ final class UnifiedChatViewController: UIViewController {
     var onRestoreMessage: (() -> Void)?
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     var onToggleReminder: ((Message) -> Void)?
+    var onTogglePin: ((Message) -> Void)?
 
     // Selection mode
     var isSelectionMode: Bool = false {
@@ -888,6 +904,9 @@ final class UnifiedChatViewController: UIViewController {
         }
         vc.onToggleReminder = { [weak self] message in
             self?.onToggleReminder?(message)
+        }
+        vc.onTogglePin = { [weak self] message in
+            self?.onTogglePin?(message)
         }
         // Selection mode
         vc.isSelectionMode = isSelectionMode

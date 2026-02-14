@@ -29,6 +29,8 @@ final class MessageListViewController: UIViewController {
     var onToggleTodoItem: ((Message, UUID, Bool) -> Void)?
     /// Callback when reminder is toggled on a message
     var onToggleReminder: ((Message) -> Void)?
+    /// Callback when pin is toggled on a message
+    var onTogglePin: ((Message) -> Void)?
 
     // Keyboard/composer focus state (for todo checkbox interaction)
     var isComposerFocused: Bool = false {
@@ -310,6 +312,7 @@ final class MessageListViewController: UIViewController {
             hasher.combine(message.content)
             hasher.combine(message.todoTitle)
             hasher.combine(message.hasReminder)
+            hasher.combine(message.isPinned)
             hasher.combine(message.photoFileNames.count)
             hasher.combine(message.videoFileNames.count)
             hasher.combine(message.createdAt.timeIntervalSinceReferenceDate.bitPattern)
@@ -355,6 +358,7 @@ final class MessageListViewController: UIViewController {
         hasher.combine(message.videoFileNames.count)
         hasher.combine(message.todoTitle)
         hasher.combine(message.hasReminder)
+        hasher.combine(message.isPinned)
         hasher.combine(message.linkPreview?.url)
         hasher.combine(message.linkPreview?.title)
         hasher.combine(message.linkPreview?.isPlaceholder)
@@ -1181,6 +1185,17 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
                 children: moveChildren
             )
             actions.append(moveMenu)
+
+            // Pin action
+            let pinTitle = message.isPinned ? L10n.Menu.unpin : L10n.Menu.pin
+            let pinIcon = message.isPinned ? "pin.slash" : "pin"
+            let pinAction = UIAction(
+                title: pinTitle,
+                image: UIImage(systemName: pinIcon)
+            ) { [weak self] _ in
+                self?.onTogglePin?(message)
+            }
+            actions.append(pinAction)
 
             // Reminder action
             let reminderTitle = message.hasReminder ? L10n.Menu.editReminder : L10n.Menu.remind

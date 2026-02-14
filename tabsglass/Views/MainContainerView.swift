@@ -17,6 +17,7 @@ struct MainContainerView: View {
     @Query(sort: \Message.createdAt) private var allMessages: [Message]
     @State private var selectedTabIndex = 1  // 0 = Search, 1 = Inbox (virtual), 2+ = real tabs
     @State private var pendingScrollMessageId: UUID?
+    @State private var immediateScrollMessageId: UUID?
     @State private var showNewTabAlert = false
     @State private var showRenameAlert = false
     @State private var showRenameInboxAlert = false
@@ -47,6 +48,9 @@ struct MainContainerView: View {
     @State private var showMoveToNewTabAlert = false
     @State private var pendingMoveMessageIds: Set<UUID> = []
     @State private var reloadTrigger = 0
+    @State private var containerWidth: CGFloat = 393
+    @State private var showPinnedBanner = false
+    @State private var displayedPinnedMessage: Message?
 
     /// Total number of tabs including Search and virtual Inbox
     private var totalTabCount: Int {
@@ -59,6 +63,35 @@ struct MainContainerView: View {
         return tabs[selectedTabIndex - 2].id
     }
 
+
+    /// Pinned message for a given tab index (nil if none or Search)
+    private func pinnedMessageForTabIndex(_ index: Int) -> Message? {
+        guard index > 0 else { return nil }  // No pins on Search
+        let tabId: UUID?
+        if index == 1 {
+            tabId = nil  // Inbox
+        } else {
+            let arrayIndex = index - 2
+            guard arrayIndex >= 0 && arrayIndex < tabs.count else { return nil }
+            tabId = tabs[arrayIndex].id
+        }
+        return allMessages.first(where: { $0.tabId == tabId && $0.isPinned })
+    }
+
+    /// The pinned message for the currently selected tab
+    private var pinnedMessage: Message? {
+        pinnedMessageForTabIndex(selectedTabIndex)
+    }
+
+    /// The pinned message for the tab we're swiping towards
+    private var neighborPinnedMessage: Message? {
+        if switchFraction < -0.01 {
+            return pinnedMessageForTabIndex(selectedTabIndex - 1)
+        } else if switchFraction > 0.01 {
+            return pinnedMessageForTabIndex(selectedTabIndex + 1)
+        }
+        return nil
+    }
 
     /// Check if currently on Inbox
     private var isOnInbox: Bool {
@@ -73,6 +106,29 @@ struct MainContainerView: View {
         } else {
             return true  // From any tab, can at least move to Inbox
         }
+    }
+
+    @State private var showUnpinAlert = false
+    @State private var messageToUnpin: Message?
+
+    @ViewBuilder
+    private var pinnedBannerView: some View {
+        PinnedMessageBanner(
+            message: displayedPinnedMessage,
+            onTap: {
+                if let msg = displayedPinnedMessage {
+                    immediateScrollMessageId = msg.id
+                }
+            },
+            onClose: {
+                if let msg = displayedPinnedMessage {
+                    messageToUnpin = msg
+                    showUnpinAlert = true
+                }
+            }
+        )
+        .padding(.horizontal, 12)
+        .padding(.top, 60)
     }
 
     private var chatView: UnifiedChatView {
@@ -111,6 +167,15 @@ struct MainContainerView: View {
             onToggleReminder: { message in
                 messageForReminder = message
             },
+            onTogglePin: { message in
+                message.isPinned.toggle()
+                // Enforce one pinned message per tab
+                if message.isPinned {
+                    let sameTabMessages = allMessages.filter { $0.tabId == message.tabId && $0.id != message.id }
+                    for m in sameTabMessages { m.isPinned = false }
+                }
+                reloadTrigger += 1
+            },
             isSelectionMode: $isSelectionMode,
             selectedMessageIds: $selectedMessageIds,
             onEnterSelectionMode: { message in
@@ -128,7 +193,8 @@ struct MainContainerView: View {
                 }
             },
             reloadTrigger: reloadTrigger,
-            pendingScrollMessageId: $pendingScrollMessageId
+            pendingScrollMessageId: $pendingScrollMessageId,
+            immediateScrollMessageId: $immediateScrollMessageId
         )
     }
 
@@ -139,6 +205,11 @@ struct MainContainerView: View {
             chatView
             .ignoresSafeArea(.keyboard)
             .scrollEdgeEffectHidden(true, for: .all)
+            .background(GeometryReader { geo in
+                Color.clear
+                    .onAppear { containerWidth = geo.size.width }
+                    .onChange(of: geo.size.width) { _, w in containerWidth = w }
+            })
 
             // Header layer (floating on top).
             // Keep it mounted to avoid UIKit tab bar re-creation glitches after selection mode.
@@ -183,6 +254,24 @@ struct MainContainerView: View {
                     : .easeOut(duration: 0.3).delay(0.18),
                 value: isSelectionMode
             )
+
+            // Pinned message banner — glass stays when neighbor also has pin, content transitions inside
+            if !isSelectionMode {
+                let swipeProgress = Double(abs(switchFraction))
+                let neighborHasPin = neighborPinnedMessage != nil
+
+                let bannerOpacity: Double = {
+                    guard showPinnedBanner else { return 0 }
+                    // Glass stays if swiping to another pinned tab
+                    if neighborHasPin { return 1.0 }
+                    // Fade out if swiping to a tab without pin
+                    return swipeProgress > 0.01 ? max(0, 1 - swipeProgress * 2.5) : 1.0
+                }()
+
+                pinnedBannerView
+                    .opacity(bannerOpacity)
+                    .allowsHitTesting(showPinnedBanner && swipeProgress < 0.02)
+            }
 
             // Selection UI - always mounted, animated via offset/opacity
             // Cancel bar at top
@@ -314,6 +403,15 @@ struct MainContainerView: View {
         } message: {
             Text(L10n.Selection.deleteMessage(selectedMessageIds.count))
         }
+        .alert(L10n.Menu.unpin + "?", isPresented: $showUnpinAlert) {
+            Button(L10n.Tab.cancel, role: .cancel) { }
+            Button(L10n.Menu.unpin, role: .destructive) {
+                if let msg = messageToUnpin {
+                    msg.isPinned = false
+                    reloadTrigger += 1
+                }
+            }
+        }
         .onChange(of: tabs.count) { oldValue, newValue in
             if newValue > oldValue {
                 // New tab created - select it with animation
@@ -333,6 +431,49 @@ struct MainContainerView: View {
             // Reset fraction when tab changes (from tap or swipe completion)
             if abs(switchFraction) > 0.01 {
                 switchFraction = 0
+            }
+            // Update pinned banner for new tab
+            let newPinned = pinnedMessage
+            if let newPinned {
+                if displayedPinnedMessage != nil && displayedPinnedMessage?.id != newPinned.id {
+                    // Both tabs have pins — animate content transition inside glass
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        displayedPinnedMessage = newPinned
+                    }
+                } else if displayedPinnedMessage == nil {
+                    // Arriving from tab without pin — fade banner in
+                    displayedPinnedMessage = newPinned
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showPinnedBanner = true
+                    }
+                }
+                showPinnedBanner = true
+            } else if showPinnedBanner {
+                // No pin on new tab — already faded via swipe opacity
+                showPinnedBanner = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    if !showPinnedBanner { displayedPinnedMessage = nil }
+                }
+            }
+        }
+        .onChange(of: reloadTrigger) { _, _ in
+            // Update pinned banner after pin/unpin on current tab
+            let newPinned = pinnedMessage
+            if let newPinned {
+                displayedPinnedMessage = newPinned
+                if !showPinnedBanner {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showPinnedBanner = true
+                    }
+                }
+            } else if showPinnedBanner {
+                // Fade out, then clear cached message after animation
+                withAnimation(.easeOut(duration: 0.15)) {
+                    showPinnedBanner = false
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                    if !showPinnedBanner { displayedPinnedMessage = nil }
+                }
             }
         }
         .onChange(of: pendingDeepLink?.messageId) { _, newValue in
@@ -1136,6 +1277,143 @@ struct TabInputSheet: View {
         onDismiss()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             onDone(trimmed)
+        }
+    }
+}
+
+// MARK: - Pinned Message Banner
+
+private struct PinnedMessageBanner: View {
+    let message: Message?
+    let onTap: () -> Void
+    let onClose: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var showThumbnail: Bool
+    @State private var thumbFileName: String
+    @State private var previewString: String
+
+    init(message: Message?, onTap: @escaping () -> Void, onClose: @escaping () -> Void) {
+        self.message = message
+        self.onTap = onTap
+        self.onClose = onClose
+        let hasMedia = message.map { !$0.photoFileNames.isEmpty || !$0.videoThumbnailFileNames.isEmpty } ?? false
+        _showThumbnail = State(initialValue: hasMedia)
+        _thumbFileName = State(initialValue: message?.photoFileNames.first ?? message?.videoThumbnailFileNames.first ?? "")
+        _previewString = State(initialValue: Self.makePreview(message))
+    }
+
+    private static func makePreview(_ msg: Message?) -> String {
+        guard let msg else { return "" }
+        if msg.isTodoList, let items = msg.todoItems, let first = items.first {
+            let circle = first.isCompleted ? "●" : "○"
+            return "\(circle) \(first.text)"
+        }
+        if !msg.content.isEmpty { return msg.content }
+        return "Photo"
+    }
+
+    var body: some View {
+        if message != nil {
+            HStack(spacing: 0) {
+                Button(action: onTap) {
+                    HStack(spacing: 0) {
+                        PinnedThumbnail(fileName: thumbFileName)
+                            .frame(width: showThumbnail ? 38 : 0, height: 38)
+                            .scaleEffect(showThumbnail ? 1 : 0.01, anchor: .leading)
+                            .opacity(showThumbnail ? 1 : 0)
+                            .clipped()
+                            .padding(.trailing, showThumbnail ? 10 : 0)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text("Pinned Message")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundStyle(.secondary)
+
+                            Text(previewString)
+                                .font(.system(size: 13))
+                                .lineLimit(1)
+                                .foregroundStyle(colorScheme == .dark ? .white : .black)
+                                .contentTransition(.opacity)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.leading, showThumbnail ? 8 : 14)
+            .padding(.trailing, 6)
+            .padding(.vertical, 4)
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
+            .onChange(of: message?.id, initial: true) {
+                guard let message else { return }
+                let newHasMedia = !message.photoFileNames.isEmpty || !message.videoThumbnailFileNames.isEmpty
+                let newThumbName = message.photoFileNames.first ?? message.videoThumbnailFileNames.first ?? ""
+                let newPreview = Self.makePreview(message)
+
+                if previewString.isEmpty {
+                    // First appearance — set instantly, no animation
+                    thumbFileName = newThumbName
+                    previewString = newPreview
+                    showThumbnail = newHasMedia
+                } else if newHasMedia != showThumbnail {
+                    // Layout change — text snaps, thumbnail + position slide
+                    thumbFileName = newThumbName
+                    previewString = newPreview
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showThumbnail = newHasMedia
+                    }
+                } else {
+                    // Same layout — crossfade text in place
+                    thumbFileName = newThumbName
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        previewString = newPreview
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct PinnedThumbnail: View {
+    let fileName: String
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: 32, height: 32)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onAppear { loadImage() }
+        .onChange(of: fileName) { loadImage() }
+    }
+
+    private func loadImage() {
+        guard !fileName.isEmpty else { return }
+        ImageCache.shared.loadThumbnail(for: fileName, targetSize: CGSize(width: 64, height: 64)) { loaded in
+            image = loaded
         }
     }
 }

@@ -50,6 +50,8 @@
 "menu.remind" = "Remind";
 "menu.edit_reminder" = "Edit Reminder";
 "menu.remove_reminder" = "Remove Reminder";
+"menu.pin" = "Pin";
+"menu.unpin" = "Unpin";
 
 // MARK: - Themes
 

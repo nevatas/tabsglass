@@ -50,6 +50,8 @@
 "menu.remind" = "Recordar";
 "menu.edit_reminder" = "Editar recordatorio";
 "menu.remove_reminder" = "Quitar recordatorio";
+"menu.pin" = "Fijar";
+"menu.unpin" = "Desfijar";
 
 // MARK: - Themes
 

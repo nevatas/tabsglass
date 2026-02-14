@@ -50,6 +50,8 @@
 "menu.remind" = "Напомнить";
 "menu.edit_reminder" = "Изм. напоминание";
 "menu.remove_reminder" = "Убрать напоминание";
+"menu.pin" = "Закрепить";
+"menu.unpin" = "Открепить";
 
 // MARK: - Themes
 

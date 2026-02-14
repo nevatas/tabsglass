@@ -521,6 +521,9 @@ final class MessageTableCell: UITableViewCell {
         lastLayoutWidth = 0
         lastLayoutHash = 0
         reminderBadge.isHidden = true
+        reminderBadge.backgroundColor = .systemRed
+        let bellConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        reminderIcon.image = UIImage(systemName: "bell.fill", withConfiguration: bellConfig)
         // Reset constraints
         messageTextViewTopToMosaic.isActive = false
         messageTextViewTopToBubble.isActive = false
@@ -586,8 +589,22 @@ final class MessageTableCell: UITableViewCell {
             linkPreviewView.configure(with: message.linkPreview, isDarkMode: isDarkMode)
         }
 
-        // Show/hide reminder badge (floating — no layout impact on cell height)
-        reminderBadge.isHidden = !message.hasReminder
+        // Show/hide badge (floating — no layout impact on cell height)
+        // Pin takes icon priority, reminder takes color priority
+        if message.isPinned || message.hasReminder {
+            reminderBadge.isHidden = false
+            let iconName = message.isPinned ? "pin.fill" : "bell.fill"
+            let config = UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+            reminderIcon.image = UIImage(systemName: iconName, withConfiguration: config)
+            if message.hasReminder {
+                reminderBadge.backgroundColor = .systemRed
+            } else {
+                let accent = ThemeManager.shared.currentTheme.accentColor.map { UIColor($0) } ?? .tintColor
+                reminderBadge.backgroundColor = accent
+            }
+        } else {
+            reminderBadge.isHidden = true
+        }
 
         updateBubbleColor()
         updateShowMoreButtonColor()

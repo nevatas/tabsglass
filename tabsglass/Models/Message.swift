@@ -344,6 +344,7 @@ final class Message: Identifiable {
     var reminderDate: Date?         // When to send reminder notification
     var reminderRepeatInterval: ReminderRepeatInterval?  // How often to repeat
     var notificationId: String?     // ID for canceling scheduled notification
+    var isPinned: Bool = false      // Whether this message is pinned in its tab
 
     /// Whether this message has a reminder set
     var hasReminder: Bool {
