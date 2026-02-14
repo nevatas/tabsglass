@@ -1370,7 +1370,7 @@ private struct PinnedMessageBanner: View {
                 .padding(.leading, showThumbnail ? 8 : 14)
                 .padding(.trailing, 6)
                 .padding(.vertical, 4)
-                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
+                .glassEffect(.regular.interactive().tint(colorScheme == .dark ? themeManager.currentTheme.composerTintColorDark : themeManager.currentTheme.composerTintColor), in: .rect(cornerRadius: 18))
             }
         }
         .onChange(of: message?.id, initial: true) {

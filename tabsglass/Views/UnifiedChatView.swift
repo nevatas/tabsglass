@@ -853,6 +853,7 @@ final class UnifiedChatViewController: UIViewController {
             existing.allTabs = tabs
             existing.currentTabId = currentTabId
             existing.messages = tabMessages
+            existing.hasPinnedMessage = tabMessages.contains { $0.isPinned }
             existing.isComposerFocused = isComposerFocused
             existing.onContextMenuWillShow = { [weak self] in
                 self?.resetComposerPosition()
@@ -871,6 +872,7 @@ final class UnifiedChatViewController: UIViewController {
         vc.currentTabId = currentTabId
         vc.allTabs = tabs
         vc.messages = tabMessages
+        vc.hasPinnedMessage = tabMessages.contains { $0.isPinned }
         vc.onTap = { [weak self] in
             self?.view.endEditing(true)
         }
@@ -1134,6 +1136,7 @@ final class UnifiedChatViewController: UIViewController {
                 currentVC.allTabs = tabs
                 let msgs = currentIndex == 0 ? filteredMessages : messagesForTab(currentVC.currentTabId)
                 currentVC.messages = msgs
+                currentVC.hasPinnedMessage = msgs.contains { $0.isPinned }
                 currentVC.reloadMessages(invalidateHeights: true)
             }
 
@@ -1145,7 +1148,9 @@ final class UnifiedChatViewController: UIViewController {
                 let adjTabId = tabId(for: adjacentIndex)
                 cachedVC.currentTabId = adjTabId
                 cachedVC.allTabs = tabs
-                cachedVC.messages = adjacentIndex == 0 ? filteredMessages : messagesForTab(adjTabId)
+                let adjMsgs = adjacentIndex == 0 ? filteredMessages : messagesForTab(adjTabId)
+                cachedVC.messages = adjMsgs
+                cachedVC.hasPinnedMessage = adjMsgs.contains { $0.isPinned }
                 cachedVC.reloadMessages(invalidateHeights: true)
             }
         } else {

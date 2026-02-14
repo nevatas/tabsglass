@@ -32,6 +32,14 @@ final class MessageListViewController: UIViewController {
     /// Callback when pin is toggled on a message
     var onTogglePin: ((Message) -> Void)?
 
+    /// Whether this tab has a pinned message (adds extra top inset for banner)
+    var hasPinnedMessage: Bool = false {
+        didSet {
+            guard oldValue != hasPinnedMessage, isViewLoaded else { return }
+            refreshContentInset()
+        }
+    }
+
     // Keyboard/composer focus state (for todo checkbox interaction)
     var isComposerFocused: Bool = false {
         didSet {
@@ -719,7 +727,8 @@ final class MessageListViewController: UIViewController {
         // Safe area top + header content + extra padding
         let safeAreaTop = view.safeAreaInsets.top
         let headerHeight: CGFloat = 60
-        let topInset = safeAreaTop + headerHeight
+        let pinnedBannerHeight: CGFloat = hasPinnedMessage ? 62 : 0
+        let topInset = safeAreaTop + headerHeight + pinnedBannerHeight
 
         if isSearchTab {
             // Search tab: normal layout (top to bottom)
