@@ -48,6 +48,7 @@ final class GalleryViewController: UIViewController {
     private let contentView = UIView()
     private var pageViewController: UIPageViewController!
     private var closeButtonHost: UIHostingController<GalleryCloseButtonView>!
+    private var shareButtonHost: UIHostingController<GalleryShareButtonView>!
     private var pageIndicatorHost: UIHostingController<GalleryPageIndicatorView>?
 
     // State
@@ -90,6 +91,7 @@ final class GalleryViewController: UIViewController {
         setupDismissScrollView()
         setupPageViewController()
         setupCloseButton()
+        setupShareButton()
         setupPageControl()
     }
 
@@ -181,6 +183,42 @@ final class GalleryViewController: UIViewController {
         ])
     }
 
+    private func setupShareButton() {
+        let shareView = GalleryShareButtonView { [weak self] in
+            self?.shareCurrentMedia()
+        }
+        let hosting = UIHostingController(rootView: shareView)
+        hosting.view.backgroundColor = .clear
+        hosting.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(hosting)
+        view.addSubview(hosting.view)
+        hosting.didMove(toParent: self)
+        shareButtonHost = hosting
+
+        NSLayoutConstraint.activate([
+            hosting.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            hosting.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            hosting.view.widthAnchor.constraint(equalToConstant: 44),
+            hosting.view.heightAnchor.constraint(equalToConstant: 44)
+        ])
+    }
+
+    private func shareCurrentMedia() {
+        guard currentIndex < mediaItems.count else { return }
+
+        var activityItems: [Any] = []
+        switch mediaItems[currentIndex] {
+        case .photo(let image):
+            activityItems = [image]
+        case .video(let url, _):
+            activityItems = [url]
+        }
+
+        let activityVC = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        activityVC.popoverPresentationController?.sourceView = shareButtonHost.view
+        present(activityVC, animated: true)
+    }
+
     private func setupPageControl() {
         guard mediaItems.count > 1 else { return }
 
@@ -243,6 +281,7 @@ final class GalleryViewController: UIViewController {
         let newAlpha: CGFloat = closeButtonHost.view.alpha > 0.5 ? 0 : 1
         UIView.animate(withDuration: 0.2) {
             self.closeButtonHost.view.alpha = newAlpha
+            self.shareButtonHost.view.alpha = newAlpha
             self.pageIndicatorHost?.view.alpha = newAlpha
         }
     }
@@ -305,6 +344,7 @@ extension GalleryViewController: UIScrollViewDelegate {
             self.backgroundView.alpha = 0
             self.closeButtonHost.view.alpha = 0
             self.pageIndicatorHost?.view.alpha = 0
+            self.shareButtonHost.view.alpha = 0
         }) { _ in
             self.dismissGallery()
         }
@@ -1052,6 +1092,20 @@ struct GalleryCloseButtonView: View {
 
     var body: some View {
         Image(systemName: "xmark")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+            .onTapGesture { onTap() }
+            .glassEffect(.regular.interactive(), in: .circle)
+    }
+}
+
+struct GalleryShareButtonView: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Image(systemName: "square.and.arrow.up")
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.primary)
             .frame(width: 44, height: 44)

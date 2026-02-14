@@ -104,6 +104,7 @@ struct ExportableMessage: Codable, Sendable {
     let todoItems: [TodoItem]?
     let todoTitle: String?
     let contentBlocks: [ContentBlock]?
+    let mediaOrder: [String]?
     let reminderDate: Date?
     let reminderRepeatInterval: ReminderRepeatInterval?
     // Note: notificationId is NOT exported - will be regenerated on import
@@ -129,6 +130,7 @@ struct ExportableMessage: Codable, Sendable {
         self.todoItems = message.todoItems
         self.todoTitle = message.todoTitle
         self.contentBlocks = message.contentBlocks
+        self.mediaOrder = message.mediaOrder
         self.reminderDate = message.reminderDate
         self.reminderRepeatInterval = message.reminderRepeatInterval
     }
@@ -146,6 +148,7 @@ struct ExportableMessage: Codable, Sendable {
             videoAspectRatios: videoAspectRatios,
             videoDurations: videoDurations,
             videoThumbnailFileNames: videoThumbnailFileNames,
+            mediaOrder: mediaOrder,
             position: position,
             sourceUrl: sourceUrl,
             linkPreview: linkPreview,

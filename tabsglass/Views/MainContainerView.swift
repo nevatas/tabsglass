@@ -32,6 +32,7 @@ struct MainContainerView: View {
     @State private var switchFraction: CGFloat = 0  // -1.0 to 1.0 swipe progress
     @State private var attachedImages: [UIImage] = []
     @State private var attachedVideos: [AttachedVideo] = []
+    @State private var mediaOrderTags: [String] = []
     @State private var formattingEntities: [TextEntity] = []
     @State private var composerContent: FormattingTextView.ComposerContent?
     @State private var capturedLinkPreview: LinkPreview?
@@ -91,6 +92,7 @@ struct MainContainerView: View {
             switchFraction: $switchFraction,
             attachedImages: $attachedImages,
             attachedVideos: $attachedVideos,
+            mediaOrderTags: $mediaOrderTags,
             formattingEntities: $formattingEntities,
             composerContent: $composerContent,
             linkPreview: $capturedLinkPreview,
@@ -326,7 +328,8 @@ struct MainContainerView: View {
                 originalVideoThumbnailFileNames: message.videoThumbnailFileNames,
                 originalVideoDurations: message.videoDurations,
                 originalLinkPreview: message.linkPreview,
-                onSave: { newText, newEntities, newPhotoFileNames, newVideoFileNames, newVideoThumbnailFileNames, newVideoDurations, newLinkPreview in
+                originalMediaOrder: message.mediaOrder,
+                onSave: { newText, newEntities, newPhotoFileNames, newVideoFileNames, newVideoThumbnailFileNames, newVideoDurations, newLinkPreview, newMediaOrder in
                     let originalPhotoFileNames = message.photoFileNames
                     let originalPhotoAspectRatios = message.photoAspectRatios
                     let originalVideoFileNames = message.videoFileNames
@@ -425,6 +428,7 @@ struct MainContainerView: View {
                     message.videoAspectRatios = newVideoAspectRatios
                     message.videoDurations = newVideoDurations
                     message.videoThumbnailFileNames = newVideoThumbnailFileNames
+                    message.mediaOrder = newMediaOrder
 
                     // Update link preview — clean up old image if changed
                     let oldPreviewImage = message.linkPreview?.image
@@ -483,6 +487,7 @@ struct MainContainerView: View {
         // Capture all data BEFORE clearing (for async Task)
         let imagesToSave = attachedImages
         let videosToSave = attachedVideos
+        let orderTagsToSave = mediaOrderTags
         let entitiesToSave = formattingEntities
         let originalText = messageText
         let tabId = currentTabId
@@ -497,6 +502,7 @@ struct MainContainerView: View {
         messageText = ""
         attachedImages = []
         attachedVideos = []
+        mediaOrderTags = []
         formattingEntities = []
         composerContent = nil
         capturedLinkPreview = nil
@@ -505,27 +511,57 @@ struct MainContainerView: View {
         Task {
             var photoFileNames: [String] = []
             var photoAspectRatios: [Double] = []
-            for image in imagesToSave {
-                if let result = Message.savePhoto(image) {
-                    photoFileNames.append(result.fileName)
-                    photoAspectRatios.append(result.aspectRatio)
-                }
-            }
-
             var videoFileNames: [String] = []
             var videoAspectRatios: [Double] = []
             var videoDurations: [Double] = []
             var videoThumbnailFileNames: [String] = []
+            var finalMediaOrder: [String] = []
 
-            for video in videosToSave {
+            // Save media in user-selected order using tag sequence
+            var imageIdx = 0
+            var videoIdx = 0
+            for tag in orderTagsToSave {
+                if tag == "p", imageIdx < imagesToSave.count {
+                    let image = imagesToSave[imageIdx]
+                    imageIdx += 1
+                    if let result = Message.savePhoto(image) {
+                        photoFileNames.append(result.fileName)
+                        photoAspectRatios.append(result.aspectRatio)
+                        finalMediaOrder.append("p")
+                    }
+                } else if tag == "v", videoIdx < videosToSave.count {
+                    let video = videosToSave[videoIdx]
+                    videoIdx += 1
+                    if let result = await SharedVideoStorage.saveVideo(from: video.url) {
+                        videoFileNames.append(result.fileName)
+                        videoAspectRatios.append(result.aspectRatio)
+                        videoDurations.append(result.duration)
+                        videoThumbnailFileNames.append(result.thumbnailFileName)
+                        finalMediaOrder.append("v")
+                    }
+                    try? FileManager.default.removeItem(at: video.url)
+                }
+            }
+            // Defensive: save any remaining media not covered by tags
+            while imageIdx < imagesToSave.count {
+                if let result = Message.savePhoto(imagesToSave[imageIdx]) {
+                    photoFileNames.append(result.fileName)
+                    photoAspectRatios.append(result.aspectRatio)
+                    finalMediaOrder.append("p")
+                }
+                imageIdx += 1
+            }
+            while videoIdx < videosToSave.count {
+                let video = videosToSave[videoIdx]
                 if let result = await SharedVideoStorage.saveVideo(from: video.url) {
                     videoFileNames.append(result.fileName)
                     videoAspectRatios.append(result.aspectRatio)
                     videoDurations.append(result.duration)
                     videoThumbnailFileNames.append(result.thumbnailFileName)
+                    finalMediaOrder.append("v")
                 }
-                // Clean up temp file
                 try? FileManager.default.removeItem(at: video.url)
+                videoIdx += 1
             }
 
             await MainActor.run {
@@ -578,6 +614,8 @@ struct MainContainerView: View {
                 guard hasContent else { return }
 
                 // tabId = nil for Inbox, or actual tab ID
+                // Only store mediaOrder when there's mixed media
+                let hasPhotosAndVideos = !photoFileNames.isEmpty && !videoFileNames.isEmpty
                 let message = Message(
                     content: contentForMessage,
                     tabId: tabId,
@@ -587,7 +625,8 @@ struct MainContainerView: View {
                     videoFileNames: videoFileNames,
                     videoAspectRatios: videoAspectRatios,
                     videoDurations: videoDurations,
-                    videoThumbnailFileNames: videoThumbnailFileNames
+                    videoThumbnailFileNames: videoThumbnailFileNames,
+                    mediaOrder: hasPhotosAndVideos ? finalMediaOrder : nil
                 )
 
                 if let items = todoItems {
@@ -725,6 +764,7 @@ struct MainContainerView: View {
             videoAspectRatios: snapshot.videoAspectRatios,
             videoDurations: snapshot.videoDurations,
             videoThumbnailFileNames: snapshot.videoThumbnailFileNames,
+            mediaOrder: snapshot.mediaOrder,
             position: snapshot.position,
             sourceUrl: snapshot.sourceUrl,
             linkPreview: snapshot.linkPreview,
