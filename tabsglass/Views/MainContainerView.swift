@@ -111,25 +111,6 @@ struct MainContainerView: View {
     @State private var showUnpinAlert = false
     @State private var messageToUnpin: Message?
 
-    @ViewBuilder
-    private var pinnedBannerView: some View {
-        PinnedMessageBanner(
-            message: displayedPinnedMessage,
-            onTap: {
-                if let msg = displayedPinnedMessage {
-                    immediateScrollMessageId = msg.id
-                }
-            },
-            onClose: {
-                if let msg = displayedPinnedMessage {
-                    messageToUnpin = msg
-                    showUnpinAlert = true
-                }
-            }
-        )
-        .padding(.horizontal, 12)
-        .padding(.top, 60)
-    }
 
     private var chatView: UnifiedChatView {
         UnifiedChatView(
@@ -261,16 +242,39 @@ struct MainContainerView: View {
                 let neighborHasPin = neighborPinnedMessage != nil
 
                 let bannerOpacity: Double = {
-                    guard showPinnedBanner else { return 0 }
-                    // Glass stays if swiping to another pinned tab
-                    if neighborHasPin { return 1.0 }
-                    // Fade out if swiping to a tab without pin
-                    return swipeProgress > 0.01 ? max(0, 1 - swipeProgress * 2.5) : 1.0
+                    if showPinnedBanner {
+                        // Current tab has pin
+                        if neighborHasPin { return 1.0 }
+                        // Fade out toward unpinned tab
+                        return swipeProgress > 0.01 ? max(0, 1 - swipeProgress * 2.5) : 1.0
+                    } else if neighborHasPin {
+                        // Current tab has no pin, but swiping toward pinned tab — fade in
+                        return min(1.0, swipeProgress * 2.5)
+                    }
+                    return 0
                 }()
 
-                pinnedBannerView
-                    .opacity(bannerOpacity)
-                    .allowsHitTesting(showPinnedBanner && swipeProgress < 0.02)
+                // Show neighbor's content while swiping in
+                let bannerMessage = showPinnedBanner ? displayedPinnedMessage : neighborPinnedMessage
+
+                PinnedMessageBanner(
+                    message: bannerOpacity > 0 ? bannerMessage : nil,
+                    onTap: {
+                        if let msg = displayedPinnedMessage {
+                            immediateScrollMessageId = msg.id
+                        }
+                    },
+                    onClose: {
+                        if let msg = displayedPinnedMessage {
+                            messageToUnpin = msg
+                            showUnpinAlert = true
+                        }
+                    }
+                )
+                .padding(.horizontal, 12)
+                .padding(.top, 60)
+                .opacity(bannerOpacity)
+                .allowsHitTesting(showPinnedBanner && swipeProgress < 0.02)
             }
 
             // Selection UI - always mounted, animated via offset/opacity
@@ -435,18 +439,9 @@ struct MainContainerView: View {
             // Update pinned banner for new tab
             let newPinned = pinnedMessage
             if let newPinned {
-                if displayedPinnedMessage != nil && displayedPinnedMessage?.id != newPinned.id {
-                    // Both tabs have pins — animate content transition inside glass
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        displayedPinnedMessage = newPinned
-                    }
-                } else if displayedPinnedMessage == nil {
-                    // Arriving from tab without pin — fade banner in
-                    displayedPinnedMessage = newPinned
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showPinnedBanner = true
-                    }
-                }
+                // Set immediately — banner was already visible during swipe
+                // (either as current pin or as neighbor preview fading in)
+                displayedPinnedMessage = newPinned
                 showPinnedBanner = true
             } else if showPinnedBanner {
                 // No pin on new tab — already faded via swipe opacity
@@ -454,6 +449,13 @@ struct MainContainerView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     if !showPinnedBanner { displayedPinnedMessage = nil }
                 }
+            }
+        }
+        .onChange(of: neighborPinnedMessage?.id) {
+            // Pre-warm neighbor's thumbnail so it's cached before animation starts
+            if let neighbor = neighborPinnedMessage,
+               let thumbName = neighbor.photoFileNames.first ?? neighbor.videoThumbnailFileNames.first {
+                ImageCache.shared.loadThumbnail(for: thumbName, targetSize: CGSize(width: 76, height: 76)) { _ in }
             }
         }
         .onChange(of: reloadTrigger) { _, _ in
@@ -1289,6 +1291,7 @@ private struct PinnedMessageBanner: View {
     let onClose: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    private var themeManager: ThemeManager { ThemeManager.shared }
     @State private var showThumbnail: Bool
     @State private var thumbFileName: String
     @State private var previewString: String
@@ -1332,13 +1335,12 @@ private struct PinnedMessageBanner: View {
                                 Text("Pinned Message")
                                     .font(.system(size: 11, weight: .semibold))
                             }
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color(themeManager.currentTheme.placeholderColor))
 
                             Text(previewString)
                                 .font(.system(size: 13))
                                 .lineLimit(1)
                                 .foregroundStyle(colorScheme == .dark ? .white : .black)
-                                .contentTransition(.opacity)
                         }
 
                         Spacer(minLength: 0)
@@ -1350,7 +1352,7 @@ private struct PinnedMessageBanner: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color(themeManager.currentTheme.placeholderColor))
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -1366,23 +1368,16 @@ private struct PinnedMessageBanner: View {
                 let newThumbName = message.photoFileNames.first ?? message.videoThumbnailFileNames.first ?? ""
                 let newPreview = Self.makePreview(message)
 
-                if previewString.isEmpty {
-                    // First appearance — set instantly, no animation
-                    thumbFileName = newThumbName
-                    previewString = newPreview
-                    showThumbnail = newHasMedia
-                } else if newHasMedia != showThumbnail {
-                    // Layout change — text snaps, thumbnail + position slide
-                    thumbFileName = newThumbName
-                    previewString = newPreview
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        showThumbnail = newHasMedia
-                    }
-                } else {
-                    // Same layout — crossfade text in place
-                    thumbFileName = newThumbName
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        previewString = newPreview
+                // Snap content immediately
+                thumbFileName = newThumbName
+                previewString = newPreview
+
+                // Defer layout animation to next frame so snap changes settle first
+                if newHasMedia != showThumbnail {
+                    DispatchQueue.main.async {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showThumbnail = newHasMedia
+                        }
                     }
                 }
             }
