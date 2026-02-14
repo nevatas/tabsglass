@@ -260,7 +260,7 @@ final class SwiftUIComposerContainer: UIView {
 
     private let composerState = ComposerState()
     private var hostingController: UIHostingController<EmbeddedComposerView>?
-    private var currentHeight: CGFloat = 102
+    private var currentHeight: CGFloat = 92
     private var didAddToParentVC = false
 
     override init(frame: CGRect) {
@@ -396,14 +396,14 @@ final class SwiftUIComposerContainer: UIView {
 
     /// Вычисляет текущую требуемую высоту
     func calculateHeight() -> CGFloat {
-        guard let hc = hostingController else { return 102 }
+        guard let hc = hostingController else { return 92 }
         if composerState.formattingTextView?.isEditMenuLayoutLocked == true {
             return currentHeight
         }
         let screenWidth = window?.windowScene?.screen.bounds.width
         let targetWidth = bounds.width > 0 ? bounds.width : (screenWidth ?? bounds.width)
         let fittingSize = hc.sizeThatFits(in: CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
-        return max(102, fittingSize.height)
+        return max(92, fittingSize.height)
     }
 
     /// Обновляет высоту и уведомляет parent
@@ -427,7 +427,7 @@ final class SwiftUIComposerContainer: UIView {
         hostingController?.view.layoutIfNeeded()
 
         // Collapse immediately to the base height after clearing.
-        currentHeight = 102
+        currentHeight = 92
         invalidateIntrinsicContentSize()
         onHeightChange?(currentHeight)
 
@@ -718,7 +718,7 @@ struct EmbeddedComposerView: View {
                     if hasMedia {
                         VStack(spacing: 0) {
                             ScrollView(.horizontal) {
-                                LazyHStack(spacing: 8) {
+                                LazyHStack(spacing: 4) {
                                     ForEach(state.attachedMedia) { item in
                                         switch item {
                                         case .image(let img):
@@ -760,10 +760,11 @@ struct EmbeddedComposerView: View {
                     // Bottom section with text field and buttons
                     VStack(spacing: 0) {
                         FormattingTextViewWrapper(state: state, colorScheme: colorScheme)
+                            .padding(.horizontal, 4)
 
-                        Spacer().frame(height: 8) // Tighter spacing between textfield and buttons
+                        Spacer().frame(height: 6) // Spacing between textfield and buttons
 
-                        HStack {
+                        HStack(spacing: 12) {
                             Menu {
                                 Button {
                                     state.onShowPhotoPicker?()
@@ -780,8 +781,7 @@ struct EmbeddedComposerView: View {
                                 Image(systemName: "plus")
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
-                                    .padding(.vertical, 8)
-                                    .padding(.trailing, 12)
+                                    .frame(width: 32, height: 32)
                                     .contentShape(Rectangle())
                             }
 
@@ -796,7 +796,7 @@ struct EmbeddedComposerView: View {
                                 Image(systemName: "checkmark.circle")
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundStyle(themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black))
-                                    .padding(.vertical, 8)
+                                    .frame(width: 32, height: 32)
                                     .contentShape(Rectangle())
                             }
 
@@ -818,19 +818,19 @@ struct EmbeddedComposerView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 14)
                 }
             }
-            .padding(.top, (hasMedia || hasLinkPreview) ? 8 : 14)
-            .padding(.bottom, 10)
-            .contentShape(.rect(cornerRadius: 24))
+            .padding(.top, (hasMedia || hasLinkPreview) ? 8 : 16)
+            .padding(.bottom, 14)
+            .contentShape(.rect(cornerRadius: 28))
             .onTapGesture {
                 state.shouldFocus = true
             }
-            .clipShape(.rect(cornerRadius: 24))
+            .clipShape(.rect(cornerRadius: 28))
             .glassEffect(
                 .regular.interactive(),
-                in: .rect(cornerRadius: 24)
+                in: .rect(cornerRadius: 28)
             )
             .id(glassId)  // Force recreation when theme changes
         }
@@ -851,21 +851,21 @@ struct AttachedImageView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 80, height: 80)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .clipShape(RoundedRectangle(cornerRadius: 20))
                 .allowsHitTesting(false)
 
             Button(action: onRemove) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 22, height: 22)
                     .background(Color.black.opacity(0.6))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .contentShape(Circle())
             .zIndex(1)
-            .padding(6)
+            .offset(x: -9, y: 9)
         }
         .frame(width: 80, height: 80)
     }
@@ -891,7 +891,7 @@ struct AttachedVideoView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 80, height: 80)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .clipShape(RoundedRectangle(cornerRadius: 20))
                 .allowsHitTesting(false)
 
             // Play icon overlay (center)
@@ -922,16 +922,16 @@ struct AttachedVideoView: View {
             // Remove button (top right)
             Button(action: onRemove) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 22, height: 22)
                     .background(Color.black.opacity(0.6))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .contentShape(Circle())
             .zIndex(1)
-            .padding(6)
+            .offset(x: -9, y: 9)
         }
         .frame(width: 80, height: 80)
     }
