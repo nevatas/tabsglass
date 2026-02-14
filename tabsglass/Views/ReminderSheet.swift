@@ -96,7 +96,7 @@ struct ReminderSheet: View {
     }
 
     private var accentColor: Color {
-        themeManager.currentTheme.accentColor ?? (colorScheme == .dark ? .white : .black)
+        themeManager.currentTheme.accentColor ?? .blue
     }
 
     var body: some View {
