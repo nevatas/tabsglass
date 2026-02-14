@@ -38,14 +38,6 @@ final class MessageListViewController: UIViewController {
                     messageCell.isKeyboardActive = isComposerFocused
                 }
             }
-            // Shrink/expand header gradient when header hides/shows
-            if !isSearchTab {
-                let targetHeight = isComposerFocused ? chatTopFadeCompactHeight : chatTopFadeFullHeight
-                chatTopFadeHeightConstraint?.constant = targetHeight
-                UIView.animate(withDuration: 0.25) {
-                    self.view.layoutIfNeeded()
-                }
-            }
         }
     }
 
@@ -74,9 +66,6 @@ final class MessageListViewController: UIViewController {
     private var searchTabsHostingController: UIHostingController<SearchTabsView>?
     private var topFadeGradient: TopFadeGradientView?
     private var chatTopFadeGradient: ChatTopFadeGradientView?
-    private var chatTopFadeHeightConstraint: NSLayoutConstraint?
-    private let chatTopFadeFullHeight: CGFloat = 190
-    private let chatTopFadeCompactHeight: CGFloat = 100  // When header is hidden, only tab bar visible
 
     // MARK: - Show More: Expanded messages
     /// IDs of messages whose "Show more" has been tapped (expanded text)
@@ -204,17 +193,15 @@ final class MessageListViewController: UIViewController {
         gradientView.isUserInteractionEnabled = false
         view.addSubview(gradientView)
 
-        let heightConstraint = gradientView.heightAnchor.constraint(equalToConstant: chatTopFadeFullHeight)
         NSLayoutConstraint.activate([
             // Extend above view top to cover Dynamic Island / safe area
             gradientView.topAnchor.constraint(equalTo: view.topAnchor, constant: -60),
             gradientView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             gradientView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            heightConstraint
+            gradientView.heightAnchor.constraint(equalToConstant: 190)
         ])
 
         chatTopFadeGradient = gradientView
-        chatTopFadeHeightConstraint = heightConstraint
     }
 
     /// Update the search tabs with new data
