@@ -107,7 +107,43 @@ struct ExportableMessage: Codable, Sendable {
     let mediaOrder: [String]?
     let reminderDate: Date?
     let reminderRepeatInterval: ReminderRepeatInterval?
+    let isPinned: Bool
     // Note: notificationId is NOT exported - will be regenerated on import
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        serverId = try container.decodeIfPresent(Int.self, forKey: .serverId)
+        content = try container.decode(String.self, forKey: .content)
+        entities = try container.decodeIfPresent([TextEntity].self, forKey: .entities)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        tabId = try container.decodeIfPresent(UUID.self, forKey: .tabId)
+        position = try container.decode(Int.self, forKey: .position)
+        sourceUrl = try container.decodeIfPresent(String.self, forKey: .sourceUrl)
+        linkPreview = try container.decodeIfPresent(LinkPreview.self, forKey: .linkPreview)
+        mediaGroupId = try container.decodeIfPresent(String.self, forKey: .mediaGroupId)
+        photoFileNames = try container.decode([String].self, forKey: .photoFileNames)
+        photoAspectRatios = try container.decode([Double].self, forKey: .photoAspectRatios)
+        videoFileNames = try container.decode([String].self, forKey: .videoFileNames)
+        videoAspectRatios = try container.decode([Double].self, forKey: .videoAspectRatios)
+        videoDurations = try container.decode([Double].self, forKey: .videoDurations)
+        videoThumbnailFileNames = try container.decode([String].self, forKey: .videoThumbnailFileNames)
+        todoItems = try container.decodeIfPresent([TodoItem].self, forKey: .todoItems)
+        todoTitle = try container.decodeIfPresent(String.self, forKey: .todoTitle)
+        contentBlocks = try container.decodeIfPresent([ContentBlock].self, forKey: .contentBlocks)
+        mediaOrder = try container.decodeIfPresent([String].self, forKey: .mediaOrder)
+        reminderDate = try container.decodeIfPresent(Date.self, forKey: .reminderDate)
+        reminderRepeatInterval = try container.decodeIfPresent(ReminderRepeatInterval.self, forKey: .reminderRepeatInterval)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, serverId, content, entities, createdAt, tabId, position, sourceUrl
+        case linkPreview, mediaGroupId, photoFileNames, photoAspectRatios
+        case videoFileNames, videoAspectRatios, videoDurations, videoThumbnailFileNames
+        case todoItems, todoTitle, contentBlocks, mediaOrder
+        case reminderDate, reminderRepeatInterval, isPinned
+    }
 
     @MainActor
     init(from message: Message) {
@@ -133,6 +169,7 @@ struct ExportableMessage: Codable, Sendable {
         self.mediaOrder = message.mediaOrder
         self.reminderDate = message.reminderDate
         self.reminderRepeatInterval = message.reminderRepeatInterval
+        self.isPinned = message.isPinned
     }
 
     /// Convert back to Message model (for import)
@@ -163,6 +200,7 @@ struct ExportableMessage: Codable, Sendable {
         message.contentBlocks = contentBlocks
         message.reminderDate = reminderDate
         message.reminderRepeatInterval = reminderRepeatInterval
+        message.isPinned = isPinned
         // notificationId will be set when scheduling reminder
         return message
     }
