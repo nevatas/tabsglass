@@ -561,18 +561,14 @@ final class MessageTableCell: UITableViewCell {
     }
 
     func configure(with message: Message, isExpanded: Bool = false) {
-        let t0 = CACurrentMediaTime()
         cachedMessage = message
         self.isExpanded = isExpanded
 
         // Create attributed string with entities (links, formatting)
-        let t1 = CACurrentMediaTime()
         let attributedText = createAttributedString(for: message)
         messageTextView.attributedText = attributedText
-        let attrElapsed = (CACurrentMediaTime() - t1) * 1000
 
         // Configure mixed content view if message uses content blocks
-        let t2 = CACurrentMediaTime()
         if message.hasContentBlocks, let blocks = message.contentBlocks {
             let bubbleWidth = max(contentView.bounds.width - 32, 0)
             var hasher = Hasher()
@@ -595,7 +591,6 @@ final class MessageTableCell: UITableViewCell {
                 self?.onTodoToggle?(itemId, isCompleted)
             }
         }
-        let blocksElapsed = (CACurrentMediaTime() - t2) * 1000
 
         // Configure todo view if this is a todo list (old format)
         if !message.hasContentBlocks && message.isTodoList, let items = message.todoItems {
@@ -635,17 +630,11 @@ final class MessageTableCell: UITableViewCell {
             let widthUnchanged = abs(width - lastLayoutWidth) < 0.5
             if widthUnchanged && layoutHash == lastLayoutHash {
                 // Layout-affecting data unchanged — skip expensive constraint rebuild
-                let totalElapsed = (CACurrentMediaTime() - t0) * 1000
-                print("  📦 CONFIGURE id=\(message.id.uuidString.prefix(8)) \(String(format: "%.2f", totalElapsed))ms (attr=\(String(format: "%.2f", attrElapsed)) blocks=\(String(format: "%.2f", blocksElapsed))) LAYOUT SKIPPED")
                 return
             }
             lastLayoutWidth = width
             lastLayoutHash = layoutHash
-            let t3 = CACurrentMediaTime()
             applyLayout(for: message, width: width)
-            let layoutElapsed = (CACurrentMediaTime() - t3) * 1000
-            let totalElapsed = (CACurrentMediaTime() - t0) * 1000
-            print("  📦 CONFIGURE id=\(message.id.uuidString.prefix(8)) \(String(format: "%.2f", totalElapsed))ms (attr=\(String(format: "%.2f", attrElapsed)) blocks=\(String(format: "%.2f", blocksElapsed)) layout=\(String(format: "%.2f", layoutElapsed)))")
         }
     }
 

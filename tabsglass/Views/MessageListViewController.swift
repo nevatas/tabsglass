@@ -884,10 +884,7 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
 
         let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageTableCell
-        let t0 = CACurrentMediaTime()
         cell.configure(with: message, isExpanded: expandedMessageIds.contains(message.id))
-        let elapsed = (CACurrentMediaTime() - t0) * 1000
-        print("⏱ CELL CONFIG row=\(indexPath.row) id=\(message.id.uuidString.prefix(8)) \(String(format: "%.2f", elapsed))ms")
         cellRenderCache[message.id] = makeCellRenderHash(for: message)
         cell.isKeyboardActive = isComposerFocused
         cell.onMediaTapped = { [weak self] index, sourceFrame, _, _, _ in
@@ -968,9 +965,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
     }
 
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
-        if indexPath.row < sortedMessages.count {
-            print("⏱ WILL DISPLAY row=\(indexPath.row) id=\(sortedMessages[indexPath.row].id.uuidString.prefix(8)) offset=\(Int(tableView.contentOffset.y))")
-        }
         // Ensure selection mode is correct for pre-fetched cells that missed updateSelectionMode
         guard let messageCell = cell as? MessageTableCell,
               indexPath.row < sortedMessages.count else { return }
@@ -1008,7 +1002,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         }
 
         // Calculate height (expensive operation)
-        let t0 = CACurrentMediaTime()
         let height: CGFloat
         if isSearchTab {
             // Search tab uses SearchResultCell with different layout
@@ -1016,8 +1009,6 @@ extension MessageListViewController: UITableViewDataSource, UITableViewDelegate 
         } else {
             height = calculateMessageHeight(for: message, cellWidth: cellWidth)
         }
-        let elapsed = (CACurrentMediaTime() - t0) * 1000
-        print("⏱ HEIGHT CALC row=\(indexPath.row) id=\(message.id.uuidString.prefix(8)) \(String(format: "%.2f", elapsed))ms h=\(Int(height)) media=\(message.hasMedia) todo=\(message.isTodoList) blocks=\(message.hasContentBlocks) text=\(message.content.count)ch")
 
         // Cache the result alongside input hash for change detection
         heightCache[message.id] = height
