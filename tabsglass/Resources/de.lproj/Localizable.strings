@@ -145,8 +145,27 @@
 "onboarding.subtitle" = "";
 "onboarding.tabs_title" = "Sortiere deine Gedanken in Tabs";
 "onboarding.reminders_title" = "Wichtiges anheften und Erinnerungen setzen";
+"onboarding.space_title" = "Mach es persönlich";
+"onboarding.space_subtitle" = "Gib deinem Raum einen Namen";
+"onboarding.space_placeholder" = "Benenne deinen Raum";
 "onboarding.picker_title" = "Mach es zu deinem";
 "onboarding.picker_subtitle" = "Wähle ein paar aus — umbenennen oder mehr hinzufügen jederzeit";
+"onboarding.tab.ideas" = "💡 Ideen";
+"onboarding.tab.todo" = "✅ Aufgaben";
+"onboarding.tab.work" = "💼 Arbeit";
+"onboarding.tab.study" = "🎓 Studium";
+"onboarding.tab.shopping" = "🛒 Einkaufen";
+"onboarding.tab.gym" = "🏋️ Fitness";
+"onboarding.tab.reading" = "📚 Lesen";
+"onboarding.tab.recipes" = "🍽️ Rezepte";
+"onboarding.tab.finance" = "💰 Finanzen";
+"onboarding.tab.travel" = "✈️ Reisen";
+"onboarding.tab.links" = "🔗 Links";
+"onboarding.tab.watchlist" = "🎬 Watchlist";
+"onboarding.tab.journal" = "📝 Tagebuch";
+"onboarding.tab.home" = "🏠 Zuhause";
+"onboarding.tab.wishlist" = "🎁 Wunschliste";
+"onboarding.tab.pets" = "🐾 Haustiere";
 "onboarding.skip" = "Überspringen";
 "onboarding.continue" = "Weiter";
 

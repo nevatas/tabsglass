@@ -102,7 +102,7 @@ struct OnboardingView: View {
     @Environment(\.colorScheme) private var colorScheme
     let onComplete: () -> Void
 
-    // Step: 0 = welcome, 1 = phone demo, 2 = tabs, 3 = reminders, 4 = tab picker
+    // Step: 0 = welcome, 1 = phone demo, 2 = tabs, 3 = reminders, 4 = name space, 5 = tab picker
     @State private var step = 0
 
     // Welcome step animations (sequential: title → icon → subtitle → button)
@@ -135,6 +135,14 @@ struct OnboardingView: View {
     @State private var remindersTitleVisible = false
     @State private var remindersButtonVisible = false
 
+    // Name space step animations
+    @State private var spaceTitleVisible = false
+    @State private var spaceContentVisible = false
+    @State private var spaceButtonVisible = false
+    @State private var spaceNameInput = ""
+    @State private var keyboardHeight: CGFloat = 0
+    @FocusState private var spaceFieldFocused: Bool
+
     // Tab picker step animations
     @State private var phoneHidden = false
     @State private var pickerTitleVisible = false
@@ -142,12 +150,16 @@ struct OnboardingView: View {
     @State private var pickerButtonVisible = false
     @State private var selectedStarterTabs: Set<String> = []
 
-    private static let starterTabs = [
-        "💡 Ideas", "✅ To-Do", "💼 Work", "🎓 Study",
-        "🛒 Shopping", "🏋️ Fitness", "📚 Reading", "🍽️ Recipes",
-        "💰 Finance", "✈️ Travel", "🎯 Goals", "🎬 Watchlist",
-        "📝 Journal", "🏠 Home", "🎵 Music", "🐾 Pets",
+    private static let starterTabKeys = [
+        "onboarding.tab.ideas", "onboarding.tab.todo", "onboarding.tab.work", "onboarding.tab.study",
+        "onboarding.tab.shopping", "onboarding.tab.gym", "onboarding.tab.reading", "onboarding.tab.recipes",
+        "onboarding.tab.finance", "onboarding.tab.travel", "onboarding.tab.links", "onboarding.tab.watchlist",
+        "onboarding.tab.journal", "onboarding.tab.home", "onboarding.tab.wishlist", "onboarding.tab.pets",
     ]
+
+    private var starterTabs: [String] {
+        Self.starterTabKeys.map { NSLocalizedString($0, comment: "") }
+    }
 
     private let warmDark = Color(red: 0x33/255, green: 0x2F/255, blue: 0x24/255)
 
@@ -203,7 +215,7 @@ struct OnboardingView: View {
             VStack {
                 Spacer()
                 ChatTopFadeGradientBridge()
-                    .frame(height: 160)
+                    .frame(height: 240)
                     .scaleEffect(y: -1)
             }
             .ignoresSafeArea(.all, edges: .bottom)
@@ -319,7 +331,43 @@ struct OnboardingView: View {
                 .opacity(remindersTitleVisible ? 1 : 0)
                 .offset(y: remindersTitleVisible ? 0 : 20)
 
-            // MARK: - Step 4: Tab picker
+            // MARK: - Step 4: Name your space
+
+            VStack(spacing: 0) {
+                Spacer()
+                Spacer()
+
+                Text("💎")
+                    .font(.system(size: 56))
+                    .opacity(spaceTitleVisible ? 1 : 0)
+                    .offset(y: spaceTitleVisible ? 0 : 20)
+
+                TextField("", text: $spaceNameInput, prompt: Text(L10n.Onboarding.spacePlaceholder)
+                    .foregroundStyle((colorScheme == .dark ? Color.white : warmDark).opacity(0.3)))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(colorScheme == .dark ? .white : warmDark)
+                    .multilineTextAlignment(.center)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .focused($spaceFieldFocused)
+                    .onChange(of: spaceNameInput) { _, newValue in
+                        if newValue.count > 20 {
+                            spaceNameInput = String(newValue.prefix(20))
+                        }
+                    }
+                    .padding(.horizontal, 40)
+                    .padding(.top, 24)
+                    .opacity(spaceContentVisible ? 1 : 0)
+                    .offset(y: spaceContentVisible ? 0 : 20)
+
+                Spacer()
+                Spacer()
+                Spacer()
+            }
+            .opacity(step == 4 ? 1 : 0)
+            .allowsHitTesting(step == 4)
+
+            // MARK: - Step 5: Tab picker
 
             VStack(spacing: 0) {
                 VStack(spacing: 8) {
@@ -342,7 +390,7 @@ struct OnboardingView: View {
                 Spacer()
 
                 FlowLayout(spacing: 12) {
-                    ForEach(Self.starterTabs, id: \.self) { tab in
+                    ForEach(starterTabs, id: \.self) { tab in
                         let isSelected = selectedStarterTabs.contains(tab)
                         OnboardingTabChip(
                             title: tab,
@@ -376,6 +424,20 @@ struct OnboardingView: View {
             VStack {
                 Spacer()
 
+                // Progress dots
+                HStack(spacing: 8) {
+                    ForEach(0..<6) { index in
+                        Circle()
+                            .fill(index == step
+                                  ? (colorScheme == .dark ? Color.white : warmDark)
+                                  : (colorScheme == .dark ? Color.white.opacity(0.25) : warmDark.opacity(0.25)))
+                            .frame(width: 8, height: 8)
+                    }
+                }
+                .padding(.bottom, 16)
+                .opacity(step >= 1 && step != 4 && step != 5 ? 1 : 0)
+                .animation(.easeOut(duration: 0.3), value: step)
+
                 Button {
                     if step == 0 {
                         advanceToPhoneStep()
@@ -384,6 +446,8 @@ struct OnboardingView: View {
                     } else if step == 2 {
                         advanceToRemindersStep()
                     } else if step == 3 {
+                        advanceToSpaceStep()
+                    } else if step == 4 {
                         advanceToPickerStep()
                     } else {
                         withAnimation(.easeIn(duration: 0.6)) {
@@ -395,22 +459,25 @@ struct OnboardingView: View {
                         }
                     }
                 } label: {
-                    Text(step == 4 && selectedStarterTabs.isEmpty
+                    Text(step == 5 && selectedStarterTabs.isEmpty
                          ? L10n.Onboarding.skipButton
                          : L10n.Onboarding.continueButton)
                         .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundStyle(buttonForeground)
+                        .foregroundStyle(buttonForeground.opacity(spaceButtonDisabled ? 0.4 : 1))
                         .contentTransition(.interpolate)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 18)
-                        .background(buttonBackground)
+                        .background(buttonBackground.opacity(spaceButtonDisabled ? 0.4 : 1))
                         .clipShape(Capsule())
                 }
+                .disabled(spaceButtonDisabled)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+                .padding(.bottom, keyboardHeight > 0 ? keyboardHeight - 20 : 8)
+                .animation(.easeOut(duration: 0.25), value: keyboardHeight)
                 .opacity(currentButtonVisible ? 1 : 0)
                 .offset(y: currentButtonVisible ? 0 : 20)
             }
+            .ignoresSafeArea(.keyboard)
 
             // Fade to black before paywall
             Color.black
@@ -421,6 +488,18 @@ struct OnboardingView: View {
         .onAppear {
             animateWelcome()
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                keyboardHeight = frame.height
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardHeight = 0
+        }
+    }
+
+    private var spaceButtonDisabled: Bool {
+        step == 4 && spaceNameInput.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private var currentButtonVisible: Bool {
@@ -429,6 +508,7 @@ struct OnboardingView: View {
         case 1: return phoneButtonVisible
         case 2: return tabsButtonVisible
         case 3: return remindersButtonVisible
+        case 4: return spaceButtonVisible
         default: return pickerButtonVisible
         }
     }
@@ -591,7 +671,7 @@ struct OnboardingView: View {
         }
     }
 
-    private func advanceToPickerStep() {
+    private func advanceToSpaceStep() {
         // Fade out reminders UI and phone
         withAnimation(.easeIn(duration: 0.25)) {
             remindersButtonVisible = false
@@ -601,6 +681,43 @@ struct OnboardingView: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             step = 4
+
+            withAnimation(.easeOut(duration: 0.4)) {
+                spaceTitleVisible = true
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.easeOut(duration: 0.4)) {
+                    spaceContentVisible = true
+                }
+                spaceFieldFocused = true
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    spaceButtonVisible = true
+                }
+            }
+        }
+    }
+
+    private func advanceToPickerStep() {
+        spaceFieldFocused = false
+        // Save space name
+        let trimmed = spaceNameInput.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            AppSettings.shared.spaceName = trimmed
+        }
+
+        // Fade out space UI
+        withAnimation(.easeIn(duration: 0.25)) {
+            spaceButtonVisible = false
+            spaceTitleVisible = false
+            spaceContentVisible = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            step = 5
 
             withAnimation(.easeOut(duration: 0.4)) {
                 pickerContentVisible = true

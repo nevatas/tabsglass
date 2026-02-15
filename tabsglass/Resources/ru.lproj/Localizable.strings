@@ -145,8 +145,27 @@
 "onboarding.subtitle" = "";
 "onboarding.tabs_title" = "Раскладывай мысли по табам";
 "onboarding.reminders_title" = "Закрепляй важное и ставь напоминания";
+"onboarding.space_title" = "Сделай его своим";
+"onboarding.space_subtitle" = "Придумай название для своего пространства";
+"onboarding.space_placeholder" = "Назови пространство";
 "onboarding.picker_title" = "Настрой под себя";
 "onboarding.picker_subtitle" = "Выбери несколько — переименуй или добавь ещё в любой момент";
+"onboarding.tab.ideas" = "💡 Идеи";
+"onboarding.tab.todo" = "✅ Задачи";
+"onboarding.tab.work" = "💼 Работа";
+"onboarding.tab.study" = "🎓 Учёба";
+"onboarding.tab.shopping" = "🛒 Покупки";
+"onboarding.tab.gym" = "🏋️ Спорт";
+"onboarding.tab.reading" = "📚 Чтение";
+"onboarding.tab.recipes" = "🍽️ Рецепты";
+"onboarding.tab.finance" = "💰 Финансы";
+"onboarding.tab.travel" = "✈️ Путешествия";
+"onboarding.tab.links" = "🔗 Ссылки";
+"onboarding.tab.watchlist" = "🎬 Смотреть";
+"onboarding.tab.journal" = "📝 Дневник";
+"onboarding.tab.home" = "🏠 Дом";
+"onboarding.tab.wishlist" = "🎁 Хотелки";
+"onboarding.tab.pets" = "🐾 Питомцы";
 "onboarding.skip" = "Пропустить";
 "onboarding.continue" = "Продолжить";
 

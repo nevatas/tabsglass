@@ -46,7 +46,7 @@ struct PaywallView: View {
                 .opacity(titleVisible ? 1 : 0)
                 .offset(y: titleVisible ? 0 : 20)
 
-                Text("Make Your Own Space")
+                Text("Your space is ready")
                     .font(.system(.title3, design: .rounded))
                     .foregroundStyle(.gray)
                     .padding(.top, 6)

@@ -57,6 +57,7 @@ enum TabDisplayItem: Identifiable {
 struct TabBarView: View {
     let tabs: [Tab]
     var inboxTitle: String = AppSettings.shared.inboxTitle
+    @AppStorage("spaceName") private var spaceName = "Taby"
     @Binding var selectedIndex: Int
     @Binding var switchFraction: CGFloat  // -1.0 ... 0 ... 1.0 при свайпе
     let onAddTap: () -> Void
@@ -117,7 +118,7 @@ struct TabBarView: View {
                 .opacity(1 - searchProgress)
                 .allowsHitTesting(searchProgress < 0.5)
 
-                Text(L10n.Search.title)
+                Text(spaceName)
                     .font(.headline)
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)

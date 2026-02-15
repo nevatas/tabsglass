@@ -175,6 +175,9 @@ enum L10n {
         static var subtitle: String { NSLocalizedString("onboarding.subtitle", comment: "") }
         static var tabsTitle: String { NSLocalizedString("onboarding.tabs_title", comment: "") }
         static var remindersTitle: String { NSLocalizedString("onboarding.reminders_title", comment: "") }
+        static var spaceTitle: String { NSLocalizedString("onboarding.space_title", comment: "") }
+        static var spaceSubtitle: String { NSLocalizedString("onboarding.space_subtitle", comment: "") }
+        static var spacePlaceholder: String { NSLocalizedString("onboarding.space_placeholder", comment: "") }
         static var pickerTitle: String { NSLocalizedString("onboarding.picker_title", comment: "") }
         static var pickerSubtitle: String { NSLocalizedString("onboarding.picker_subtitle", comment: "") }
         static var skipButton: String { NSLocalizedString("onboarding.skip", comment: "") }
