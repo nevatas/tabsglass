@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct PaywallView: View {
     @Binding var isPresented: Bool
@@ -26,7 +27,7 @@ struct PaywallView: View {
 
             VStack(spacing: 0) {
                 ZStack(alignment: .trailing) {
-                    Text("Taby Unlimited")
+                    Text("Super Taby")
                         .font(.system(.largeTitle, design: .rounded))
                         .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
@@ -228,10 +229,14 @@ private struct PlanPicker: View {
                 // Labels
                 HStack(spacing: 0) {
                     PlanSegment(title: "Yearly", price: "$29.99", isSelected: selectedPlan == 0) {
+                        guard selectedPlan != 0 else { return }
                         selectedPlan = 0
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     }
                     PlanSegment(title: "Monthly", price: "$9.99", isSelected: selectedPlan == 1) {
+                        guard selectedPlan != 1 else { return }
                         selectedPlan = 1
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     }
                 }
             }
@@ -268,11 +273,20 @@ private struct PlanSegment: View {
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(isSelected ? 1 : 0.4))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
             .animation(.easeInOut(duration: 0.2), value: isSelected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PlanSegmentButtonStyle())
+    }
+}
+
+private struct PlanSegmentButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 

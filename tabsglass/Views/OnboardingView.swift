@@ -154,13 +154,14 @@ struct OnboardingView: View {
         "onboarding.tab.ideas", "onboarding.tab.todo", "onboarding.tab.work", "onboarding.tab.study",
         "onboarding.tab.shopping", "onboarding.tab.gym", "onboarding.tab.reading", "onboarding.tab.recipes",
         "onboarding.tab.finance", "onboarding.tab.travel", "onboarding.tab.links", "onboarding.tab.watchlist",
-        "onboarding.tab.journal", "onboarding.tab.home", "onboarding.tab.wishlist", "onboarding.tab.pets",
+        "onboarding.tab.journal", "onboarding.tab.home", "onboarding.tab.wishlist", "onboarding.tab.funny",
     ]
 
     private var starterTabs: [String] {
         Self.starterTabKeys.map { NSLocalizedString($0, comment: "") }
     }
 
+    private let maxContentWidth: CGFloat = 393
     private let warmDark = Color(red: 0x33/255, green: 0x2F/255, blue: 0x24/255)
 
     private var buttonBackground: Color {
@@ -289,6 +290,7 @@ struct OnboardingView: View {
                 Spacer()
                 Spacer()
             }
+            .frame(maxWidth: maxContentWidth)
             .opacity(step == 0 ? 1 : 0)
             .offset(y: step == 0 ? 0 : -40)
 
@@ -301,7 +303,7 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
                 .padding(.top, 32)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: maxContentWidth, maxHeight: .infinity, alignment: .top)
                 .opacity(phoneTitleVisible ? 1 : 0)
                 .offset(y: phoneTitleVisible ? 0 : 20)
 
@@ -314,7 +316,7 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
                 .padding(.top, 32)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: maxContentWidth, maxHeight: .infinity, alignment: .top)
                 .opacity(tabsTitleVisible ? 1 : 0)
                 .offset(y: tabsTitleVisible ? 0 : 20)
 
@@ -327,7 +329,7 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
                 .padding(.top, 32)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: maxContentWidth, maxHeight: .infinity, alignment: .top)
                 .opacity(remindersTitleVisible ? 1 : 0)
                 .offset(y: remindersTitleVisible ? 0 : 20)
 
@@ -364,6 +366,7 @@ struct OnboardingView: View {
                 Spacer()
                 Spacer()
             }
+            .frame(maxWidth: maxContentWidth)
             .opacity(step == 4 ? 1 : 0)
             .allowsHitTesting(step == 4)
 
@@ -416,7 +419,9 @@ struct OnboardingView: View {
 
                 Spacer()
                 Spacer()
+                Spacer()
             }
+            .frame(maxWidth: maxContentWidth)
             .opacity(pickerContentVisible ? 1 : 0)
 
             // MARK: - Continue button
@@ -477,6 +482,7 @@ struct OnboardingView: View {
                 .opacity(currentButtonVisible ? 1 : 0)
                 .offset(y: currentButtonVisible ? 0 : 20)
             }
+            .frame(maxWidth: maxContentWidth)
             .ignoresSafeArea(.keyboard)
 
             // Fade to black before paywall

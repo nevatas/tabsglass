@@ -49,6 +49,7 @@ struct ContentView: View {
                     showOnboarding = false
                     showPaywall = true
                 }
+                .environment(\.colorScheme, .light)
             }
         }
         .background(backgroundColor.ignoresSafeArea())
