@@ -169,6 +169,8 @@ enum L10n {
 
     // MARK: - Onboarding
     enum Onboarding {
+        static var welcomeTitle: String { NSLocalizedString("onboarding.welcome_title", comment: "") }
+        static var welcomeSubtitle: String { NSLocalizedString("onboarding.welcome_subtitle", comment: "") }
         static var title: String { NSLocalizedString("onboarding.title", comment: "") }
         static var subtitle: String { NSLocalizedString("onboarding.subtitle", comment: "") }
         static var continueButton: String { NSLocalizedString("onboarding.continue", comment: "") }

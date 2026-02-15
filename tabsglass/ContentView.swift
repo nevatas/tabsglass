@@ -15,8 +15,8 @@ struct DeepLink {
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showOnboarding = false // TODO: revert to !AppSettings.shared.hasCompletedOnboarding
-    @State private var showPaywall = false // TODO: revert to AppSettings.shared.hasCompletedOnboarding
+    @State private var showOnboarding = true // DEBUG: always show for development
+    @State private var showPaywall = false
     @State private var pendingDeepLink: DeepLink?
     private var themeManager: ThemeManager { ThemeManager.shared }
 

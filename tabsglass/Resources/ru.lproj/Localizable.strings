@@ -139,8 +139,10 @@
 
 // MARK: - Onboarding
 
-"onboarding.title" = "Заметки выглядят как сообщения в мессенджерах";
-"onboarding.subtitle" = "Будто чат с самим собой";
+"onboarding.welcome_title" = "Добро пожаловать в Taby!";
+"onboarding.welcome_subtitle" = "Простое место для всего важного";
+"onboarding.title" = "Заметки как чат с самим собой";
+"onboarding.subtitle" = "";
 "onboarding.continue" = "Продолжить";
 
 // MARK: - Search

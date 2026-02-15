@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D613636E2F41E4E200E2DDBB /* ConfettiSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = D613636D2F41E4E200E2DDBB /* ConfettiSwiftUI */; };
 		D62F85B92F322E4000186C77 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = D6EXPORT022F000002000F3043 /* ZIPFoundation */; };
 		D6AAAA0C2F400C0C00000001 /* TabyWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D6AAAA012F40000100000001 /* TabyWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D6C2B1552F2B909B000F3043 /* share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D6C2B14B2F2B909B000F3043 /* share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -152,6 +153,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D613636E2F41E4E200E2DDBB /* ConfettiSwiftUI in Frameworks */,
 				D62F85B92F322E4000186C77 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -187,6 +189,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		D613636C2F41E4E200E2DDBB /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		D63BFDE12F217BAC00B28B56 = {
 			isa = PBXGroup;
 			children = (
@@ -195,6 +204,7 @@
 				D63BFE042F217BAD00B28B56 /* tabsglassUITests */,
 				D6C2B14C2F2B909B000F3043 /* share */,
 				D6AAAA022F40000200000001 /* TabyWidget */,
+				D613636C2F41E4E200E2DDBB /* Frameworks */,
 				D63BFDEB2F217BAC00B28B56 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -235,6 +245,7 @@
 			name = tabsglass;
 			packageProductDependencies = (
 				D6EXPORT022F000002000F3043 /* ZIPFoundation */,
+				D613636D2F41E4E200E2DDBB /* ConfettiSwiftUI */,
 			);
 			productName = tabsglass;
 			productReference = D63BFDEA2F217BAC00B28B56 /* Taby.app */;
@@ -374,6 +385,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D6EXPORT012F000001000F3043 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				D613636B2F41E48900E2DDBB /* XCRemoteSwiftPackageReference "ConfettiSwiftUI" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D63BFDEB2F217BAC00B28B56 /* Products */;
@@ -635,7 +647,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = company.thecool.taby;
 				PRODUCT_MODULE_NAME = tabsglass;
 				PRODUCT_NAME = Taby;
@@ -674,7 +686,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = company.thecool.taby;
 				PRODUCT_MODULE_NAME = tabsglass;
 				PRODUCT_NAME = Taby;
@@ -948,6 +960,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		D613636B2F41E48900E2DDBB /* XCRemoteSwiftPackageReference "ConfettiSwiftUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/simibac/ConfettiSwiftUI";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.0.0;
+			};
+		};
 		D6EXPORT012F000001000F3043 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
@@ -959,6 +979,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D613636D2F41E4E200E2DDBB /* ConfettiSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D613636B2F41E48900E2DDBB /* XCRemoteSwiftPackageReference "ConfettiSwiftUI" */;
+			productName = ConfettiSwiftUI;
+		};
 		D6EXPORT022F000002000F3043 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D6EXPORT012F000001000F3043 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;

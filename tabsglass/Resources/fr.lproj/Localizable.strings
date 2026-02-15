@@ -139,8 +139,10 @@
 
 // MARK: - Onboarding
 
-"onboarding.title" = "Les notes ressemblent à des messages de messagerie";
-"onboarding.subtitle" = "Comme un chat avec soi-même";
+"onboarding.welcome_title" = "Bienvenue dans Taby !";
+"onboarding.welcome_subtitle" = "Un endroit simple pour tout ce qui compte";
+"onboarding.title" = "Des notes comme un chat avec soi-même";
+"onboarding.subtitle" = "";
 "onboarding.continue" = "Continuer";
 
 // MARK: - Search
