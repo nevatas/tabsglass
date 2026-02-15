@@ -143,6 +143,11 @@
 "onboarding.welcome_subtitle" = "Простое место для всего важного";
 "onboarding.title" = "Заметки как чат с самим собой";
 "onboarding.subtitle" = "";
+"onboarding.tabs_title" = "Раскладывай мысли по табам";
+"onboarding.reminders_title" = "Закрепляй важное и ставь напоминания";
+"onboarding.picker_title" = "Настрой под себя";
+"onboarding.picker_subtitle" = "Выбери несколько — переименуй или добавь ещё в любой момент";
+"onboarding.skip" = "Пропустить";
 "onboarding.continue" = "Продолжить";
 
 // MARK: - Search

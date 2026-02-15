@@ -143,6 +143,11 @@
 "onboarding.welcome_subtitle" = "Un endroit simple pour tout ce qui compte";
 "onboarding.title" = "Des notes comme un chat avec soi-même";
 "onboarding.subtitle" = "";
+"onboarding.tabs_title" = "Classez vos idées dans des onglets";
+"onboarding.reminders_title" = "Épinglez l'essentiel et créez des rappels";
+"onboarding.picker_title" = "Personnalisez votre espace";
+"onboarding.picker_subtitle" = "Choisissez-en quelques-uns — renommez ou ajoutez-en à tout moment";
+"onboarding.skip" = "Passer";
 "onboarding.continue" = "Continuer";
 
 // MARK: - Search

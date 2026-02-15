@@ -143,6 +143,11 @@
 "onboarding.welcome_subtitle" = "A simple place for everything that matters";
 "onboarding.title" = "Notes look like a chat with yourself";
 "onboarding.subtitle" = "";
+"onboarding.tabs_title" = "Sort your thoughts into tabs";
+"onboarding.reminders_title" = "Pin what matters and set reminders";
+"onboarding.picker_title" = "Make it yours";
+"onboarding.picker_subtitle" = "Pick a few to start — rename or add more anytime";
+"onboarding.skip" = "Skip";
 "onboarding.continue" = "Continue";
 
 // MARK: - Search
