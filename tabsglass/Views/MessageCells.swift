@@ -64,6 +64,7 @@ final class MessageTableCell: UITableViewCell {
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
     private var lastLayoutHash: Int = 0
+    private var lastMixedContentHash: Int = 0
 
     /// Callback when a photo is tapped: (index, sourceFrame in window, image, fileNames)
     var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
@@ -569,9 +570,23 @@ final class MessageTableCell: UITableViewCell {
 
         // Configure mixed content view if message uses content blocks
         if message.hasContentBlocks, let blocks = message.contentBlocks {
-            let isDarkMode = traitCollection.userInterfaceStyle == .dark
             let bubbleWidth = max(contentView.bounds.width - 32, 0)
-            mixedContentView.configure(with: blocks, isDarkMode: isDarkMode, maxWidth: bubbleWidth)
+            var hasher = Hasher()
+            hasher.combine(message.id)
+            for block in blocks {
+                hasher.combine(block.id)
+                hasher.combine(block.isCompleted)
+                hasher.combine(block.text)
+            }
+            hasher.combine(traitCollection.userInterfaceStyle == .dark)
+            hasher.combine(Int(bubbleWidth))
+            let mixedContentHash = hasher.finalize()
+            if lastMixedContentHash != mixedContentHash {
+                let isDarkMode = traitCollection.userInterfaceStyle == .dark
+                mixedContentView.configure(with: blocks, isDarkMode: isDarkMode, maxWidth: bubbleWidth)
+                lastMixedContentHash = mixedContentHash
+            }
+            mixedContentView.isHidden = false
             mixedContentView.onTodoToggle = { [weak self] itemId, isCompleted in
                 self?.onTodoToggle?(itemId, isCompleted)
             }
