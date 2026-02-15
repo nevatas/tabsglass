@@ -136,7 +136,6 @@ struct OnboardingView: View {
     @State private var remindersButtonVisible = false
 
     // Name space step animations
-    @State private var spaceTitleVisible = false
     @State private var spaceContentVisible = false
     @State private var spaceButtonVisible = false
     @State private var spaceNameInput = ""
@@ -155,6 +154,7 @@ struct OnboardingView: View {
         "onboarding.tab.shopping", "onboarding.tab.gym", "onboarding.tab.reading", "onboarding.tab.recipes",
         "onboarding.tab.finance", "onboarding.tab.travel", "onboarding.tab.links", "onboarding.tab.watchlist",
         "onboarding.tab.journal", "onboarding.tab.home", "onboarding.tab.wishlist", "onboarding.tab.funny",
+        "onboarding.tab.listening", "onboarding.tab.selfcare", "onboarding.tab.sideproject", "onboarding.tab.inspo",
     ]
 
     private var starterTabs: [String] {
@@ -195,7 +195,7 @@ struct OnboardingView: View {
                         radius: 20, y: 10
                     )
                     .padding(.horizontal, 44)
-                    .offset(y: -30 + (phoneVisible ? 0 : -100) + (phoneDropped ? 210 : 0) + (phoneRaised ? -120 : 0))
+                    .offset(y: -30 + (phoneVisible ? 0 : -100) + (phoneDropped ? 210 : 0) + (phoneRaised ? -60 : 0))
                     .opacity(step >= 1 && phoneVisible && !phoneHidden ? 1 : 0)
 
                 Spacer()
@@ -339,11 +339,6 @@ struct OnboardingView: View {
                 Spacer()
                 Spacer()
 
-                Text("💎")
-                    .font(.system(size: 56))
-                    .opacity(spaceTitleVisible ? 1 : 0)
-                    .offset(y: spaceTitleVisible ? 0 : 20)
-
                 TextField("", text: $spaceNameInput, prompt: Text(L10n.Onboarding.spacePlaceholder)
                     .foregroundStyle((colorScheme == .dark ? Color.white : warmDark).opacity(0.3)))
                     .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -385,6 +380,7 @@ struct OnboardingView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
+                .frame(maxWidth: maxContentWidth)
                 .padding(.horizontal, 32)
                 .padding(.top, 32)
                 .opacity(pickerTitleVisible ? 1 : 0)
@@ -421,7 +417,6 @@ struct OnboardingView: View {
                 Spacer()
                 Spacer()
             }
-            .frame(maxWidth: maxContentWidth)
             .opacity(pickerContentVisible ? 1 : 0)
 
             // MARK: - Continue button
@@ -689,13 +684,10 @@ struct OnboardingView: View {
             step = 4
 
             withAnimation(.easeOut(duration: 0.4)) {
-                spaceTitleVisible = true
+                spaceContentVisible = true
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                withAnimation(.easeOut(duration: 0.4)) {
-                    spaceContentVisible = true
-                }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 spaceFieldFocused = true
             }
 
@@ -718,7 +710,6 @@ struct OnboardingView: View {
         // Fade out space UI
         withAnimation(.easeIn(duration: 0.25)) {
             spaceButtonVisible = false
-            spaceTitleVisible = false
             spaceContentVisible = false
         }
 

@@ -86,6 +86,22 @@ struct PaywallView: View {
 
                 Spacer()
 
+                // Social proof
+                HStack(spacing: 4) {
+                    ForEach(0..<5) { _ in
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.yellow)
+                    }
+                    Text("in App Store")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .padding(.leading, 8)
+                }
+                .opacity(cardsVisible[3] ? 1 : 0)
+
+                Spacer()
+
                 // CTA
                 VStack(spacing: 12) {
                     // Plan picker
@@ -95,7 +111,7 @@ struct PaywallView: View {
                         // TODO: Start purchase
                     } label: {
                         VStack(spacing: 2) {
-                            Text("Try 7 Days Free")
+                            Text(selectedPlan == 0 ? "Try 7 Days Free" : "Try 3 Days Free")
                                 .font(.system(size: 18, weight: .bold, design: .rounded))
                             Text(selectedPlan == 0 ? "then $29.99/year" : "then $9.99/month")
                                 .font(.system(size: 13, weight: .medium, design: .rounded))
@@ -298,7 +314,7 @@ struct TabsFeatureCard: View {
     private static let allTabs = [
         "📝 Journal", "🧘 Mindfulness", "🛌 Sleep Tracker", "🏋️ Fitness", "💊 Health",
         "🍽️ Recipes", "🎯 Goals", "💰 Finance", "🛒 Shopping", "🎁 Gifts",
-        "🚀 Startup", "📌 To-Do", "📆 Meetings", "🎙️ Voice Notes", "🗂️ Documents",
+        "🚀 Startup", "📌 To-Do", "📆 Meetings", "🗂️ Documents",
         "🧠 Brainstorm", "📋 Research", "⌨️ Code Snippets", "💡 UX/UI", "📊 Stats",
         "🎸 Music", "📚 Books", "🎬 Movies & Series", "🎮 Games", "📷 Photography",
         "🎨 Art", "✍️ Writing", "📜 Quotes", "🃏 Fun Ideas", "🎤 Podcast Notes",
@@ -312,9 +328,9 @@ struct TabsFeatureCard: View {
     @State private var tabs2: [String] = Array(allTabs.shuffled().prefix(10))
     @State private var tabs3: [String] = Array(allTabs.shuffled().prefix(10))
 
-    private let row1Speed: CGFloat = 42
-    private let row2Speed: CGFloat = 54
-    private let row3Speed: CGFloat = 34
+    private let row1Speed: CGFloat = 28
+    private let row2Speed: CGFloat = 36
+    private let row3Speed: CGFloat = 22
 
     var body: some View {
         VStack(spacing: 0) {
@@ -660,7 +676,7 @@ struct InfiniteTasksScroller: View {
     let tasks: [String]
     let elapsed: TimeInterval
 
-    private let scrollSpeed: CGFloat = 40
+    private let scrollSpeed: CGFloat = 26
 
     @State private var contentHeight: CGFloat = 0
 
