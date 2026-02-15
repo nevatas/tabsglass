@@ -7,6 +7,36 @@ import SwiftUI
 import SwiftData
 import WidgetKit
 
+// MARK: - Localization
+
+private enum WidgetL10n {
+    private static var lang: String {
+        Locale.current.language.languageCode?.identifier ?? "en"
+    }
+
+    static var latest: String {
+        switch lang {
+        case "ru": "Недавнее"
+        case "de": "Neueste"
+        case "fr": "Récente"
+        case "es": "Reciente"
+        default: "Latest"
+        }
+    }
+
+    static var andMore: (Int) -> String {
+        { count in
+            switch lang {
+            case "ru": "и ещё \(count)"
+            case "de": "und \(count) mehr"
+            case "fr": "et \(count) de plus"
+            case "es": "y \(count) más"
+            default: "and \(count) more"
+            }
+        }
+    }
+}
+
 // MARK: - Entry
 
 struct TodoLine: Identifiable {
@@ -193,7 +223,7 @@ struct LatestMessageWidgetEntryView: View {
                     .resizable()
                     .frame(width: 20, height: 20)
                     .clipShape(RoundedRectangle(cornerRadius: 5))
-                Text("Last Post")
+                Text(WidgetL10n.latest)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(secondaryText)
                 Spacer()
@@ -244,7 +274,7 @@ struct LatestMessageWidgetEntryView: View {
                 if !entry.todoLines.isEmpty {
                     let maxTodos = entry.content.isEmpty ? 4 : 3
                     if entry.todoLines.count > maxTodos {
-                        Text("and \(entry.todoLines.count - maxTodos) more")
+                        Text(WidgetL10n.andMore(entry.todoLines.count - maxTodos))
                             .font(.caption2)
                             .foregroundStyle(tertiaryText)
                             .lineLimit(1)
@@ -275,7 +305,7 @@ struct LatestMessageWidget: Widget {
                 .widgetURL(entry.deepLinkURL)
                 .containerBackground(bg, for: .widget)
         }
-        .configurationDisplayName("Latest Message")
+        .configurationDisplayName(WidgetL10n.latest)
         .description("Shows the most recent message.")
         .supportedFamilies([.systemSmall])
     }
