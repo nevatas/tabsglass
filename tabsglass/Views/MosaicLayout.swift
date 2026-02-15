@@ -556,6 +556,7 @@ final class MosaicMediaView: UIView {
 
             // Load thumbnail
             let targetSize = item.frame.size
+            let loadStart = CACurrentMediaTime()
             if mediaItem.isVideo, let thumbnailFileName = mediaItem.thumbnailFileName {
                 // Load video thumbnail
                 ImageCache.shared.loadVideoThumbnail(
@@ -563,6 +564,8 @@ final class MosaicMediaView: UIView {
                     thumbnailFileName: thumbnailFileName,
                     targetSize: targetSize
                 ) { [weak imageView] image in
+                    let loadElapsed = (CACurrentMediaTime() - loadStart) * 1000
+                    print("  🎬 VIDEO THUMB \(mediaItem.fileName.prefix(8)) \(String(format: "%.1f", loadElapsed))ms cached=\(loadElapsed < 1)")
                     imageView?.image = image
                 }
 
@@ -580,6 +583,8 @@ final class MosaicMediaView: UIView {
             } else {
                 // Load photo thumbnail
                 ImageCache.shared.loadThumbnail(for: mediaItem.fileName, targetSize: targetSize) { [weak imageView] image in
+                    let loadElapsed = (CACurrentMediaTime() - loadStart) * 1000
+                    print("  📷 PHOTO THUMB \(mediaItem.fileName.prefix(8)) \(String(format: "%.1f", loadElapsed))ms cached=\(loadElapsed < 1)")
                     imageView?.image = image
                 }
             }

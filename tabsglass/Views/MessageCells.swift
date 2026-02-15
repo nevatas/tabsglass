@@ -64,6 +64,7 @@ final class MessageTableCell: UITableViewCell {
     private var cachedMessage: Message?
     private var lastLayoutWidth: CGFloat = 0
     private var lastLayoutHash: Int = 0
+    private var lastMixedContentHash: Int = 0
 
     /// Callback when a photo is tapped: (index, sourceFrame in window, image, fileNames)
     var onPhotoTapped: ((Int, CGRect, UIImage, [String]) -> Void)?
@@ -560,22 +561,41 @@ final class MessageTableCell: UITableViewCell {
     }
 
     func configure(with message: Message, isExpanded: Bool = false) {
+        let t0 = CACurrentMediaTime()
         cachedMessage = message
         self.isExpanded = isExpanded
 
         // Create attributed string with entities (links, formatting)
+        let t1 = CACurrentMediaTime()
         let attributedText = createAttributedString(for: message)
         messageTextView.attributedText = attributedText
+        let attrElapsed = (CACurrentMediaTime() - t1) * 1000
 
         // Configure mixed content view if message uses content blocks
+        let t2 = CACurrentMediaTime()
         if message.hasContentBlocks, let blocks = message.contentBlocks {
-            let isDarkMode = traitCollection.userInterfaceStyle == .dark
             let bubbleWidth = max(contentView.bounds.width - 32, 0)
-            mixedContentView.configure(with: blocks, isDarkMode: isDarkMode, maxWidth: bubbleWidth)
+            var hasher = Hasher()
+            hasher.combine(message.id)
+            for block in blocks {
+                hasher.combine(block.id)
+                hasher.combine(block.isCompleted)
+                hasher.combine(block.text)
+            }
+            hasher.combine(traitCollection.userInterfaceStyle == .dark)
+            hasher.combine(Int(bubbleWidth))
+            let mixedContentHash = hasher.finalize()
+            if lastMixedContentHash != mixedContentHash {
+                let isDarkMode = traitCollection.userInterfaceStyle == .dark
+                mixedContentView.configure(with: blocks, isDarkMode: isDarkMode, maxWidth: bubbleWidth)
+                lastMixedContentHash = mixedContentHash
+            }
+            mixedContentView.isHidden = false
             mixedContentView.onTodoToggle = { [weak self] itemId, isCompleted in
                 self?.onTodoToggle?(itemId, isCompleted)
             }
         }
+        let blocksElapsed = (CACurrentMediaTime() - t2) * 1000
 
         // Configure todo view if this is a todo list (old format)
         if !message.hasContentBlocks && message.isTodoList, let items = message.todoItems {
@@ -615,11 +635,17 @@ final class MessageTableCell: UITableViewCell {
             let widthUnchanged = abs(width - lastLayoutWidth) < 0.5
             if widthUnchanged && layoutHash == lastLayoutHash {
                 // Layout-affecting data unchanged — skip expensive constraint rebuild
+                let totalElapsed = (CACurrentMediaTime() - t0) * 1000
+                print("  📦 CONFIGURE id=\(message.id.uuidString.prefix(8)) \(String(format: "%.2f", totalElapsed))ms (attr=\(String(format: "%.2f", attrElapsed)) blocks=\(String(format: "%.2f", blocksElapsed))) LAYOUT SKIPPED")
                 return
             }
             lastLayoutWidth = width
             lastLayoutHash = layoutHash
+            let t3 = CACurrentMediaTime()
             applyLayout(for: message, width: width)
+            let layoutElapsed = (CACurrentMediaTime() - t3) * 1000
+            let totalElapsed = (CACurrentMediaTime() - t0) * 1000
+            print("  📦 CONFIGURE id=\(message.id.uuidString.prefix(8)) \(String(format: "%.2f", totalElapsed))ms (attr=\(String(format: "%.2f", attrElapsed)) blocks=\(String(format: "%.2f", blocksElapsed)) layout=\(String(format: "%.2f", layoutElapsed)))")
         }
     }
 
