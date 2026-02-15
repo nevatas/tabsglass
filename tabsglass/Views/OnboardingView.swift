@@ -112,6 +112,8 @@ struct OnboardingView: View {
     @State private var iconTapCount = 0
     @State private var confettiTrigger = 0
     @State private var welcomeSubtitleVisible = false
+    @State private var revealedCount = 0
+    @State private var typewriterTimer: Timer?
     @State private var welcomeButtonVisible = false
 
     // Phone step animations
@@ -119,6 +121,7 @@ struct OnboardingView: View {
     @State private var phoneButtonVisible = false
     @State private var videoPlaying = false
     @State private var phoneShadow = false
+    @State private var fadeToBlack = false
 
     private let warmDark = Color(red: 0x33/255, green: 0x2F/255, blue: 0x24/255)
 
@@ -139,7 +142,7 @@ struct OnboardingView: View {
 
             // Video player — always mounted for prerendering, hidden until step 1
             VStack {
-                LoopingVideoPlayer(assetName: "onboarding-video-1", isPlaying: videoPlaying)
+                LoopingVideoPlayer(assetName: "onboarding/onboarding-video", isPlaying: videoPlaying)
                     .aspectRatio(590.0 / 1278.0, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 42, style: .continuous))
                     .padding(5)
@@ -226,13 +229,11 @@ struct OnboardingView: View {
                     .offset(y: welcomeTitleVisible ? 0 : 20)
                     .padding(.bottom, 8)
 
-                Text(L10n.Onboarding.welcomeSubtitle)
+                Text(typewriterAttributedSubtitle)
                     .font(.system(.title3, design: .rounded))
-                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                     .opacity(welcomeSubtitleVisible ? 1 : 0)
-                    .offset(y: welcomeSubtitleVisible ? 0 : 20)
 
                 Spacer()
                 Spacer()
@@ -263,8 +264,13 @@ struct OnboardingView: View {
                     if step == 0 {
                         advanceToPhoneStep()
                     } else {
-                        AppSettings.shared.hasCompletedOnboarding = true
-                        onComplete()
+                        withAnimation(.easeIn(duration: 0.6)) {
+                            fadeToBlack = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            AppSettings.shared.hasCompletedOnboarding = true
+                            onComplete()
+                        }
                     }
                 } label: {
                     Text(L10n.Onboarding.continueButton)
@@ -280,6 +286,12 @@ struct OnboardingView: View {
                 .opacity(currentButtonVisible ? 1 : 0)
                 .offset(y: currentButtonVisible ? 0 : 20)
             }
+
+            // Fade to black before paywall
+            Color.black
+                .ignoresSafeArea()
+                .opacity(fadeToBlack ? 1 : 0)
+                .allowsHitTesting(false)
         }
         .onAppear {
             animateWelcome()
@@ -288,6 +300,23 @@ struct OnboardingView: View {
 
     private var currentButtonVisible: Bool {
         step == 0 ? welcomeButtonVisible : phoneButtonVisible
+    }
+
+    private var typewriterAttributedSubtitle: AttributedString {
+        let full = L10n.Onboarding.welcomeSubtitle
+        var result = AttributedString(full)
+        let chars = Array(full)
+        var offset = result.startIndex
+        for i in 0..<chars.count {
+            let next = result.index(afterCharacter: offset)
+            if i < revealedCount {
+                result[offset..<next].foregroundColor = .secondary
+            } else {
+                result[offset..<next].foregroundColor = .clear
+            }
+            offset = next
+        }
+        return result
     }
 
     // MARK: - Animations
@@ -309,18 +338,35 @@ struct OnboardingView: View {
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + start + 1.3) {
-            withAnimation(.easeOut(duration: 0.5)) {
+            withAnimation(.easeOut(duration: 0.3)) {
                 welcomeSubtitleVisible = true
             }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                startTypewriter()
+            }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + start + 2.0) {
-            withAnimation(.easeOut(duration: 0.4)) {
-                welcomeButtonVisible = true
+    }
+
+    private func startTypewriter() {
+        let total = L10n.Onboarding.welcomeSubtitle.count
+        typewriterTimer = Timer.scheduledTimer(withTimeInterval: 0.07, repeats: true) { timer in
+            if revealedCount < total {
+                revealedCount += 1
+            } else {
+                timer.invalidate()
+                typewriterTimer = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        welcomeButtonVisible = true
+                    }
+                }
             }
         }
     }
 
     private func advanceToPhoneStep() {
+        typewriterTimer?.invalidate()
+        typewriterTimer = nil
         // Fade out welcome
         withAnimation(.easeIn(duration: 0.3)) {
             welcomeTitleVisible = false
