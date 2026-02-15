@@ -208,6 +208,7 @@ struct LatestMessageWidgetEntryView: View {
 
             // Message content
             if !entry.todoLines.isEmpty {
+                let maxTodos = entry.content.isEmpty ? 4 : 3
                 VStack(alignment: .leading, spacing: 3) {
                     if !entry.content.isEmpty {
                         Text(entry.content)
@@ -215,7 +216,7 @@ struct LatestMessageWidgetEntryView: View {
                             .foregroundStyle(primaryText)
                             .lineLimit(2)
                     }
-                    ForEach(entry.todoLines) { todo in
+                    ForEach(Array(entry.todoLines.prefix(maxTodos))) { todo in
                         HStack(spacing: 5) {
                             Image(systemName: "circle")
                                 .font(.system(size: 10))
@@ -238,8 +239,17 @@ struct LatestMessageWidgetEntryView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
 
-            // Tab name in bottom-right
+            // Footer: "and N more" (left) + tab name (right)
             HStack {
+                if !entry.todoLines.isEmpty {
+                    let maxTodos = entry.content.isEmpty ? 4 : 3
+                    if entry.todoLines.count > maxTodos {
+                        Text("and \(entry.todoLines.count - maxTodos) more")
+                            .font(.caption2)
+                            .foregroundStyle(tertiaryText)
+                            .lineLimit(1)
+                    }
+                }
                 Spacer()
                 Text(entry.tabName)
                     .font(.caption2)
