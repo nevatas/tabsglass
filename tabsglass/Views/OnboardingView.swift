@@ -13,6 +13,7 @@ import ConfettiSwiftUI
 
 private struct LoopingVideoPlayer: UIViewRepresentable {
     let assetName: String
+    var isPlaying: Bool
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView()
@@ -42,8 +43,6 @@ private struct LoopingVideoPlayer: UIViewRepresentable {
             player.play()
         }
 
-        player.play()
-
         context.coordinator.player = player
         context.coordinator.playerLayer = playerLayer
 
@@ -53,6 +52,9 @@ private struct LoopingVideoPlayer: UIViewRepresentable {
     func updateUIView(_ uiView: UIView, context: Context) {
         DispatchQueue.main.async {
             context.coordinator.playerLayer?.frame = uiView.bounds
+        }
+        if isPlaying {
+            context.coordinator.player?.play()
         }
     }
 
@@ -115,6 +117,8 @@ struct OnboardingView: View {
     // Phone step animations
     @State private var phoneVisible = false
     @State private var phoneButtonVisible = false
+    @State private var videoPlaying = false
+    @State private var phoneShadow = false
 
     private let warmDark = Color(red: 0x33/255, green: 0x2F/255, blue: 0x24/255)
 
@@ -135,13 +139,18 @@ struct OnboardingView: View {
 
             // Video player — always mounted for prerendering, hidden until step 1
             VStack {
-                LoopingVideoPlayer(assetName: "onboarding-video-1")
+                LoopingVideoPlayer(assetName: "onboarding-video-1", isPlaying: videoPlaying)
                     .aspectRatio(590.0 / 1278.0, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 42, style: .continuous))
                     .padding(5)
                     .background(
                         RoundedRectangle(cornerRadius: 47, style: .continuous)
                             .fill(Color(red: 0.65, green: 0.55, blue: 0.42))
+                    )
+                    .shadow(
+                        color: Color(red: 0.45, green: 0.3, blue: 0.15)
+                            .opacity(phoneShadow ? 0.4 : 0),
+                        radius: 20, y: 10
                     )
                     .padding(.horizontal, 44)
                     .offset(y: -60 + (phoneVisible ? 0 : -100))
@@ -328,6 +337,14 @@ struct OnboardingView: View {
             // Animate phone in
             withAnimation(.easeOut(duration: 0.7)) {
                 phoneVisible = true
+            }
+
+            // Start video and fade in shadow after phone animation completes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                videoPlaying = true
+                withAnimation(.easeOut(duration: 1.2)) {
+                    phoneShadow = true
+                }
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
