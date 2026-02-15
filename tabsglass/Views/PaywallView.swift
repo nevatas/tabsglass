@@ -19,6 +19,7 @@ struct PaywallView: View {
     private let backgroundColor = Color.black
 
     var body: some View {
+        GeometryReader { geo in
         ZStack {
             backgroundColor
                 .ignoresSafeArea()
@@ -131,6 +132,14 @@ struct PaywallView: View {
                         } label: {
                             Text("Privacy")
                         }
+
+                        Text("  ·  ")
+
+                        Button {
+                            showSecretCodeAlert()
+                        } label: {
+                            Text("Enter Code")
+                        }
                     }
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.3))
@@ -143,9 +152,11 @@ struct PaywallView: View {
             .opacity(contentReady ? 1 : 0.001)
 
         }
+        .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .ignoresSafeArea(.keyboard)
         .preferredColorScheme(.dark)
         .environment(\.colorScheme, .dark)
-        .ignoresSafeArea(.keyboard)
         .onAppear {
             // Let TimelineView render a few frames off-screen first
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -173,6 +184,26 @@ struct PaywallView: View {
                 ctaVisible = true
             }
         }
+    }
+
+    private func showSecretCodeAlert() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootVC = windowScene.keyWindow?.rootViewController else { return }
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController { topVC = presented }
+
+        let alert = UIAlertController(title: "Enter Secret Code", message: nil, preferredStyle: .alert)
+        alert.overrideUserInterfaceStyle = .dark
+        alert.addTextField { field in
+            field.placeholder = "Code"
+            field.autocorrectionType = .no
+            field.autocapitalizationType = .none
+        }
+        alert.addAction(UIAlertAction(title: L10n.Tab.cancel, style: .cancel))
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+            // TODO: Handle code
+        })
+        topVC.present(alert, animated: true)
     }
 }
 

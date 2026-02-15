@@ -23,7 +23,8 @@ private struct LoopingVideoPlayer: UIViewRepresentable {
         guard let dataAsset = NSDataAsset(name: assetName) else { return container }
 
         // Write to temp file for AVPlayer
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(assetName).mp4")
+        let safeName = assetName.replacingOccurrences(of: "/", with: "-")
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(safeName).mp4")
         try? dataAsset.data.write(to: tempURL)
 
         let player = AVPlayer(url: tempURL)
